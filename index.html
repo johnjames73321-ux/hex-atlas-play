@@ -100,7 +100,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
   <button id="t-ck" aria-pressed="false" hidden title="Crowns of the Hex World: rule a dynasty from 1444 (CK3-style)">👑 Crowns</button>
   <button id="t-set" aria-pressed="false" aria-label="Settings" title="Settings">⚙</button>
   <div id="setpop" hidden><label><input type="checkbox" id="devmode"> Developer mode</label></div>
-  <button id="t-game" aria-pressed="false" hidden title="1444 game mode: countries, religions, cultures, ethnicities and population (G)">Game mode: off</button>
+  <button id="t-game" aria-pressed="false" hidden title="Show the 1444 country borders and colours on the map (G)">1444 borders: off</button>
   <div class="group" id="gviews" role="group" aria-label="Map view" hidden><span class="label">View</span><button data-v="political" aria-pressed="true">Countries</button><button data-v="religion" aria-pressed="false">Religion</button><button data-v="ethnicity" aria-pressed="false">Ethnicity</button><button data-v="culture" aria-pressed="false">Culture</button><button data-v="population" aria-pressed="false">Population</button></div>
   <button id="t-mark" aria-pressed="false" title="Mark places: draw around one or more areas (Backspace undoes the last), Enter, say what to do (K)">Mark <small>K</small></button>
   <button id="t-dev" aria-pressed="false" title="Edit the map: land, water, barrages (T)">Edit map <small>T</small></button>
@@ -978,7 +978,7 @@ function legend() {
 function setGame(on, v) {
   if (!G) return;
   gameOn = on; if (v) gameView = v;
-  $("t-game").setAttribute("aria-pressed", gameOn); $("t-game").textContent = "Game mode: " + (gameOn ? "on" : "off");
+  $("t-game").setAttribute("aria-pressed", gameOn); $("t-game").textContent = "1444 borders: " + (gameOn ? "on" : "off");
   $("gviews").hidden = !gameOn;
   $("gviews").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === gameView));
   $("card").hidden = true; keepGame(); legend(); buildBase();
