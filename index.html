@@ -58,6 +58,8 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
 .legend .bar { grid-column: 1 / -1; height: 12px; border-radius: 3px; border: 1px solid var(--line); }
 .legend .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; color: var(--muted); }
 #t-game[aria-pressed="true"] { background: #b8860b; border-color: #b8860b; }
+#setpop { position: fixed; z-index: 30; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: .85rem; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+#setpop label { display: flex; gap: 8px; align-items: center; cursor: pointer; white-space: nowrap; }
 .card .swc { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); vertical-align: -1px; margin-right: 5px; }
 .dev { position: absolute; z-index: 6; top: 12px; right: 16px; width: auto; max-width: calc(100% - 32px); max-height: calc(100% - 24px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(20,20,50,.18); display: flex; flex-direction: column; gap: 8px; font-size: .85rem; }
 .dev h3 { font-family: var(--display); font-weight: 800; font-size: 1.05rem; margin: 0; }
@@ -95,7 +97,9 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
     <button id="t-mapT" aria-pressed="false" title="THE MAP: your reference world map, unchanged (ref/the-map.webp)">THE MAP</button>
     <button id="t-drag" aria-pressed="false" title="Island maps: drag to move, mouse wheel = bigger/smaller, arrow up/down = more/less see-through (acts on the island map under the mouse)">Drag maps</button>
   </div>
-  <button id="t-ck" aria-pressed="false" title="Crowns of the Hex World: rule a dynasty from 1444 (CK3-style)">👑 Crowns</button>
+  <button id="t-ck" aria-pressed="false" hidden title="Crowns of the Hex World: rule a dynasty from 1444 (CK3-style)">👑 Crowns</button>
+  <button id="t-set" aria-pressed="false" aria-label="Settings" title="Settings">⚙</button>
+  <div id="setpop" hidden><label><input type="checkbox" id="devmode"> Developer mode</label></div>
   <button id="t-game" aria-pressed="false" hidden title="1444 game mode: countries, religions, cultures, ethnicities and population (G)">Game mode: off</button>
   <div class="group" id="gviews" role="group" aria-label="Map view" hidden><span class="label">View</span><button data-v="political" aria-pressed="true">Countries</button><button data-v="religion" aria-pressed="false">Religion</button><button data-v="ethnicity" aria-pressed="false">Ethnicity</button><button data-v="culture" aria-pressed="false">Culture</button><button data-v="population" aria-pressed="false">Population</button></div>
   <button id="t-mark" aria-pressed="false" title="Mark places: draw around one or more areas (Backspace undoes the last), Enter, say what to do (K)">Mark <small>K</small></button>
@@ -3317,8 +3321,14 @@ addEventListener("keydown", e => {
 }, true);
 setMapMode = m => { _setMapMode(m); keepAtlasSafe(); };
 const hb = el("t-ck"); if (hb) hb.onclick = () => showStart();
+// Crowns stays hidden: Settings (⚙) > Developer mode shows its button (user 2026-10-29)
+const devOn = () => { try { return localStorage.getItem("hexatlas-dev") === "1"; } catch (e) { return false; } };
+{ const sb = el("t-set"), sp = el("setpop"), dm = el("devmode"); dm.checked = devOn(); if (hb) hb.hidden = !devOn();
+  sb.onclick = e => { e.stopPropagation(); sp.hidden = !sp.hidden; sb.setAttribute("aria-pressed", !sp.hidden); if (!sp.hidden) { const r = sb.getBoundingClientRect(); sp.style.top = r.bottom + 6 + "px"; sp.style.left = Math.max(8, Math.min(innerWidth - 200, r.left)) + "px"; } };
+  addEventListener("pointerdown", e => { if (!sp.hidden && !e.target.closest("#setpop, #t-set")) { sp.hidden = true; sb.setAttribute("aria-pressed", false); } });
+  dm.onchange = () => { try { localStorage.setItem("hexatlas-dev", dm.checked ? "1" : "0"); } catch (e) {} if (hb) hb.hidden = !dm.checked; if (!dm.checked && ckOn) exitCK(); }; }
 requestAnimationFrame(loop);
-if (localStorage.getItem("hexcrowns-on") === "1" && localStorage.getItem(SAVE)) loadGame().then(ok => { if (ok) enter(); });
+if (devOn() && localStorage.getItem("hexcrowns-on") === "1" && localStorage.getItem(SAVE)) loadGame().then(ok => { if (ok) enter(); });
 window.CK = { get S() { return S; }, newGame, startAs, enter, exitCK, showStart, declareWar, endWar, day, monthly, yearly, econ, power, CO, opinion, ch: id => S.ch[id], neighbours, cbsAgainst, openWin, openPanel, saveGame, loadGame, tagName };
 })();
 </script>
