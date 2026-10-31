@@ -819,7 +819,7 @@ const STRIPE_NB = (() => { let i0 = -1; for (let i = 0; i < N && i0 < 0; i++) { 
   return STRIPE_SEG.map(g => [dirOf(g[0], g[1]), dirOf(g[2], g[3])]); })();
 function drawStripes(c, list) {
   if (!ERA_STRIPE || !gameOn || gameView !== "era") return;
-  const W = [0, S * 0.1130, S * 0.3530], P = [null, new Path2D(), new Path2D()], H = [null, new Path2D(), new Path2D()];
+  const W = [0, S * 0.1017, S * 0.3530], P = [null, new Path2D(), new Path2D()], H = [null, new Path2D(), new Path2D()];
   for (const i of list) {
     const k = eraOf(i); if (k < 0 || !ERA_STRIPE[k]) continue; const t = ERA_STRIPE[k], p = P[t], x = cx[i], y = cy[i];
     const h = H[t]; h.moveTo(x + VX[0], y + VY[0]); for (let v = 1; v < 6; v++) h.lineTo(x + VX[v], y + VY[v]); h.closePath();
