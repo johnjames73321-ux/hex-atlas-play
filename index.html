@@ -1102,7 +1102,7 @@ function applyEdits() {
 let applyT = 0; const queueApply = () => { clearTimeout(applyT); applyT = setTimeout(() => { if (writing) queueApply(); else applyEdits(); }, 400); };   // not while saving: every saved doc fires a snapshot
 // saving: 8 writes at a time, latest change per hex/edge wins; the queue is kept in this browser until each write is confirmed,
 // so closing or reloading the tab mid-upload loses nothing (it carries on next time the map opens)
-const QK = KEY + "-q", wq = new Map(), stale = new Set(), BAKED = "2026-10-31T00:33:30"; let writing = false;   // BAKED: newest edit baked into this version
+const QK = KEY + "-q", wq = new Map(), stale = new Set(), BAKED = "2026-10-31T00:33:30", DRAFT_CUT = "2026-10-30T23:02:00"; let writing = false;   // BAKED: newest edit baked into this version; DRAFT_CUT: last map rebuild (unsaved drafts from before it are stale)
 try { for (const [id, e] of JSON.parse(localStorage.getItem(QK) || "[]")) wq.set(id, e); } catch (err) {}
 const keepQ = () => { try { localStorage.setItem(QK, JSON.stringify([...wq])); } catch (err) {} };
 const within = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timed out")), ms))]);
@@ -1144,7 +1144,7 @@ try { if (!localStorage.getItem(KEY + "-rv1")) {   // one-time (user, 2026-10-20
   for (const [id, e] of [...draft]) if (!e || e.at >= "2026-10-20T15:55") draft.delete(id);
   localStorage.setItem(KEY + "-draft", JSON.stringify([...draft])); localStorage.setItem(KEY + "-rv1", "1"); } } catch (e) {}
 // edits older than BAKED were drawn on an older map: never re-apply them (2026-10-25: a stale 10-22 draft wrecked North America)
-for (const [id, e] of [...draft]) if (e && e.at < BAKED) draft.delete(id);
+for (const [id, e] of [...draft]) if (e && e.at < DRAFT_CUT) draft.delete(id);   // not BAKED: autobaking someone's saves must not wipe unsaved drafts (2026-10-31)
 for (const [id, e] of [...saved]) if (e && e.at < BAKED) saved.delete(id);   // saved edits already baked into this map: done, never re-applied or re-sent
 try { localStorage.setItem(KEY + "-map", JSON.stringify([...saved])); } catch (e) {}
 for (const [id, e] of [...saved]) if (!e || e.at < BAKED) saved.delete(id);   // same for changes saved in this browser (downloaded copy): re-applied, moved land got scrambled regions
