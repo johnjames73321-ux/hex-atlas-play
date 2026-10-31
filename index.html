@@ -5285,7 +5285,17 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   };
   const NM = [["Aldric", "Bran", "Corin", "Dunstan", "Edric", "Godwin", "Hamon", "Osric"], ["Aelith", "Brenna", "Cerys", "Edith", "Isolde", "Maud", "Rowena", "Wynn"]];
   const LINES = ["Safe travels, stranger.", "Keep your blade close, the beasts are bold here.", "They say a great beast rules this land.", "Coins? The wild ones carry them, oddly enough.", "The blue lights at the edge of the land lead elsewhere.", "I never fight. I just run, and I run fast.", "Fine armour. Is it heavy?"];
-  const npcs = [], SKIN = ["f1c9a5", "d9a27a", "b97a50", "8d5a3a", "5e3a26"], CLOTH = ["7a2f2f", "2f4f7a", "4f6a2f", "6a4f2f", "5a3a6a", "8a7a4a"], HAIR = ["2a1a10", "6a4020", "c8a050", "1a1a1a", "8a3a1a"];
+  // villagers look like the people of the place (user, 11-01): skin and hair by region
+  const [SKIN, HAIR] = lon < -30 ? [["c8946a", "b88458", "c99a70"], ["101420", "141820", "1a1a1a"]]                                   // the Americas: like SE Asia
+    : lat > 50 && lon > -12 && lon < 62 ? [["f6dcc8", "f3d6c0", "efd0b8"], ["f0dca0", "e8d090", "d8b870", "c8a060", "f4e4b4"]]         // northern Europe to the Urals: fair, blonde
+    : lat >= 35 && lat <= 50 && lon > -12 && lon < 51 ? [["ecc6a6", "e6bc98", "e8c0a0"], ["2a1a10", "3a2414", "1a1410", "5a3a20"]]   // southern Europe to Armenia / Azerbaijan
+    : lat < 12 && lon > -20 && lon < 52 ? [["9a6a44", "8a5c3a", "a87650"], ["141010", "1a1410"]]                                       // Africa: dark tan at most
+    : lat >= 12 && lon > -20 && lon < 63 ? [["c99a70", "c08e64", "d4a67c"], ["1a1410", "2a1a10", "141010"]]                           // Middle East, North Africa: tan
+    : lon >= 63 && lon < 92 && lat < 36 ? [["a8754c", "9c6c46", "b07c52"], ["141010", "1a1410"]]                                        // India
+    : lon >= 92 && lat < 23 ? [["c8946a", "c08c62", "cc9a70"], ["101420", "141820"]]                                                   // South-east Asia: browner than the north
+    : lon >= 92 ? [["f0d0a8", "ecc8a0", "f2d4ae"], ["0c1020", "101424", "0e1222"]]                                                      // East Asia: jet black, a touch blue
+    : [["e0b890", "d4aa82"], ["1a1410", "2a1a10"]];
+  const npcs = [], CLOTH = ["7a2f2f", "2f4f7a", "4f6a2f", "6a4f2f", "5a3a6a", "8a7a4a"];
   for (let j = 0; j < 6; j++) { const fem = j % 2, pk = a => +("0x" + a[Math.floor(r() * a.length)]), h = human(fem, pk(SKIN), pk(CLOTH), pk(HAIR));
     for (let t = 0; t < 30; t++) { const an = r() * 6.28, d = 25 + r() * 120, x = me.pos.x + Math.cos(an) * d, z = me.pos.z + Math.sin(an) * d; if (H(x, z) > 0) { h.root.position.set(x, H(x, z), z); break; } }
     scene.add(h.root); npcs.push({ ...h, name: NM[fem][Math.floor(r() * 8)], hd: r() * 6.28, wt: 0, t: 0 }); }
@@ -5371,9 +5381,9 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   //      animation cuts its recovery for +25%, pressed earlier it waits. Angles: yaw like the animals (0 = +z), + = to the hero's left ----
   const hero = me.hero, BASE = 24, REACH = 2.4;
   const ATK = {
-    s0: { from: -1.25, to: 1.25, dur: .2, m: 1, reach: 1, lock: .42, lunge: .35 },          // right -> left
-    s1: { from: 1.25, to: -1.25, dur: .2, m: 1, reach: 1, lock: .42, lunge: .35 },          // left -> right
-    s2: { from: -1.5, to: 1.5, dur: .27, m: 1.5, reach: 1.1, lock: .48, lunge: .6 },          // right -> left, 1.5x
+    s0: { from: -1.25, to: 1.25, dur: .4, m: 1, reach: 1, lock: .42, lunge: .35 },          // right -> left
+    s1: { from: 1.25, to: -1.25, dur: .4, m: 1, reach: 1, lock: .42, lunge: .35 },          // left -> right
+    s2: { from: -1.5, to: 1.5, dur: .54, m: 1.5, reach: 1.1, lock: .48, lunge: .6 },          // right -> left, 1.5x
     sweep: { from: -Math.PI / 2, to: Math.PI / 2, dur: .3, m: 2, reach: 1.35, lock: .55, lunge: .3 },
     spin: { from: 0, to: -Math.PI * 2, dur: .4, m: 1.4, reach: 1.2, lock: .55, lunge: 0, w: .45, round: 1 },   // R: full circle
     slam: { from: .5, to: -.5, dur: .34, m: 2.2, reach: 1.2, lock: .55, lunge: .7, w: .5 },          // combo 4th: overhead slam with a shockwave
