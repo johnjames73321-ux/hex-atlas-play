@@ -5220,7 +5220,7 @@ function heroMesh() {   // an ordinary white stick figure (forward is +z, right 
   guard.rotation.x = -Math.PI / 2; guard.position.y = 1; guard.visible = false; root.add(guard);   // block: a bright arc in front, readable from above
   root.rotation.order = "YXZ";   // so rotation.x leans the body forward along its own facing
   // the Tripo knight over the stick figure: same joints, moved to the knight's hips and shoulders; the sword arm is modelled pointing forward
-  W.visible = K.visible = false;
+  root.traverse(o => { if (o.isMesh && (o.material === W || o.material === K)) o.visible = false; });   // the stick figure stays hidden even after materials are swapped
   legs[0].position.set(-.12, .6, 0); legs[1].position.set(.12, .6, 0); armL.position.set(.3, 1.3, 0); armR.position.set(-.3, 1.3, 0);
   root.add(tripoMesh("torso")); legs[0].add(tripoMesh("legR")); legs[1].add(tripoMesh("legL")); armL.add(tripoMesh("armL")); armR.add(tripoMesh("armR"));
   sword.position.set(-.08, 0, .6);
@@ -5237,7 +5237,10 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     for (let t = 0; t < 30; t++) { const ang = r() * 6.28, d = (far ? 90 : 18) + r() * 60, x = me.pos.x + Math.cos(ang) * d, z = me.pos.z + Math.sin(ang) * d; if (aqua(k) || H(x, z) > 0) { b.root.position.set(x, H(x, z), z); break; } }
     b.root.rotation.y = r() * 6.28; scene.add(b.root);
     if (boss) {   // the land's boss: same animal, light and dark swapped, bigger, 1.5x stats and quicker
-      const seen = new Set(); b.root.traverse(o => { const mt = o.material; if (mt && mt.color && !seen.has(mt)) { seen.add(mt); const h = {}; mt.color.getHSL(h); mt.color.setHSL(h.h, h.s, clamp(1 - h.l, .08, .9)); } });
+      const ms = new Set(); b.root.traverse(o => { const mt = o.material; if (mt && mt.color) ms.add(mt); });   // reverse the order of its own colours: darkest part gets the lightest colour and so on
+      const lum = c => Math.round((c.r * .3 + c.g * .59 + c.b * .11) * 12), rep = new Map(); for (const mt of ms) { const l = lum(mt.color); if (!rep.has(l)) rep.set(l, mt.color.getHex()); }   // near-equal shades count as one
+      const ls = [...rep.keys()].sort((u, v) => u - v);
+      for (const mt of ms) { const j = ls.indexOf(lum(mt.color)); ls.length > 1 ? mt.color.setHex(rep.get(ls[ls.length - 1 - j])) : mt.color.multiplyScalar(.45); }
       b.root.scale.multiplyScalar(1.25); a[5] *= 1.6; a[6] *= 1.5; a[7] *= 1.5; a[9] = "Boss " + a[9];
     }
     const m = { boss, k, a, ...b, hp: a[6], cd: 0, angry: 0, dead: 0, hd: b.root.rotation.y, wt: 0, ph: r() * 9, flash: 0, alt: 18 + r() * 14, hitBy: 0 };
@@ -5277,12 +5280,19 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
 #svTree button:disabled{opacity:.55;cursor:default}#svTree button span{opacity:.8}#svTree button i{font-style:normal;color:#9fe0ff;font-size:.7rem}`; document.head.appendChild(c); }
   let tree = $("svTree"); if (!tree) { tree = document.createElement("div"); tree.id = "svTree"; tree.className = "hud tree"; $("sv").appendChild(tree); } tree.hidden = true;
   const drawTree0 = () => { if (tree.hidden) return; tree.innerHTML = `<h3>Skills · Lv ${prog.lvl} · ${prog.pts} pts</h3>` + Object.entries(SK).map(([k, q]) => { const l = sk(k), mx = l >= q.max, c = mx ? 0 : q.cost(l), rq = mx ? 0 : q.req(l), ok = !mx && prog.pts >= c && prog.lvl >= rq; return `<button data-k="${k}"${ok ? "" : " disabled"}><b>${q.n} ${"●".repeat(l)}${"○".repeat(q.max - l)}</b><i>${mx ? "max" : `${c} pts · Lv ${rq}`}</i></button>`; }).join(""); };
-  const UPS = { dmg: "Damage", spd: "Speed", dex: "Dexterity", car: "Cardio", hp: "Health", jmp: "Jump" }, upL = k => (prog.up && prog.up[k]) || 0, upCost = k => 2 ** upL(k);
+  const UPS = { dmg: "⚔️ Damage|hit harder", spd: "👟 Speed|run faster", dex: "🤺 Dexterity|faster attacks", car: "🫁 Cardio|faster recovery", hp: "❤️ Health|take less damage", jmp: "🦘 Jump|jump higher" }, upL = k => (prog.up && prog.up[k]) || 0, upCost = k => 2 ** upL(k);
   me.up = k => 1 + .01 * upL(k);
-  const drawTree = () => { drawTree0(); if (tree.hidden) return; tree.insertAdjacentHTML("beforeend", `<h3>Training · ${prog.coins || 0} 🪙</h3>` + Object.entries(UPS).map(([k, n]) => `<button data-u="${k}"${(prog.coins || 0) >= upCost(k) ? "" : " disabled"}><b>${n} +${upL(k)}%</b><i>${upCost(k)} 🪙</i></button>`).join("")); };
+  const drawTree = () => { drawTree0(); if (tree.hidden) return; tree.insertAdjacentHTML("beforeend", `<h3>Training · ${prog.coins || 0} 🪙</h3>` + Object.entries(UPS).map(([k, n]) => `<button data-u="${k}"${(prog.coins || 0) >= upCost(k) ? "" : " disabled"}><b>${n.split("|")[0]} +${upL(k)}%</b><span>${n.split("|")[1]}</span><i>${upCost(k)} 🪙</i></button>`).join("")); };
   tree.onclick = e => { const u = e.target.closest("button[data-u]"); if (u) { const k = u.dataset.u, c = upCost(k); if ((prog.coins || 0) < c) return; prog.coins -= c; prog.up = prog.up || {}; prog.up[k] = upL(k) + 1; saveProg(); drawTree(); tone(1500, .05); return; } const b = e.target.closest("button[data-k]"); if (!b) return; const k = b.dataset.k, q = SK[k], l = sk(k); if (l >= q.max || prog.pts < q.cost(l) || prog.lvl < q.req(l)) return; prog.pts -= q.cost(l); prog.sk[k] = l + 1; saveProg(); drawTree(); tone(1200, .05); };
   me.toggleTree = () => { tree.hidden = !tree.hidden; if (!tree.hidden) { try { document.exitPointerLock(); } catch (e) {} drawTree(); } };
   const gainXP = v => { prog.xp += v; let up = 0; while (prog.xp >= xpNeed(prog.lvl)) { prog.xp -= xpNeed(prog.lvl); prog.lvl++; prog.pts += prog.lvl % 5 ? 1 : 2; up = 1; } if (up) { say(`Level ${prog.lvl}! K = skill tree (${prog.pts} point${prog.pts === 1 ? "" : "s"})`, 3200); tone(880, .07); } saveProg(); drawTree(); };
+  // coins: burst out of a kill, bounce, spin, and fly into you when you come close
+  const coinGeo = new T.CylinderGeometry(.16, .16, .045, 14).rotateX(Math.PI / 2), coinMat = new T.MeshLambertMaterial({ color: 0xffc83a, emissive: 0x6a4000 }), coins = [], cv3 = new T.Vector3();
+  const dropCoins = (p, v) => { const n = Math.min(14, v); for (let i = 0; i < n; i++) { const o = new T.Mesh(coinGeo, coinMat); o.position.set(p.x, p.y + 1, p.z); scene.add(o); const a = Math.random() * 6.28, sp = 1.5 + Math.random() * 2.5; coins.push({ o, v: new T.Vector3(Math.cos(a) * sp, 5 + Math.random() * 3, Math.sin(a) * sp), val: Math.floor(v / n) + (i < v % n ? 1 : 0), t: 0 }); } };
+  me.ps.push(dt => { for (const c of coins.slice()) { const o = c.o; cv3.set(me.pos.x, me.pos.y + 1, me.pos.z); const d = o.position.distanceTo(cv3); c.t += dt; o.rotation.y += dt * 6;
+    if (c.mag || (c.t > .6 && d < 3.2 && me.hp > 0)) { c.mag = 1; o.position.lerp(cv3, Math.min(1, dt * 10)); o.scale.setScalar(clamp(d, .3, 1)); if (d < .45) { scene.remove(o); coins.splice(coins.indexOf(c), 1); prog.coins = (prog.coins || 0) + c.val; saveProg(); tone(1600 + Math.random() * 600, .03); } continue; }
+    c.v.y -= 18 * dt; o.position.addScaledVector(c.v, dt); const g = H(o.position.x, o.position.z) + .15; if (o.position.y < g) { o.position.y = g; c.v.y = Math.abs(c.v.y) * .4; c.v.x *= .6; c.v.z *= .6; }
+    if (c.t > 90) { scene.remove(o); coins.splice(coins.indexOf(c), 1); } } });
   // floating damage numbers
   const nums = [], prj = new T.Vector3();
   const popNum = (m, v, crit) => { const el = document.createElement("div"); el.className = "dn" + (crit ? " crit" : ""); el.textContent = Math.round(v) + (crit ? "!" : ""); $("sv").appendChild(el); nums.push({ el, p: m.root.position.clone().setY(m.root.position.y + m.a[2] * GS + .5), t: 0, x: (Math.random() - .5) * 30 }); };
@@ -5296,7 +5306,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     popNum(m, dmg, crit); me.stopT = crit || heavy ? .07 : .035; me.shake = Math.max(me.shake || 0, crit || heavy ? .25 : .12);
     if (m.hp <= 0) { m.dead = 3.5; me.kills++; me.hp = Math.min(100, me.hp + 4); hpDraw();
       const lk = Math.random(), luck = lk < .002 ? 25 : lk < .025 ? 4 : 1, coin = Math.round((1 + Math.sqrt(m.a[1] * m.a[2]) * .6 + Math.random()) * luck * (m.boss ? 10 : 1));   // bigger = more, rarely a lucky haul
-      prog.coins = (prog.coins || 0) + coin; saveProg(); drawTree(); if (luck > 1) tone(1760, .12);
+      dropCoins(m.root.position, coin); if (luck > 1) tone(1760, .12);
       say(`${m.a[9]} slain · +${Math.round(m.a[6] * .6 + 5)} XP · +${coin} 🪙${luck >= 25 ? " JACKPOT!" : luck > 1 ? " lucky!" : ""}`); gainXP(Math.round(m.a[6] * .6 + 5)); }
   };
   const tone = (f, v) => { const ac = me.ac; if (!ac || !me.soundOn) return; try { const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime; o.type = "sawtooth"; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * .4, t + .25); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + .3); o.connect(g).connect(ac.destination); o.start(t); o.stop(t + .32); } catch (e) {} };
@@ -5562,7 +5572,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
       if (m.stun > 0) { m.stun -= dt; for (const mt of m.mats) mt.emissive.setHex(0x203060); continue; }   // stunned by a parry
       m.cd -= dt; m.angry -= dt; m.flash -= dt;
       for (const mt of m.mats) mt.emissive.setHex(m.flash > 0 ? 0x902010 : 0);
-      const dx = cp.x - R0.position.x, dz = cp.z - R0.position.z, dist = Math.hypot(dx, dz), chase = (a[8] && dist < a[8]) || m.angry > 0;
+      const dx = cp.x - R0.position.x, dz = cp.z - R0.position.z, dist = Math.hypot(dx, dz), chase = (a[8] && dist < a[8] && Math.hypot(cp.x, cp.z) > 9) || m.angry > 0;   // the spawn point is safe ground: only your own attacks start a fight there
       let sp = 0;
       if (chase && me.hp > 0) { m.hd = Math.atan2(dx, dz); sp = a[5] * (dist < 4 ? .2 : 1); }
       else { m.wt -= dt; if (m.wt <= 0) { m.wt = 2 + r() * 5; m.hd += (r() - .5) * 2; m.walk = r() < .6; } sp = m.walk ? a[5] * .22 : 0;
@@ -5722,7 +5732,7 @@ window.svNav = me => {
   g.beginPath(); g.moveTo(0, -8); g.lineTo(6, 6); g.lineTo(0, 3); g.lineTo(-6, 6); g.closePath(); g.fill(); g.stroke(); g.restore();
 };
 ov.insertAdjacentHTML("beforeend", `<div class="hp" id="svHP"><b></b><span></span></div><div class="msg" id="svMsg" hidden></div><div class="hurt" id="svHurt"></div><div class="atk"><button id="svJump" title="Jump (Space)">⤒</button><button id="svThrow" title="Throw the sword (E)">⚔</button><button id="svSpin" title="Spin attack (R)">🌀</button></div>`);
-ov.querySelector(".help").textContent = "H hide/show · Mouse look · WASD move · Shift run · Ctrl crouch (tap while running = slide) · C turn 180° · Space jump · LMB combo ×3 (skills: 4th overhead slam, 5th whirlwind; hold = charged sweep; after a parry = riposte) · 1 longsword · 2 bow (hold LMB to draw, release to shoot) · 3 battle axe · 4 war hammer · 5 spear · V dodge roll · K skill tree · RMB block (tap just before a bite = parry) · MMB jab · R spin · E chain throw (tap spear, hold lob, E/LMB again pulls it back) · Tab dash strike · Q block / parry · cancel near the end of a move for +25% · click = mouse look · wheel zoom · Esc map";
+ov.querySelector(".help").textContent = "H hide/show · Mouse look · WASD move · Shift run · Ctrl crouch (tap while running = slide) · C turn 180° · Space jump · LMB combo ×3 (skills: 4th overhead slam, 5th whirlwind; hold = charged sweep; after a parry = riposte) · 1 longsword · 2 bow (hold LMB to draw, release to shoot) · 3 battle axe · 4 war hammer · 5 spear · Z dodge roll · X/V turn left/right · K skill tree · RMB block (tap just before a bite = parry) · MMB jab · R spin · E chain throw (tap spear, hold lob, E/LMB again pulls it back) · Tab dash strike · Q block / parry · cancel near the end of a move for +25% · click = mouse look · wheel zoom · Esc map";
 const st2 = document.createElement("style");
 st2.textContent = `#sv .hp{position:absolute;left:50%;top:14px;transform:translateX(-50%);width:min(280px,50vw);color:#fff;font-size:.72rem;text-align:center;text-shadow:0 1px 2px #000}
 #sv .hp b{display:block;height:8px;border-radius:4px;background:linear-gradient(90deg,#e0482a,#f0a030);box-shadow:0 0 0 1px rgba(0,0,0,.5);transition:width .2s;margin-bottom:3px}
@@ -5898,7 +5908,7 @@ function build(me, i) {
   $("svHud").innerHTML = `<h2>${esc(b.n)}</h2><div class="m">${esc([name, admin, country].filter(Boolean).join(", "))} · ${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lon).toFixed(1)}°${lon >= 0 ? "E" : "W"}</div>${spp.length ? `<ul>${spp.map(k => `<li>${esc(SP[k][5])} · ${SP[k][1]} m</li>`).join("")}</ul>` : ""}`;
   $("svHud").insertAdjacentHTML("beforeend", `<div class="fauna">⚠ ${apex.slice(0, 4).map(a => `${esc(a[9])} · ${(+a[1]).toFixed(1)} m`).join(" · ")}</div>`);
   // camera, controls, loop
-  Object.assign(me, { R, pix, scene, cam, H, sky, sun, sunDir, last: 0, jy: 0, vy: 0, walkT: 0, jump: () => { if (!me.jy) { me.vy = (me.slide ? 9.5 : 8) * (me.up ? me.up("jmp") : 1); me.slide = null; } }, crouchDown: () => { if (me.runNow && !me.slide && me.mdir && me.hp > 0) { me.slide = { t: 0, x: me.mdir[0], z: me.mdir[1] }; me.atk = null; } }, turn: () => { me.yaw += Math.PI; me.face += Math.PI; } });
+  Object.assign(me, { R, pix, scene, cam, H, sky, sun, sunDir, last: 0, jy: 0, vy: 0, walkT: 0, jump: () => { if (!me.jy) { me.vy = (me.slide ? 9.5 : 8) * (me.up ? me.up("jmp") : 1); me.slide = null; } }, crouchDown: () => { if (me.runNow && !me.slide && me.mdir && me.hp > 0) { me.slide = { t: 0, x: me.mdir[0], z: me.mdir[1] }; me.atk = null; } }, turn: (a = Math.PI) => { me.yaw += a; me.face += a; } });
   if (me.ac) { me.stop = ambience(me.ac, String(b.a || "wind,birds").split(",")); me.ac.resume && me.ac.resume(); }
   const ray = new T.Raycaster(), plane = new T.Plane(new T.Vector3(0, 1, 0), 0), aimV = new T.Vector3(), ndc = new T.Vector2();
   const loop = t => {
@@ -5958,7 +5968,7 @@ function close() {
 }
 $("svX").onclick = close;
 $("svSnd").onclick = () => { const me = S3; if (!me || !me.ac) return; me.soundOn = !me.soundOn; me.soundOn ? me.ac.resume() : me.ac.suspend(); $("svSnd").textContent = me.soundOn ? "🔊" : "🔇"; };
-addEventListener("keydown", e => { if (!S3) return; if (e.code === "Space" && !e.repeat) S3.jump && S3.jump(); if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "KeyF") S3.act("spear"); else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyV") S3.roll && S3.roll(); else if (e.code === "KeyK") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.act && S3.act("q"); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
+addEventListener("keydown", e => { if (!S3) return; if (e.code === "Space" && !e.repeat) S3.jump && S3.jump(); if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "KeyF") S3.act("spear"); else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyZ") S3.roll && S3.roll(); else if (e.code === "KeyX" && !e.repeat) S3.turn && S3.turn(Math.PI / 2); else if (e.code === "KeyV" && !e.repeat) S3.turn && S3.turn(-Math.PI / 2); else if (e.code === "KeyK") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.act && S3.act("q"); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
 addEventListener("keyup", e => { if (!S3) return; S3.keys[e.code] = 0; if (e.code === "Tab") e.preventDefault(); if (e.code === "KeyE") S3.tabUp && S3.tabUp(); if (e.code === "KeyQ") S3.block = false; e.stopImmediatePropagation(); }, true);
 addEventListener("blur", () => { if (S3) S3.keys = {}; });
 addEventListener("resize", () => { const me = S3; if (!me || !me.R) return; me.R.setSize(innerWidth, innerHeight); me.pix.size(); me.cam.aspect = innerWidth / innerHeight; me.cam.updateProjectionMatrix(); });
