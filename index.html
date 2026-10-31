@@ -818,7 +818,7 @@ function drawStripes(c, list) {
   const P = [null, new Path2D(), new Path2D()];
   const H = [null, new Path2D(), new Path2D()];   // stripes are clipped to their own hexes, so border stripes never spill onto a plain neighbour
   for (const i of list) { const k = eraOf(i); if (k < 0 || !ERA_STRIPE[k]) continue; const p = P[ERA_STRIPE[k]], x = cx[i], y = cy[i]; hexPath(H[ERA_STRIPE[k]], i); for (const g of STRIPE_SEG) { p.moveTo(x + g[0], y + g[1]); p.lineTo(x + g[2], y + g[3]); } }
-  for (const t of [1, 2]) { c.save(); c.clip(H[t]); c.strokeStyle = "#ffffff"; c.lineCap = "butt"; c.lineWidth = S * (t === 1 ? 0.1256 : 0.3056); c.stroke(P[t]); c.restore(); }
+  for (const t of [1, 2]) { c.save(); c.clip(H[t]); c.strokeStyle = "#ffffff"; c.lineCap = "butt"; c.lineWidth = S * (t === 1 ? 0.1130 : 0.3209); c.stroke(P[t]); c.restore(); }
 }
 const relOf = i => G && D.reg[i] >= 0 && i < G.hrel.length ? G.hrel[i] : -1;
 const culOf = i => G && D.reg[i] >= 0 && i < G.hcul.length ? G.hcul[i] : -1;
