@@ -111,6 +111,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
   <canvas id="ocean" aria-hidden="true" style="pointer-events:none"></canvas>
   <canvas id="cv"></canvas>
   <canvas id="bloom" aria-hidden="true" style="pointer-events:none"></canvas>
+  <canvas id="lab" aria-hidden="true" style="pointer-events:none"></canvas>
   <div class="status" id="status"></div>
   <div class="markbox" id="markbox" hidden><p class="where" id="mark-where"></p><textarea id="mark-text" placeholder="What should Claude do with this place? Enter sends, Shift+Enter new line, Esc cancels"></textarea></div>
   <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zfit" aria-label="Fit map">⤢</button></div>
@@ -377,7 +378,7 @@ let NR = D.regions.length;
 const PALETTE = ["#c0392b","#e67e22","#f1c40f","#7cb342","#1e8449","#16a085","#2e86c1","#1b4f72","#7d3c98","#d35400","#a04000","#f5b7b1","#85929e","#212f3d","#5d4037","#ff8fab"];
 const DIRS = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
 const $ = id => document.getElementById(id);
-const cv = $("cv"), ctx = cv.getContext("2d");
+const cv = $("cv"), ctx = cv.getContext("2d"), labCv = $("lab"), lctx = labCv.getContext("2d");
 const cssCache = new Map(), css = n => { let v = cssCache.get(n); if (v === undefined) { v = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); cssCache.set(n, v); } return v; };
 new MutationObserver(() => cssCache.clear()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "style", "class"] });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => cssCache.clear());
@@ -473,7 +474,7 @@ function hexAt(px, py) {
   const i = index.get(rq * 65536 + rr); return i === undefined ? -1 : i;
 }
 function fit() { const r = cv.getBoundingClientRect(); view.s = Math.min(r.width / W, r.height / H); view.x = (r.width - W * view.s) / 2; view.y = (r.height - H * view.s) / 2; }
-function resize() { dpr = window.devicePixelRatio || 1; const r = cv.getBoundingClientRect(); cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); draw(); }
+function resize() { dpr = window.devicePixelRatio || 1; const r = cv.getBoundingClientRect(); cv.width = labCv.width = Math.round(r.width * dpr); cv.height = labCv.height = Math.round(r.height * dpr); LB.ok = false; draw(); }
 
 // ---- rendering: whole map baked into an offscreen bitmap; vector drawing only when zoomed far in ----
 const OS = 3, base = document.createElement("canvas"); base.width = W * OS; base.height = H * OS;
@@ -565,12 +566,13 @@ function fillHexes(c, list) {
 const ALL = [...Array(N).keys()];
 let baseDirty = false;   // the whole-world bitmap is out of date (edits): rebuilt by the first zoomed-out frame
 function buildBase() {
-  baseDirty = false;
+  baseDirty = false; bloomKey = "";
   bctx.setTransform(OS, 0, 0, OS, 0, 0);
   bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, base.width, base.height); bctx.setTransform(OS, 0, 0, OS, 0, 0);
   fillHexes(bctx, ALL); engrave(bctx, ALL); strokeEdges(bctx, ALL, false, OS); drawStraits(bctx, OS); draw();
 }
 function paintUnits(units) {                         // refresh just the changed places in the bitmap
+  bloomKey = "";
   const list = [];
   for (const u of units) { if (+u < NR) list.push(...(regHexes[+u] || [])); }
   bctx.setTransform(OS, 0, 0, OS, 0, 0); fillHexes(bctx, list); engrave(bctx, list); strokeEdges(bctx, list, true, OS); drawStraits(bctx, OS);
@@ -580,12 +582,22 @@ function draw() { if (!raf) raf = requestAnimationFrame(render); }
 const lz = img => { if (!img.src && img.lazy) img.src = img.lazy; return img.complete && img.naturalWidth > 0; };   // reference maps decode only when first shown (the big one is 8000x3548)
 // bloom: bright parts of the frame, thresholded and blurred at quarter size, screened back over the map
 const bl = document.getElementById("bloom"), blx = bl.getContext("2d");
-function bloomPass() {
+let bloomKey = "", bloomT = 0;
+function bloomPass() {   // the glow (~13 ms) is redone only when the view or layer changed, or every 1.5 s, not on every hover redraw
+  const k = view.x + "," + view.y + "," + view.s + "," + gameOn + gameView + cv.width + "x" + cv.height, now = performance.now();
+  if (k === bloomKey && now - bloomT < 1500) return; bloomKey = k; bloomT = now;
   const w = Math.max(1, cv.width >> 2), h = Math.max(1, cv.height >> 2);
   if (bl.width !== w || bl.height !== h) { bl.width = w; bl.height = h; }
   blx.clearRect(0, 0, w, h); blx.filter = "brightness(.56) contrast(6) blur(4px)"; blx.drawImage(cv, 0, 0, w, h); blx.filter = "none";
 }
 function busy() { moving = true; clearTimeout(idle); idle = setTimeout(() => { moving = false; draw(); }, 160); }
+const LB = { s: 1, x: 0, y: 0, ok: false };
+function labelLayer(r, x0, y0, x1, y1) {
+  if (moving && LB.ok && showNames) { const k = view.s / LB.s; labCv.style.transformOrigin = "0 0"; labCv.style.transform = `translate(${view.x - LB.x * k}px, ${view.y - LB.y * k}px) scale(${k})`; return; }
+  labCv.style.transform = ""; lctx.setTransform(1, 0, 0, 1, 0, 0); lctx.clearRect(0, 0, labCv.width, labCv.height); LB.ok = false;
+  if (!showNames) return;
+  labels(r, x0, y0, x1, y1); LB.s = view.s; LB.x = view.x; LB.y = view.y; LB.ok = true;
+}
 function render() {
   raf = 0; if (!moving) queueMicrotask(bloomPass);   // the blur pass is skipped while panning/zooming; busy() redraws once it stops
   const r = cv.getBoundingClientRect(), z = view.s;
@@ -605,7 +617,7 @@ function render() {
   for (const k in ISLES) if (isleOn[k] && lz(isleImg[k])) { const m = ISLES[k]; ctx.globalAlpha = m.a; ctx.drawImage(isleImg[k], m.x, m.y, m.w, m.h); ctx.globalAlpha = 1; }
   ctx.restore();
   drawDev(); drawMark();
-  if (showNames) labels(r, x0, y0, x1, y1);
+  labelLayer(r, x0, y0, x1, y1);
   if (!hoverText) $("status").innerHTML = gameOn && gameView === "era" ? `320 BC · ${fmt(ERA.tags.length)} states, cities and peoples` : gameOn ? `1444 · ${fmt(G.tags.length)} countries · ${fmt(Math.round(G.total / 1e6))} million people` : `${fmt(N)} hexes · ${fmt(NR)} places · ${fmt(Object.keys(colors).length)} painted`;
 }
 
@@ -722,7 +734,7 @@ void main(){
 const widthCache = new Map();
 // names: largest places first, skip any label that would overlap one already drawn
 function labels(r, x0, y0, x1, y1) {
-  const z = view.s; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const z = view.s; lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const grid = new Map(), hexPx = S * z * 2, GC = 96;
   const fits = (bx, by, bw, bh) => {
     const c0 = Math.floor(bx / GC), c1 = Math.floor((bx + bw) / GC), r0 = Math.floor(by / GC), r1 = Math.floor((by + bh) / GC);
@@ -730,28 +742,28 @@ function labels(r, x0, y0, x1, y1) {
     const box = [bx, by, bw, bh]; for (let a = c0; a <= c1; a++) for (let b = r0; b <= r1; b++) { const k = a * 4096 + b; let l = grid.get(k); if (!l) grid.set(k, l = []); l.push(box); }
     return true;
   };
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  lctx.textAlign = "center"; lctx.textBaseline = "middle";
   // seas (italic) when there is room
-  ctx.font = `italic 13px ${css("--body")}`; ctx.fillStyle = css("--coast");
+  lctx.font = `italic 13px ${css("--body")}`; lctx.fillStyle = css("--coast");
   for (const s of seaOrder) {
     const a = seaAnchor[s]; if (a < 0 || D.seas[s] === "Open ocean") continue;
     if (seaHexes[s].length * hexPx * hexPx < 9000) continue;
     const sx = cx[a] * z + view.x, sy = cy[a] * z + view.y; if (sx < 0 || sy < 0 || sx > r.width || sy > r.height) continue;
-    const sk = "sea" + D.seas[s]; let w = widthCache.get(sk); if (w === undefined) { w = ctx.measureText(D.seas[s]).width + 8; widthCache.set(sk, w); } if (fits(sx - w / 2, sy - 9, w, 18)) ctx.fillText(D.seas[s], sx, sy);
+    const sk = "sea" + D.seas[s]; let w = widthCache.get(sk); if (w === undefined) { w = lctx.measureText(D.seas[s]).width + 8; widthCache.set(sk, w); } if (fits(sx - w / 2, sy - 9, w, 18)) lctx.fillText(D.seas[s], sx, sy);
   }
   if (gameOn) gameLabels(r, z, fits);                 // country names first, then province names where room is left
   if (hexPx < 9) return;
   const big = hexPx > 28 ? 12 : 11;
-  ctx.font = `700 ${big}px ${css("--body")}`; ctx.lineJoin = "round";
+  lctx.font = `700 ${big}px ${css("--body")}`; lctx.lineJoin = "round";
   let count = 0;
   for (const g of regOrder) {
     const a = regAnchor[g]; if (a < 0) continue;
     const sx = regCX[g] * z + view.x, sy = regCY[g] * z + view.y; if (sx < -50 || sy < -20 || sx > r.width + 50 || sy > r.height + 20) continue;
-    const name = placeName(regAnchor[g]), key = big + name; let w = widthCache.get(key); if (w === undefined) { w = ctx.measureText(name).width + 6; widthCache.set(key, w); }
+    const name = placeName(regAnchor[g]), key = big + name; let w = widthCache.get(key); if (w === undefined) { w = lctx.measureText(name).width + 6; widthCache.set(key, w); }
     if (hexPx * Math.sqrt(regHexes[g].length) < w * 0.45) continue;   // region too small on screen for its name
     if (!fits(sx - w / 2, sy - 8, w, 16)) continue;
-    ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 1.6; ctx.strokeText(name, sx, sy);   // slight halo
-    ctx.fillStyle = "#1f2133"; ctx.fillText(name, sx, sy);
+    lctx.strokeStyle = "rgba(255,255,255,.55)"; lctx.lineWidth = 1.6; lctx.strokeText(name, sx, sy);   // slight halo
+    lctx.fillStyle = "#1f2133"; lctx.fillText(name, sx, sy);
     if (++count > 400) break;
   }
 }
@@ -847,20 +859,20 @@ function gameComps() {
 }
 function gameLabels(r, z, fits) {
   const hexPx = S * z * 2; let count = 0;
-  ctx.lineJoin = "round";
+  lctx.lineJoin = "round";
   for (const c of gameComps()) {
     if (Math.sqrt(c.n) * hexPx < 26) continue;
     const size = Math.min(30, Math.max(9, Math.sqrt(c.n) * hexPx * 0.32));
     const sx = c.x * z + view.x, sy = c.y * z + view.y; if (sx < -100 || sy < -30 || sx > r.width + 100 || sy > r.height + 30) continue;
-    const fz = size.toFixed(1); ctx.font = `800 ${fz}px ${css("--display")}`;
-    const mk = "g" + fz + c.name; let tm = widthCache.get(mk); if (!tm) { const m = ctx.measureText(c.name); tm = { width: m.width, actualBoundingBoxRight: m.actualBoundingBoxRight, actualBoundingBoxLeft: m.actualBoundingBoxLeft, actualBoundingBoxDescent: m.actualBoundingBoxDescent, actualBoundingBoxAscent: m.actualBoundingBoxAscent }; widthCache.set(mk, tm); }
+    const fz = size.toFixed(1); lctx.font = `800 ${fz}px ${css("--display")}`;
+    const mk = "g" + fz + c.name; let tm = widthCache.get(mk); if (!tm) { const m = lctx.measureText(c.name); tm = { width: m.width, actualBoundingBoxRight: m.actualBoundingBoxRight, actualBoundingBoxLeft: m.actualBoundingBoxLeft, actualBoundingBoxDescent: m.actualBoundingBoxDescent, actualBoundingBoxAscent: m.actualBoundingBoxAscent }; widthCache.set(mk, tm); }
     const w = tm.width + 6;
     if (w > Math.sqrt(c.n) * hexPx * 1.8) continue;
     if (!fits(sx - w / 2, sy - size * 0.6, w, size * 1.2)) continue;
     if (gameView === "political" || gameView === "population" || gameView === "era") drawFlag(c.k, sx + (tm.actualBoundingBoxRight - tm.actualBoundingBoxLeft) / 2, sy + (tm.actualBoundingBoxDescent - tm.actualBoundingBoxAscent) / 2 - size * 0.15, size);   // a little above the name   // centred behind the name's ink
-    ctx.font = `800 ${fz}px ${css("--display")}`;
-    ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = Math.max(1.6, size / 10); ctx.strokeText(c.name, sx, sy + size * 0.15);
-    ctx.fillStyle = "#1f2133"; ctx.fillText(c.name, sx, sy + size * 0.15);
+    lctx.font = `800 ${fz}px ${css("--display")}`;
+    lctx.strokeStyle = "rgba(255,255,255,.55)"; lctx.lineWidth = Math.max(1.6, size / 10); lctx.strokeText(c.name, sx, sy + size * 0.15);
+    lctx.fillStyle = "#1f2133"; lctx.fillText(c.name, sx, sy + size * 0.15);
     if (++count > 350) break;
   }
 }
@@ -1007,8 +1019,8 @@ function buildFlag(k) {
 function drawFlag(k, x, y, size) {
   const w = Math.max(16, size * 2.0), h = w / 1.9, x0 = x - w / 2, y0 = y - h / 2;
   const fk = gameView === "era" ? "e" + k : k; let cv = flagCache.get(fk); if (!cv) { cv = buildFlag(k); flagCache.set(fk, cv); }
-  ctx.drawImage(cv, x0, y0, w, h);
-  ctx.strokeStyle = "rgba(20,20,40,.75)"; ctx.lineWidth = 1; ctx.strokeRect(x0, y0, w, h);
+  lctx.drawImage(cv, x0, y0, w, h);
+  lctx.strokeStyle = "rgba(20,20,40,.75)"; lctx.lineWidth = 1; lctx.strokeRect(x0, y0, w, h);
 }
 function legend() {
   const el = $("legend");
