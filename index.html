@@ -813,12 +813,26 @@ const STRIPE_SEG = (() => {
   }
   return out;
 })();
+// which neighbour lies across the wall a stripe end touches (stripe ends sit on wall midpoints m; the neighbour's centre is at 2m)
+const STRIPE_NB = (() => { let i0 = -1; for (let i = 0; i < N && i0 < 0; i++) { let ok = true; for (let d = 0; d < 6; d++) if (nb(i, d) < 0) ok = false; if (ok) i0 = i; }
+  const dirOf = (mx, my) => { let best = -1, bd = 1e9; for (let d = 0; d < 6; d++) { const j = nb(i0, d), ex = cx[j] - cx[i0] - 2 * mx, ey = cy[j] - cy[i0] - 2 * my, dd = ex * ex + ey * ey; if (dd < bd) { bd = dd; best = d; } } return best; };
+  return STRIPE_SEG.map(g => [dirOf(g[0], g[1]), dirOf(g[2], g[3])]); })();
 function drawStripes(c, list) {
   if (!ERA_STRIPE || !gameOn || gameView !== "era") return;
-  const P = [null, new Path2D(), new Path2D()];
-  const H = [null, new Path2D(), new Path2D()];   // stripes are clipped to their own hexes, so border stripes never spill onto a plain neighbour
-  for (const i of list) { const k = eraOf(i); if (k < 0 || !ERA_STRIPE[k]) continue; const p = P[ERA_STRIPE[k]], x = cx[i], y = cy[i]; hexPath(H[ERA_STRIPE[k]], i); for (const g of STRIPE_SEG) { p.moveTo(x + g[0], y + g[1]); p.lineTo(x + g[2], y + g[3]); } }
-  for (const t of [1, 2]) { c.save(); c.clip(H[t]); c.strokeStyle = "#ffffff"; c.lineCap = "butt"; c.lineWidth = S * (t === 1 ? 0.1130 : 0.3209); c.stroke(P[t]); c.restore(); }
+  const W = [0, S * 0.1130, S * 0.3530], P = [null, new Path2D(), new Path2D()];
+  for (const i of list) {
+    const k = eraOf(i); if (k < 0 || !ERA_STRIPE[k]) continue; const t = ERA_STRIPE[k], p = P[t], x = cx[i], y = cy[i];
+    const cut = W[t] * 0.3 + S * 0.1;   // a stripe that meets sea or an unstriped neighbour stops square, a little inside the hex (user, 10-31)
+    STRIPE_SEG.forEach((g, n) => {
+      const dx = g[2] - g[0], dy = g[3] - g[1], L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L;
+      const go = d => { const j = nb(i, d); return j >= 0 && D.reg[j] >= 0 && eraOf(j) >= 0 && ERA_STRIPE[eraOf(j)] === t; };
+      const a0 = go(STRIPE_NB[n][0]) ? -0.02 * S : cut, a1 = go(STRIPE_NB[n][1]) ? -0.02 * S : cut;
+      p.moveTo(x + g[0] + ux * a0, y + g[1] + uy * a0); p.lineTo(x + g[2] - ux * a1, y + g[3] - uy * a1);
+    });
+  }
+  c.save(); c.strokeStyle = "#ffffff"; c.lineCap = "butt";
+  for (const t of [1, 2]) { c.lineWidth = W[t]; c.stroke(P[t]); }
+  c.restore();
 }
 const relOf = i => G && D.reg[i] >= 0 && i < G.hrel.length ? G.hrel[i] : -1;
 const culOf = i => G && D.reg[i] >= 0 && i < G.hcul.length ? G.hcul[i] : -1;
