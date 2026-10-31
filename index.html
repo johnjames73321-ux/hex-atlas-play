@@ -111,7 +111,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
   <canvas id="ocean" aria-hidden="true" style="pointer-events:none"></canvas>
   <canvas id="cv"></canvas>
   <canvas id="bloom" aria-hidden="true" style="pointer-events:none"></canvas>
-  <canvas id="lab" aria-hidden="true" style="pointer-events:none"></canvas>
+  <div aria-hidden="true" style="position:absolute;inset:0;overflow:hidden;pointer-events:none"><canvas id="lab" style="pointer-events:none"></canvas></div>
   <div class="status" id="status"></div>
   <div class="markbox" id="markbox" hidden><p class="where" id="mark-where"></p><textarea id="mark-text" placeholder="What should Claude do with this place? Enter sends, Shift+Enter new line, Esc cancels"></textarea></div>
   <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zfit" aria-label="Fit map">⤢</button></div>
