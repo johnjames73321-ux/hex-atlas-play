@@ -5302,21 +5302,27 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     spin: { from: 0, to: -Math.PI * 2, dur: .4, m: 1.4, reach: 1.2, lock: .55, lunge: 0, w: .45, round: 1 },   // R: full circle
     slam: { from: .5, to: -.5, dur: .34, m: 2.2, reach: 1.2, lock: .55, lunge: .7, w: .5 },          // combo 4th: overhead slam with a shockwave
     whirl: { from: 0, to: -Math.PI * 3, dur: .55, m: 1.3, reach: 1.25, lock: .6, lunge: .4, w: .45, round: 1 },   // combo 5th: whirlwind
-    thrust: { from: 0, to: 0, dur: .18, m: 2.6, reach: 1.7, w: .35, lock: .4, lunge: 1.4 },        // after a parry: riposte lunge
-    jab: { from: 0, to: 0, dur: .12, m: .9, reach: 1.3, w: .3, lock: .35, lunge: .25 },
+    thrust: { from: 0, to: 0, dur: .22, m: 2.6, reach: 1.7, w: .35, lock: .4, lunge: 1.4 },        // after a parry: riposte lunge
+    jab: { from: 0, to: 0, dur: .17, m: .9, reach: 1.3, w: .3, lock: .35, lunge: .25 },
     dash: { from: 0, to: 0, dur: .2, m: 1.2, reach: 1, lock: .55 }                         // Tab: dash 6 m along your aim, cutting through
   };
   Object.assign(me, { st: 100, weapon: "sword", draw: null, rollT: 0, rollCd: 0, chain: 0, atk: null, combo: 0, comboT: -9, buf: null, blade: true, block: false, lmb: null, tnow: 0, fx: [], cdQ: 0, cdR: 0, bonus: 1, riposte: 1, tabT: 0, twist: 0 });
   const angD = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
   const swoosh = () => tone(700, .05);
   const flash = (t, ms = 650) => say(t, ms);
-  const startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (1 - .1 * sk("swift")), lock: A.lock * (1 - .1 * sk("recover")), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); };
+  const zoneMat = new T.MeshBasicMaterial({ color: 0x8fdcff, transparent: true, opacity: .45, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending });
+  const zone = A => {   // the reach of a thrust, drawn flat on the ground in front (user, 11-01)
+    const o = new T.Mesh(new T.RingGeometry(.4, REACH * A.reach + A.lunge, 18, 1, -Math.PI / 2 - A.w, A.w * 2), zoneMat.clone());
+    o.rotation.order = "YXZ"; o.rotation.set(-Math.PI / 2, A.face, 0); o.position.set(me.pos.x, me.pos.y + .08, me.pos.z); scene.add(o); me.fx.push({ o, t: 0, d: A.dur + .2, s: 0, a: .5 });
+  };
+  const ss = u => u * u * (3 - 2 * u);
+  const startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (1 - .1 * sk("swift")), lock: A.lock * (1 - .1 * sk("recover")), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
   const CHAIN = ["s0", "s1", "s2", "slam", "whirl"];
   const nextSwing = () => { if (me.riposte > 1) { me.combo = 0; return startAtk("thrust"); } if (me.tnow - me.comboT > 1.1) me.combo = 0; const len = 3 + sk("combo"); me.comboT = me.tnow; startAtk(CHAIN[me.combo % len]); me.combo = (me.combo + 1) % len; };
   const inWindow = () => !me.atk || (me.tnow - me.atk.t0) / me.atk.dur >= me.atk.lock;
   const RUN = {
     swing: nextSwing, jab: () => startAtk("jab"), sweep: () => { me.combo = 0; startAtk("sweep"); },
-    spin: () => { if (me.cdR > 0) return false; me.cdR = 3; me.combo = 0; startAtk("spin"); },
+    spin: () => { if (me.cdR > 0) return false; me.cdR = 1; me.combo = 0; startAtk("spin"); },
     q: () => { if (me.cdQ > 0) return false; me.cdQ = 4; startAtk("dash"); },
     spear: () => throwBlade("spear"), lob: () => throwBlade("lob")
   };
@@ -5379,11 +5385,13 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   const handPos = out => { hero.armR.updateMatrixWorld(); return out.setFromMatrixPosition(hero.armR.matrixWorld); };
   function throwBlade(kind) {
     if (!me.blade || me.hp <= 0) return; me.thrownT = me.tnow; me.blade = false; hero.sword.visible = false; thr.visible = true; swoosh();
-    const p0 = handPos(new T.Vector3()), dir = new T.Vector3(Math.sin(me.face), 0, Math.cos(me.face)), mul = me.bonus * me.riposte * (1 + .4 * sk("throwp")); me.bonus = 1; me.riposte = 1;
+    const L = me.lmb, pw = L && L.charging ? clamp((me.tnow - L.t - .3) / .8, 0, 1) : -1, far = pw < 0 ? 1 : 1.4 + pw * .6;   // thrown out of a LMB charge (user, 11-01)
+    if (pw >= 0) { me.lmb = null; flash("POWER THROW!", 800); tone(1400, .08); me.shake = .2; }
+    const p0 = handPos(new T.Vector3()), dir = new T.Vector3(Math.sin(me.face), 0, Math.cos(me.face)), mul = me.bonus * me.riposte * (1 + .4 * sk("throwp")) * (pw < 0 ? 1 : 1.6 + pw * 1.4); me.bonus = 1; me.riposte = 1;
     if (kind === "lob") {                                              // underhand, 45° up: slow, short, lands with a wide hit
-      const d = me.aim ? clamp(Math.hypot(me.aim.x - me.pos.x, me.aim.z - me.pos.z), 4, 14) : 12, tx = me.pos.x + dir.x * d, tz = me.pos.z + dir.z * d;
+      const d = me.aim ? clamp(Math.hypot(me.aim.x - me.pos.x, me.aim.z - me.pos.z), 4, 14 * far) : 12 * far, tx = me.pos.x + dir.x * d, tz = me.pos.z + dir.z * d;
       proj = { kind, p0, t: 0, dur: .85, tgt: new T.Vector3(tx, Math.max(H(tx, tz), -.3), tz), peak: d / 4 + 1, p: p0.clone(), dir, mul, out: 0 };
-    } else proj = { kind, p: p0.clone(), dir, left: 26 + 6 * sk("throwp"), speed: 45 + 5 * sk("throwp"), mul, out: 0, pierce: sk("pierce"), done: new Set() };   // spear throw: fast, far, one target (chain length 26 m)
+    } else proj = { kind, p: p0.clone(), dir, left: (26 + 6 * sk("throwp")) * far, speed: (45 + 5 * sk("throwp")) * (pw < 0 ? 1 : 1.35), mul, out: 0, pierce: sk("pierce"), done: new Set() };   // spear throw: fast, far, one target (chain length 26 m)
   }
   function recall() { if (!proj || proj.ret) return; proj.ret = 1; tone(420, .06); }
   me.parried = m => { m.stun = 1.6; me.riposte = 2; me.cdQ = 0; me.slowT = .45; me.st = Math.min(100, me.st + 25); flash("PARRY! LMB = riposte (2x)", 900); tone(2200, .08); spark(handPos(new T.Vector3()), 16); };
@@ -5403,7 +5411,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     if (A.round || !span) return A.from + span * (1 - (1 - p) ** 3);
     if (p < .18) return A.from - sg * .45 * Math.sin(p / .18 * Math.PI / 2);
     if (p < .7) { const u = (p - .18) / .52; return A.from - sg * .45 + (span + sg * .75) * (1 - (1 - u) ** 3); }
-    return A.to + sg * .3 * (1 - (p - .7) / .3);
+    return A.to + sg * .3 * (1 - ss((p - .7) / .3));
   };
   const damp = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
   me.ps.push((dt, t) => {
@@ -5433,13 +5441,15 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
         for (const m of mobs) if (!m.dead && !A.hit.has(m) && Math.hypot(m.root.position.x - c.x, m.root.position.z - c.z) < 3.5 + m.a[1] * .3 * GS) { A.hit.add(m); hurtMob(m, BASE * 1.4 * A.mul, c, 1); }
         const ring = new T.Mesh(new T.RingGeometry(.2, .5, 32), ringMat.clone()); ring.rotation.x = -Math.PI / 2; ring.position.copy(c); scene.add(ring); me.fx.push({ o: ring, t: 0, d: .4, s: 7 }); me.shake = .35; tone(90, .14); spark(c, 12); }
       A.prev = cur; A.cur = cur;
-      if (p >= 1) { me.atk = null; me.comboT = me.tnow; const b = me.buf; me.buf = null; if (b && RUN[b]) RUN[b](); }
+      if (p >= 1) { if (A.round) me.twist = angD(0, cur); me.atk = null; me.comboT = me.tnow; const b = me.buf; me.buf = null; if (b && RUN[b]) RUN[b](); }
     }
     // pose: targets per state, eased toward each frame (swings are set exactly so the cut stays crisp)
     const K = me.atk && me.atk.kind;
-    let tx = .95, ty = -.25, tz = 0, sz = .25, twist = 0;
+    let tx = .95, ty = -.25, tz = 0, sz = .6, twist = 0;
     if (K === "slam") { const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1); tx = p < .4 ? -2.7 : -2.7 + Math.min(1, (p - .4) / .2) * 3.9; ty = 0; twist = 0; }   // blade up over the head, then down
-    else if (K === "jab" || K === "thrust") { const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1); tx = -.05; ty = 0; sz = .25 + Math.sin(p * Math.PI) * .75; twist = -.25 * Math.sin(p * Math.PI); }
+    else if (K === "jab" || K === "thrust") {   // pull back, punch straight out, ease home
+      const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1), back = p < .25 ? Math.sin(p / .25 * Math.PI / 2) : 0, out = p < .25 ? 0 : p < .55 ? 1 - (1 - (p - .25) / .3) ** 3 : 1 - ss((p - .55) / .45);
+      tx = -.08 + back * .2; ty = .12 * back; sz = .6 - .25 * back + (K === "thrust" ? 1.2 : .95) * out; twist = .25 * back - .4 * out; }
     else if (K === "dash") { tx = -.05; ty = -.2; twist = -.2; }
     else if (me.atk && me.atk.round) { tx = -.1; ty = 0; twist = me.atk.cur; }
     else if (K) { tx = -.15 + (K === "sweep" ? .1 : 0); twist = me.atk.cur * .35; ty = me.atk.cur - twist; }   // body turns into the cut, arm does the rest
@@ -5450,10 +5460,10 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     else if (me.tnow - (me.thrownT ?? -9) < .3) { tx = -.1; ty = 0; twist = -.5; }               // follow-through after the throw
     else if (me.moving) { tx = .8 + Math.sin(me.walkT || 0) * .25; ty = -.3; }
     else { tx = .95 + Math.sin(me.tnow * 2) * .05; }                    // idle: breathing
-    const snap = K && K !== "jab" && K !== "thrust";
-    pv.rotation.x = snap ? tx : damp(pv.rotation.x, tx, 22, dt); pv.rotation.y = snap ? ty : damp(pv.rotation.y, ty, 22, dt);
-    sw.rotation.z = damp(sw.rotation.z, tz, 18, dt); sw.position.z = damp(sw.position.z, sz, 30, dt);
-    me.twist = me.atk && me.atk.round ? twist : damp(me.twist, twist, 16, dt);
+    const rk = K ? 42 : 14;   // attacks follow their curve closely, everything else glides
+    pv.rotation.x = damp(pv.rotation.x, tx, rk, dt); pv.rotation.y = damp(pv.rotation.y, ty, rk, dt);
+    sw.rotation.z = damp(sw.rotation.z, tz, rk, dt); sw.position.z = K === "jab" || K === "thrust" ? sz : damp(sw.position.z, sz, 20, dt);
+    me.twist = me.atk && me.atk.round ? twist : damp(me.twist, twist, K ? 30 : 12, dt);
     // body: lean, crouch, stance, off hand; the guard arc while blocking
     let lean = 0, crouch = 0, stance = 0, off = 0;
     if (me.slide) { lean = -.75; crouch = .75; stance = 1.1; off = 1.2; }
@@ -5473,7 +5483,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     if (me.rollT > 0) { hero.root.rotation.x = (1 - me.rollT / me.rollD) * Math.PI * 2; hero.root.position.y -= .45; }   // dodge: a forward roll
     { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0; sPts[1] = -.55; sPts[2] = 0; sPts[4] = 0; sPts[5] = -c * .4; sPts[7] = .55; sPts[8] = 0; sGeo.attributes.position.needsUpdate = true; nock.visible = me.draw != null; nock.position.set(0, 0, .1 - c * .4); }
     hero.shell.visible = !!me.block && me.blade && me.weapon === "sword"; if (hero.shell.visible) { const bh = Math.max(0, 1 - (me.tnow - (me.blockHitT ?? -9)) / .25); hero.shell.material.opacity = Math.max(bh * .8, me.tnow - (me.blockT ?? -9) < .3 + .08 * sk("guard") ? .5 : .16 + Math.sin(me.tnow * 6) * .04); hero.shell.material.color.setHex(bh > .5 ? 0xffffff : 0x8fdcff); }
-    if (!me.moving) { hero.legs[0].rotation.x = me.stance; hero.legs[1].rotation.x = -me.stance * .7; }
+    if (!me.moving) { hero.legs[0].rotation.x = damp(hero.legs[0].rotation.x, me.stance, 14, dt); hero.legs[1].rotation.x = damp(hero.legs[1].rotation.x, -me.stance * .7, 14, dt); }
     if (!me.moving || K || me.block || me.weapon === "bow") hero.armL.rotation.x = me.off;   // walking keeps its arm swing
     hero.guard.visible = !!me.block && me.blade; if (hero.guard.visible) hero.guard.material.opacity = me.tnow - (me.blockT ?? -9) < .3 ? .85 : .45;   // brighter during the parry window
     if (K === "dash" && (me.ghostT = (me.ghostT || 0) + dt) > .03) {                            // dash: fading afterimages
@@ -5529,7 +5539,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     for (let i = sparks.length - 1; i >= 0; i--) if (sparks[i].t > .5) sparks.splice(i, 1);
     if (nums.length) { const W2 = innerWidth, H2 = innerHeight; for (const n of nums) { n.t += dt; n.p.y += dt * 1.4; prj.copy(n.p).project(me.cam); n.el.style.display = prj.z < 1 ? "" : "none"; n.el.style.transform = `translate(${(prj.x + 1) / 2 * W2 + n.x - 12}px,${(1 - prj.y) / 2 * H2 - n.t * 30}px)`; n.el.style.opacity = Math.max(0, 1 - n.t / .9); if (n.t > .9) n.el.remove(); } for (let i = nums.length - 1; i >= 0; i--) if (nums[i].t > .9) nums.splice(i, 1); }
     if (me.shake > 0) { me.shake -= dt; const s = me.shake * .3; me.cam.position.x += (Math.random() - .5) * s; me.cam.position.y += (Math.random() - .5) * s; }
-    for (const f of me.fx) { f.t += dt; const k = f.t / f.d; f.o.scale.setScalar(1 + k * f.s); f.o.material.opacity = .8 * (1 - k); if (k >= 1) { scene.remove(f.o); f.o.geometry.dispose(); f.o.material.dispose(); } }
+    for (const f of me.fx) { f.t += dt; const k = f.t / f.d; f.o.scale.setScalar(1 + k * f.s); f.o.material.opacity = (f.a || .8) * (1 - k); if (k >= 1) { scene.remove(f.o); f.o.geometry.dispose(); f.o.material.dispose(); } }
     me.fx = me.fx.filter(f => f.t < f.d);
     if ((me.hudT = (me.hudT || 0) + dt) > .2) { me.hudT = 0; hpEl.lastElementChild.textContent = `${Math.max(0, Math.ceil(me.hp))} HP · ${me.kills} slain · Tab ${me.cdQ ? me.cdQ.toFixed(1) + "s" : "ready"} · R ${me.cdR ? me.cdR.toFixed(1) + "s" : "ready"}${me.riposte > 1 ? " · riposte ready" : ""}${me.blade ? "" : " · blade out: E to pull back"} · stamina ${Math.round(me.st)} · ${me.weapon === "bow" ? "🏹 bow ×" + (1 + sk("multi")) : "⚔ sword"} · Lv ${prog.lvl} (${prog.xp}/${xpNeed(prog.lvl)} XP${prog.pts ? ", " + prog.pts + " pt: K" : ""})${me.chain >= 3 && me.tnow - me.chainT < 2 ? " · combo ×" + me.chain : ""}`; }
     // animals
@@ -5614,10 +5624,10 @@ st.textContent = `#peg{position:absolute;z-index:4;right:16px;bottom:calc(126px 
 #peg svg,#pegGhost svg{width:22px;height:32px;pointer-events:none}
 #pegGhost{position:fixed;z-index:60;pointer-events:none;transform:translate(-50%,-92%);filter:drop-shadow(0 6px 4px rgba(0,0,0,.35))}
 #pegTip{position:fixed;z-index:60;pointer-events:none;font-size:.78rem;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 8px;max-width:min(260px,70vw);transform:translate(16px,-10px)}
-#sv{position:fixed;inset:0;z-index:50;background:#0b0c12;touch-action:none;user-select:none}
+#sv{position:fixed;inset:0;z-index:50;background:#0b0c12;touch-action:none;user-select:none;cursor:none}
 #sv[hidden],#pegGhost[hidden],#pegTip[hidden],#sv .load[hidden]{display:none}
 #sv canvas{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated}
-#sv .xh{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.6);pointer-events:none}
+#sv .xh{display:none;position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.6);pointer-events:none}
 #sv .hud{position:absolute;left:12px;top:12px;max-width:min(380px,calc(100% - 110px));background:rgba(12,13,20,.62);color:#f2f2f7;border-radius:10px;padding:10px 14px;font-size:.8rem;line-height:1.4;backdrop-filter:blur(6px)}
 #sv .hud h2{font-family:var(--display);font-size:1.15rem;margin:0 0 2px;font-weight:800;line-height:1.15}
 #sv .hud .m{opacity:.75}
@@ -5707,8 +5717,8 @@ ov.addEventListener("pointerdown", e => { if (!S3 || e.target.closest("button, .
 ov.addEventListener("pointerup", e => { if (!S3) return; if (e.button === 0) S3.lmbUp && S3.lmbUp(); else if (e.button === 2) S3.block = false; });
 document.addEventListener("pointerlockchange", () => { if (S3 && document.pointerLockElement !== ov && document.hasFocus() && !ov.hidden && !S3.unlocking) close(); });   // Esc while the mouse is captured: straight back to the map
 ov.addEventListener("pointermove", e => { if (!S3) return; S3.mouse = [e.clientX, e.clientY];
-  if (!e.target.closest("button, .hud")) { S3.yaw -= e.movementX * .0022; S3.pitchC = clamp(S3.pitchC + e.movementY * .0022, -.45, 1.15); } });   // look: mouse turns the view, the hero turns with it
-ov.addEventListener("wheel", e => { if (!S3) return; e.preventDefault(); S3.dist = clamp(S3.dist * Math.exp(e.deltaY * .001), 2, 10); try { localStorage.setItem("hexatlas-cam4", String(S3.dist)); } catch (err) {} }, { passive: false });
+  if (!e.target.closest("button, .hud")) { S3.yaw -= e.movementX * .0026; S3.pitchC = clamp(S3.pitchC + e.movementY * .0026, -.45, 1.15); } });   // look: mouse turns the view, the hero turns with it
+ov.addEventListener("wheel", e => { if (!S3) return; e.preventDefault(); S3.dist = clamp(S3.dist * Math.exp(e.deltaY * .001), 1.5, 10); try { localStorage.setItem("hexatlas-cam5", String(S3.dist)); } catch (err) {} }, { passive: false });
 ov.addEventListener("auxclick", e => e.preventDefault());
 
 const hexUnder = e => { const r = cv.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return -1; const i = hexAt(...world(e)); return i >= 0 && D.reg[i] >= 0 ? i : -1; };
@@ -5853,7 +5863,7 @@ function build(me, i) {
   }
   if (b.t === "aurora") aurora(me, scene, r);
   // the hero: third-person, Zelda / Pokemon style camera above and behind
-  me.pos = P(0, Math.max(H(0, 0), -.3), 0); me.face = 0; me.yaw = r() * 6.28; me.dist = 4; me.pitchC = .3; try { const c4 = localStorage.getItem("hexatlas-cam4"), c3 = localStorage.getItem("hexatlas-cam3"); me.dist = clamp(c4 ? +c4 : c3 ? +c3 - .5 : 4, 2, 10); } catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
+  me.pos = P(0, Math.max(H(0, 0), -.3), 0); me.face = 0; me.yaw = r() * 6.28; me.dist = 3.3; me.pitchC = .3; try { const c5 = localStorage.getItem("hexatlas-cam5"), c4 = localStorage.getItem("hexatlas-cam4"), c3 = localStorage.getItem("hexatlas-cam3"); me.dist = clamp(c5 ? +c5 : (c4 ? +c4 : c3 ? +c3 - .5 : 4) * .82, 1.5, 10); } catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
   me.hero = heroMesh(); scene.add(me.hero.root);
   const apex = wildlife(me, scene, cam, H, r, lat, lon);
   // HUD
