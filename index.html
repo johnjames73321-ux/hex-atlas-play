@@ -4576,7 +4576,7 @@ const AN = {
   amblack: ["bear", 1.8, .95, "1a1a1a", "5a4a3a", 10, 160, 22, 25, "American black bear"],
   blackbear: ["bear", 1.7, .9, "1a1a1a", "f0ece0", 10, 150, 22, 25, "Asian black bear"],
   spectacled: ["bear", 1.8, .85, "2a2420", "d8c8a0", 9, 140, 20, 20, "Spectacled bear"],
-  panda: ["bear", 1.7, .8, "f0ece4", "1a1a1a", 6, 180, 20, 0, "Giant panda", { panda: 1 }],
+  panda: ["bear", 2.8, 1.55, "f0ece4", "1a1a1a", 6, 180, 20, 0, "Giant panda", { panda: 1 }],
   redpanda: ["bear", .6, .3, "b84a1a", "1a1a1a", 6, 25, 4, 0, "Red panda"],
   wolf: ["dog", 1.7, .95, "8a8a88", "5a5a58", 16, 80, 14, 40, "Grey wolf"],
   ethwolf: ["dog", 1, .6, "c8682a", "f0e8d8", 14, 50, 9, 30, "Ethiopian wolf"],
@@ -5231,16 +5231,21 @@ function heroMesh() {   // an ordinary white stick figure (forward is +z, right 
 function wildlife(me, scene, cam, H, r, lat, lon) {
   const kinds = faunaOf(lat, lon).filter(k => AN[k]).map(k => regional(k, lat, lon)), mobs = [], W = 700, tmpV = new T.Vector3(), tmpW = new T.Vector3();
   const aqua = k => /croc|pin|hippo|snake/.test(AN[k][0]) || k === "hippo" || k === "capybara";
-  const spawn = (k, far) => {
-    k = morphOf(k, r); const b = beast(k), a = AN[k];
+  const spawn = (k, far, boss) => {
+    k = morphOf(k, r); const b = beast(k), a = AN[k].slice(); a[5] *= .75;   // everyone a bit slower (user, 11-01)
     { const sh = .88 + r() * .24, seen = new Set(); b.root.traverse(o => { const mt = o.material; if (mt && mt.color && !seen.has(mt) && mt.color.getHex() > 0x202020) { seen.add(mt); mt.color.multiplyScalar(sh); } }); b.root.scale.multiplyScalar(.92 + r() * .16); }   // no two alike
     for (let t = 0; t < 30; t++) { const ang = r() * 6.28, d = (far ? 90 : 18) + r() * 60, x = me.pos.x + Math.cos(ang) * d, z = me.pos.z + Math.sin(ang) * d; if (aqua(k) || H(x, z) > 0) { b.root.position.set(x, H(x, z), z); break; } }
     b.root.rotation.y = r() * 6.28; scene.add(b.root);
-    const m = { k, a, ...b, hp: a[6], cd: 0, angry: 0, dead: 0, hd: b.root.rotation.y, wt: 0, ph: r() * 9, flash: 0, alt: 18 + r() * 14, hitBy: 0 };
+    if (boss) {   // the land's boss: same animal, light and dark swapped, bigger, 1.5x stats and quicker
+      const seen = new Set(); b.root.traverse(o => { const mt = o.material; if (mt && mt.color && !seen.has(mt)) { seen.add(mt); const h = {}; mt.color.getHSL(h); mt.color.setHSL(h.h, h.s, clamp(1 - h.l, .08, .9)); } });
+      b.root.scale.multiplyScalar(1.25); a[5] *= 1.6; a[6] *= 1.5; a[7] *= 1.5; a[9] = "Boss " + a[9];
+    }
+    const m = { boss, k, a, ...b, hp: a[6], cd: 0, angry: 0, dead: 0, hd: b.root.rotation.y, wt: 0, ph: r() * 9, flash: 0, alt: 18 + r() * 14, hitBy: 0 };
     mobs.push(m); return m;
   };
   const sizes = kinds.slice().sort((u, v) => AN[v][1] * AN[v][2] - AN[u][1] * AN[u][2]);
   for (let j = 0; j < 8; j++) spawn(sizes[j % sizes.length], false);
+  if (sizes.length) spawn(sizes[0], true, 1);
   me.hp = 100; me.hurtT = 0; me.kills = 0; me.mobs = mobs;
   // HUD bits
   const hpEl = $("svHP"), msg = $("svMsg");
@@ -5271,8 +5276,11 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
 #svTree button{text-align:left;background:#1d2236;color:inherit;border:1px solid #39406a;border-radius:7px;padding:6px 8px;cursor:pointer;display:grid;gap:2px}
 #svTree button:disabled{opacity:.55;cursor:default}#svTree button span{opacity:.8}#svTree button i{font-style:normal;color:#9fe0ff;font-size:.7rem}`; document.head.appendChild(c); }
   let tree = $("svTree"); if (!tree) { tree = document.createElement("div"); tree.id = "svTree"; tree.className = "hud"; $("sv").appendChild(tree); } tree.hidden = true;
-  const drawTree = () => { if (tree.hidden) return; tree.innerHTML = `<h3>Skill tree · Level ${prog.lvl} · ${prog.pts} point${prog.pts === 1 ? "" : "s"} · XP ${prog.xp} / ${xpNeed(prog.lvl)}</h3>` + Object.entries(SK).map(([k, q]) => { const l = sk(k), mx = l >= q.max, c = mx ? 0 : q.cost(l), rq = mx ? 0 : q.req(l), ok = !mx && prog.pts >= c && prog.lvl >= rq; return `<button data-k="${k}"${ok ? "" : " disabled"}><b>${q.n} ${"●".repeat(l)}${"○".repeat(q.max - l)}</b><span>${q.d}</span><i>${mx ? "maxed" : `${c} point${c > 1 ? "s" : ""} · needs level ${rq}`}</i></button>`; }).join("") + "<p>K closes · animals give XP when slain</p>"; };
-  tree.onclick = e => { const b = e.target.closest("button[data-k]"); if (!b) return; const k = b.dataset.k, q = SK[k], l = sk(k); if (l >= q.max || prog.pts < q.cost(l) || prog.lvl < q.req(l)) return; prog.pts -= q.cost(l); prog.sk[k] = l + 1; saveProg(); drawTree(); tone(1200, .05); };
+  const drawTree0 = () => { if (tree.hidden) return; tree.innerHTML = `<h3>Skill tree · Level ${prog.lvl} · ${prog.pts} point${prog.pts === 1 ? "" : "s"} · XP ${prog.xp} / ${xpNeed(prog.lvl)}</h3>` + Object.entries(SK).map(([k, q]) => { const l = sk(k), mx = l >= q.max, c = mx ? 0 : q.cost(l), rq = mx ? 0 : q.req(l), ok = !mx && prog.pts >= c && prog.lvl >= rq; return `<button data-k="${k}"${ok ? "" : " disabled"}><b>${q.n} ${"●".repeat(l)}${"○".repeat(q.max - l)}</b><span>${q.d}</span><i>${mx ? "maxed" : `${c} point${c > 1 ? "s" : ""} · needs level ${rq}`}</i></button>`; }).join("") + "<p>K closes · animals give XP when slain</p>"; };
+  const UPS = { dmg: "Damage", spd: "Speed", dex: "Dexterity (attack speed)", car: "Cardio (recovery speed)", hp: "Health", jmp: "Jump" }, upL = k => (prog.up && prog.up[k]) || 0, upCost = k => 2 ** upL(k);
+  me.up = k => 1 + .01 * upL(k);
+  const drawTree = () => { drawTree0(); if (tree.hidden) return; tree.insertAdjacentHTML("beforeend", `<h3>Shop · ${prog.coins || 0} 🪙 · each buy +1%, price doubles</h3>` + Object.entries(UPS).map(([k, n]) => `<button data-u="${k}"${(prog.coins || 0) >= upCost(k) ? "" : " disabled"}><b>${n} +${upL(k)}%</b><span>next +1%</span><i>${upCost(k)} 🪙</i></button>`).join("")); };
+  tree.onclick = e => { const u = e.target.closest("button[data-u]"); if (u) { const k = u.dataset.u, c = upCost(k); if ((prog.coins || 0) < c) return; prog.coins -= c; prog.up = prog.up || {}; prog.up[k] = upL(k) + 1; saveProg(); drawTree(); tone(1500, .05); return; } const b = e.target.closest("button[data-k]"); if (!b) return; const k = b.dataset.k, q = SK[k], l = sk(k); if (l >= q.max || prog.pts < q.cost(l) || prog.lvl < q.req(l)) return; prog.pts -= q.cost(l); prog.sk[k] = l + 1; saveProg(); drawTree(); tone(1200, .05); };
   me.toggleTree = () => { tree.hidden = !tree.hidden; if (!tree.hidden) { try { document.exitPointerLock(); } catch (e) {} drawTree(); } };
   const gainXP = v => { prog.xp += v; let up = 0; while (prog.xp >= xpNeed(prog.lvl)) { prog.xp -= xpNeed(prog.lvl); prog.lvl++; prog.pts += prog.lvl % 5 ? 1 : 2; up = 1; } if (up) { say(`Level ${prog.lvl}! K = skill tree (${prog.pts} point${prog.pts === 1 ? "" : "s"})`, 3200); tone(880, .07); } saveProg(); drawTree(); };
   // floating damage numbers
@@ -5280,13 +5288,16 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   const popNum = (m, v, crit) => { const el = document.createElement("div"); el.className = "dn" + (crit ? " crit" : ""); el.textContent = Math.round(v) + (crit ? "!" : ""); $("sv").appendChild(el); nums.push({ el, p: m.root.position.clone().setY(m.root.position.y + m.a[2] * GS + .5), t: 0, x: (Math.random() - .5) * 30 }); };
   // every hit the hero lands: crits, combo counter bonus, stagger, hit-stop, shake, numbers; kills give XP and heal a little
   const hurtMob = (m, dmg, from, heavy) => {
-    if (m.dead) return;
+    if (m.dead) return; dmg *= me.up("dmg");
     const crit = Math.random() < .05 + .08 * sk("crit"); if (crit) dmg *= 2;
     if (me.tnow - (me.chainT ?? -9) > 2) me.chain = 0; me.chain = (me.chain || 0) + 1; me.chainT = me.tnow; dmg *= 1 + Math.min(20, me.chain - 1) * .02;
     m.hp -= dmg; m.angry = 25; m.flash = .15; if (heavy || crit) m.stun = Math.max(m.stun || 0, .4);
     const k = tmpW.subVectors(m.root.position, from).setY(0).normalize().multiplyScalar(Math.min(2.5, 60 / m.a[6] + .4) * (heavy ? 1.8 : 1)); m.root.position.add(k);
     popNum(m, dmg, crit); me.stopT = crit || heavy ? .07 : .035; me.shake = Math.max(me.shake || 0, crit || heavy ? .25 : .12);
-    if (m.hp <= 0) { m.dead = 3.5; me.kills++; me.hp = Math.min(100, me.hp + 4); hpDraw(); say(`${m.a[9]} slain · +${Math.round(m.a[6] * .6 + 5)} XP`); gainXP(Math.round(m.a[6] * .6 + 5)); }
+    if (m.hp <= 0) { m.dead = 3.5; me.kills++; me.hp = Math.min(100, me.hp + 4); hpDraw();
+      const lk = Math.random(), luck = lk < .002 ? 25 : lk < .025 ? 4 : 1, coin = Math.round((1 + Math.sqrt(m.a[1] * m.a[2]) * .6 + Math.random()) * luck * (m.boss ? 10 : 1));   // bigger = more, rarely a lucky haul
+      prog.coins = (prog.coins || 0) + coin; saveProg(); drawTree(); if (luck > 1) tone(1760, .12);
+      say(`${m.a[9]} slain · +${Math.round(m.a[6] * .6 + 5)} XP · +${coin} 🪙${luck >= 25 ? " JACKPOT!" : luck > 1 ? " lucky!" : ""}`); gainXP(Math.round(m.a[6] * .6 + 5)); }
   };
   const tone = (f, v) => { const ac = me.ac; if (!ac || !me.soundOn) return; try { const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime; o.type = "sawtooth"; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * .4, t + .25); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + .3); o.connect(g).connect(ac.destination); o.start(t); o.stop(t + .32); } catch (e) {} };
   // ---- the hero's sword (third person). LMB 3-hit combo · hold LMB = charged 180° sweep · MMB jab · R spin attack (360°)
@@ -5316,7 +5327,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     o.rotation.order = "YXZ"; o.rotation.set(-Math.PI / 2, A.face, 0); o.position.set(me.pos.x, me.pos.y + .08, me.pos.z); scene.add(o); me.fx.push({ o, t: 0, d: A.dur + .2, s: 0, a: .5 });
   };
   const ss = u => u * u * (3 - 2 * u);
-  const startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (1 - .1 * sk("swift")), lock: A.lock * (1 - .1 * sk("recover")), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
+  const startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
   const CHAIN = ["s0", "s1", "s2", "slam", "whirl"];
   const nextSwing = () => { if (me.riposte > 1) { me.combo = 0; return startAtk("thrust"); } if (me.tnow - me.comboT > 1.1) me.combo = 0; const len = 3 + sk("combo"); me.comboT = me.tnow; startAtk(CHAIN[me.combo % len]); me.combo = (me.combo + 1) % len; };
   const inWindow = () => !me.atk || (me.tnow - me.atk.t0) / me.atk.dur >= me.atk.lock;
@@ -5542,12 +5553,12 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     if (me.shake > 0) { me.shake -= dt; const s = me.shake * .3; me.cam.position.x += (Math.random() - .5) * s; me.cam.position.y += (Math.random() - .5) * s; }
     for (const f of me.fx) { f.t += dt; const k = f.t / f.d; f.o.scale.setScalar(1 + k * f.s); f.o.material.opacity = (f.a || .8) * (1 - k); if (k >= 1) { scene.remove(f.o); f.o.geometry.dispose(); f.o.material.dispose(); } }
     me.fx = me.fx.filter(f => f.t < f.d);
-    if ((me.hudT = (me.hudT || 0) + dt) > .2) { me.hudT = 0; hpEl.lastElementChild.textContent = `${Math.max(0, Math.ceil(me.hp))} HP · ${me.kills} slain · Tab ${me.cdQ ? me.cdQ.toFixed(1) + "s" : "ready"} · R ${me.cdR ? me.cdR.toFixed(1) + "s" : "ready"}${me.riposte > 1 ? " · riposte ready" : ""}${me.blade ? "" : " · blade out: E to pull back"} · stamina ${Math.round(me.st)} · ${me.weapon === "bow" ? "🏹 bow ×" + (1 + sk("multi")) : "⚔ sword"} · Lv ${prog.lvl} (${prog.xp}/${xpNeed(prog.lvl)} XP${prog.pts ? ", " + prog.pts + " pt: K" : ""})${me.chain >= 3 && me.tnow - me.chainT < 2 ? " · combo ×" + me.chain : ""}`; }
+    if ((me.hudT = (me.hudT || 0) + dt) > .2) { me.hudT = 0; hpEl.lastElementChild.textContent = `${Math.max(0, Math.ceil(me.hp))} HP · ${me.kills} slain · Tab ${me.cdQ ? me.cdQ.toFixed(1) + "s" : "ready"} · R ${me.cdR ? me.cdR.toFixed(1) + "s" : "ready"}${me.riposte > 1 ? " · riposte ready" : ""}${me.blade ? "" : " · blade out: E to pull back"} · stamina ${Math.round(me.st)} · ${me.weapon === "bow" ? "🏹 bow ×" + (1 + sk("multi")) : "⚔ sword"} · ${prog.coins || 0} 🪙 · Lv ${prog.lvl} (${prog.xp}/${xpNeed(prog.lvl)} XP${prog.pts ? ", " + prog.pts + " pt: K" : ""})${me.chain >= 3 && me.tnow - me.chainT < 2 ? " · combo ×" + me.chain : ""}`; }
     // animals
     const cp = me.pos, HUNT = /^(cat|dog|bear|croc|lizard|snake|fly)$/, PREY = /^(hoof|roo|ape|bird|tort)$/;
     for (const m of mobs.slice()) {
       const a = m.a, R0 = m.root, plan = a[0];
-      if (m.dead) { m.dead -= dt; R0.rotation.z = Math.min(Math.PI / 2, R0.rotation.z + dt * 3); R0.position.y -= dt * (m.dead < 1.5 ? .6 : 0); if (m.dead <= 0) { scene.remove(R0); mobs.splice(mobs.indexOf(m), 1); setTimeout(() => { if (S3 === me) spawn(m.k, true); }, 15000); } continue; }
+      if (m.dead) { m.dead -= dt; R0.rotation.z = Math.min(Math.PI / 2, R0.rotation.z + dt * 3); R0.position.y -= dt * (m.dead < 1.5 ? .6 : 0); if (m.dead <= 0) { scene.remove(R0); mobs.splice(mobs.indexOf(m), 1); setTimeout(() => { if (S3 === me) spawn(m.k, true, m.boss); }, m.boss ? 60000 : 4000); } continue; }
       if (m.stun > 0) { m.stun -= dt; for (const mt of m.mats) mt.emissive.setHex(0x203060); continue; }   // stunned by a parry
       m.cd -= dt; m.angry -= dt; m.flash -= dt;
       for (const mt of m.mats) mt.emissive.setHex(m.flash > 0 ? 0x902010 : 0);
@@ -5590,6 +5601,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
       let dh = m.hd - R0.rotation.y; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); R0.rotation.y += dh * Math.min(1, dt * 5);
       const ma = m.mv ? m.mv.a : R0.rotation.y, nx = R0.position.x + Math.sin(ma) * sp * dt, nz = R0.position.z + Math.cos(ma) * sp * dt;
       if ((aqua(m.k) || plan === "fly" || H(nx, nz) > 0) && Math.hypot(nx, nz) < W) { R0.position.x = nx; R0.position.z = nz; } else m.hd += 2;
+      for (const o of mobs) { if (o === m || o.dead) continue; const ex = R0.position.x - o.root.position.x, ez = R0.position.z - o.root.position.z, ed = Math.hypot(ex, ez), rr = (a[1] * R0.scale.x + o.a[1] * o.root.scale.x) * .3 * GS; if (ed < rr && ed > 1e-3) { const q = (rr - ed) / ed * .5; R0.position.x += ex * q; R0.position.z += ez * q; } }   // no two animals overlap
       const gy = H(R0.position.x, R0.position.z);
       if (plan === "fly") { const tgt = chase && dist < 25 ? cp.y + 1.2 : gy + m.alt + Math.sin(t * .7 + m.ph) * 3; R0.position.y += (Math.max(gy + .5, tgt) - R0.position.y) * Math.min(1, dt * 1.5); m.wings.forEach((w, i) => w.rotation.z = (i ? -1 : 1) * Math.sin(t * (chase ? 9 : 4) + m.ph) * .5); }
       else R0.position.y = gy + (plan === "roo" && sp ? Math.abs(Math.sin(t * 6 + m.ph)) * .8 : 0) + (m.mv && m.mv.hop ? Math.sin(m.mv.t / m.mv.d * Math.PI) * m.mv.hop : 0);
@@ -5600,10 +5612,11 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
       if (chase && d3 < reach && m.cd <= 0 && me.hp > 0) {
         if (me.rollT > 0) { m.cd = .6; continue; }   // rolled through the bite
         if (me.block && me.tnow - (me.blockT ?? -9) < .3 + .08 * sk("guard")) { m.cd = 1.6; me.parried(m); continue; }   // Q pressed just before the bite: parried, no damage
-        m.cd = 1.3; const blk = me.block && Math.abs(Math.atan2(Math.sin(Math.atan2(-dx, -dz) - me.face), Math.cos(Math.atan2(-dx, -dz) - me.face))) < 1.2;   // RMB block: 85% less from the front, knocks it back
+        m.cd = 1.3; if (r() < .55) m.mv = { k: "dash", a: Math.atan2(dx, dz) + (r() - .5) * .7, d: .75, s: 2, t: 0, f: 0 };   // bite and run past: no endless chewing on a standing player
+        const blk = me.block && Math.abs(Math.atan2(Math.sin(Math.atan2(-dx, -dz) - me.face), Math.cos(Math.atan2(-dx, -dz) - me.face))) < 1.2;   // RMB block: 85% less from the front, knocks it back
         let gb = 0; if (blk) { me.st -= 18 - 4 * sk("guard"); if (me.st <= 0) { me.st = 0; gb = 1; me.gbT = me.tnow; me.block = false; say("Guard broken!", 900); tone(150, .1); } }
         if (blk && !gb) { R0.position.x -= dx / (dist || 1) * 1.6; R0.position.z -= dz / (dist || 1) * 1.6; tone(1200, .05); me.blockHitT = me.tnow; spark(handPos(new T.Vector3())); me.shake = .1; const nx = cp.x + dx / (dist || 1) * .35, nz = cp.z + dz / (dist || 1) * .35; if (H(nx, nz) > -.6) { cp.x = nx; cp.z = nz; } }
-        me.hp -= a[7] * (blk && !gb ? [.15, .1, .05][sk("guard")] : 1); me.hurtT = 1; hpDraw(); $("svHurt").style.opacity = .55; setTimeout(() => $("svHurt").style.opacity = 0, 180);
+        me.hp -= a[7] * (blk && !gb ? [.15, .1, .05][sk("guard")] : 1) / me.up("hp"); me.hurtT = 1; hpDraw(); $("svHurt").style.opacity = .55; setTimeout(() => $("svHurt").style.opacity = 0, 180);
         if (me.hp <= 0) { say(`Killed by a ${a[9]}. Respawning…`, 3000); setTimeout(() => { if (S3 !== me) return; me.hp = 100; cp.set(0, Math.max(H(0, 0), -.3), 0); mobs.forEach(x => { x.angry = 0; }); hpDraw(); }, 2500); }
       }
     }
@@ -5885,7 +5898,7 @@ function build(me, i) {
   $("svHud").innerHTML = `<h2>${esc(b.n)}</h2><div class="m">${esc([name, admin, country].filter(Boolean).join(", "))} · ${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lon).toFixed(1)}°${lon >= 0 ? "E" : "W"}</div>${spp.length ? `<ul>${spp.map(k => `<li>${esc(SP[k][5])} · ${SP[k][1]} m</li>`).join("")}</ul>` : ""}`;
   $("svHud").insertAdjacentHTML("beforeend", `<div class="fauna">⚠ ${apex.slice(0, 4).map(a => `${esc(a[9])} · ${(+a[1]).toFixed(1)} m`).join(" · ")}</div>`);
   // camera, controls, loop
-  Object.assign(me, { R, pix, scene, cam, H, sky, sun, sunDir, last: 0, jy: 0, vy: 0, walkT: 0, jump: () => { if (!me.jy) { me.vy = me.slide ? 9.5 : 8; me.slide = null; } }, crouchDown: () => { if (me.runNow && !me.slide && me.mdir && me.hp > 0) { me.slide = { t: 0, x: me.mdir[0], z: me.mdir[1] }; me.atk = null; } }, turn: () => { me.yaw += Math.PI; me.face += Math.PI; } });
+  Object.assign(me, { R, pix, scene, cam, H, sky, sun, sunDir, last: 0, jy: 0, vy: 0, walkT: 0, jump: () => { if (!me.jy) { me.vy = (me.slide ? 9.5 : 8) * (me.up ? me.up("jmp") : 1); me.slide = null; } }, crouchDown: () => { if (me.runNow && !me.slide && me.mdir && me.hp > 0) { me.slide = { t: 0, x: me.mdir[0], z: me.mdir[1] }; me.atk = null; } }, turn: () => { me.yaw += Math.PI; me.face += Math.PI; } });
   if (me.ac) { me.stop = ambience(me.ac, String(b.a || "wind,birds").split(",")); me.ac.resume && me.ac.resume(); }
   const ray = new T.Raycaster(), plane = new T.Plane(new T.Vector3(0, 1, 0), 0), aimV = new T.Vector3(), ndc = new T.Vector2();
   const loop = t => {
@@ -5895,7 +5908,7 @@ function build(me, i) {
     const mv = Math.hypot(f, s) > .05, l = Math.max(1, Math.hypot(f, s)), mx = (-sy * f + cyw * s) / l, mz = (-cyw * f - sy * s) / l;
     const run = k.ShiftLeft || k.ShiftRight || j.run, crouch = (k.ControlLeft || k.ControlRight) && !me.slide;
     me.runNow = mv && run && !me.jy; if (mv) me.mdir = [mx, mz]; me.crouching = crouch;
-    const spd = (run && !crouch ? 13 : 5.5) * (crouch ? .5 : 1) * (me.block ? .45 : 1) * (me.draw != null ? .55 : 1) * (me.lmb && me.lmb.charging ? .5 : 1) * (me.atk && me.atk.kind !== "jab" ? .9 : 1) * (me.hp > 0 ? 1 : 0);
+    const spd = (run && !crouch ? 13 : 5.5) * (me.up ? me.up("spd") : 1) * (crouch ? .5 : 1) * (me.block ? .45 : 1) * (me.draw != null ? .55 : 1) * (me.lmb && me.lmb.charging ? .5 : 1) * (me.atk && me.atk.kind !== "jab" ? .9 : 1) * (me.hp > 0 ? 1 : 0);
     if (me.slide) {                                   // slide: a fast low burst along the run, steerable a little, slowing to a crouch
       const sl = me.slide; sl.t += dt; if (mv) { sl.x += (mx - sl.x) * dt * 2.5; sl.z += (mz - sl.z) * dt * 2.5; const n = Math.hypot(sl.x, sl.z) || 1; sl.x /= n; sl.z /= n; }
       const v = 20 * Math.max(0, 1 - sl.t / .75) ** 1.3 + 3, nx = pos.x + sl.x * v * dt, nz = pos.z + sl.z * v * dt;
