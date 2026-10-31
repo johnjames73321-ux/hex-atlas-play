@@ -378,7 +378,9 @@ const PALETTE = ["#c0392b","#e67e22","#f1c40f","#7cb342","#1e8449","#16a085","#2
 const DIRS = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
 const $ = id => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d");
-const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const cssCache = new Map(), css = n => { let v = cssCache.get(n); if (v === undefined) { v = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); cssCache.set(n, v); } return v; };
+new MutationObserver(() => cssCache.clear()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "style", "class"] });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => cssCache.clear());
 const fmt = n => n.toLocaleString("en-US");
 
 // ---- geometry & lookup ----
@@ -721,8 +723,13 @@ const widthCache = new Map();
 // names: largest places first, skip any label that would overlap one already drawn
 function labels(r, x0, y0, x1, y1) {
   const z = view.s; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const placed = [], hexPx = S * z * 2;
-  const fits = (bx, by, bw, bh) => { for (const p of placed) if (bx < p[0] + p[2] && bx + bw > p[0] && by < p[1] + p[3] && by + bh > p[1]) return false; placed.push([bx, by, bw, bh]); return true; };
+  const grid = new Map(), hexPx = S * z * 2, GC = 96;
+  const fits = (bx, by, bw, bh) => {
+    const c0 = Math.floor(bx / GC), c1 = Math.floor((bx + bw) / GC), r0 = Math.floor(by / GC), r1 = Math.floor((by + bh) / GC);
+    for (let a = c0; a <= c1; a++) for (let b = r0; b <= r1; b++) { const l = grid.get(a * 4096 + b); if (l) for (const p of l) if (bx < p[0] + p[2] && bx + bw > p[0] && by < p[1] + p[3] && by + bh > p[1]) return false; }
+    const box = [bx, by, bw, bh]; for (let a = c0; a <= c1; a++) for (let b = r0; b <= r1; b++) { const k = a * 4096 + b; let l = grid.get(k); if (!l) grid.set(k, l = []); l.push(box); }
+    return true;
+  };
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   // seas (italic) when there is room
   ctx.font = `italic 13px ${css("--body")}`; ctx.fillStyle = css("--coast");
@@ -730,7 +737,7 @@ function labels(r, x0, y0, x1, y1) {
     const a = seaAnchor[s]; if (a < 0 || D.seas[s] === "Open ocean") continue;
     if (seaHexes[s].length * hexPx * hexPx < 9000) continue;
     const sx = cx[a] * z + view.x, sy = cy[a] * z + view.y; if (sx < 0 || sy < 0 || sx > r.width || sy > r.height) continue;
-    const w = ctx.measureText(D.seas[s]).width + 8; if (fits(sx - w / 2, sy - 9, w, 18)) ctx.fillText(D.seas[s], sx, sy);
+    const sk = "sea" + D.seas[s]; let w = widthCache.get(sk); if (w === undefined) { w = ctx.measureText(D.seas[s]).width + 8; widthCache.set(sk, w); } if (fits(sx - w / 2, sy - 9, w, 18)) ctx.fillText(D.seas[s], sx, sy);
   }
   if (gameOn) gameLabels(r, z, fits);                 // country names first, then province names where room is left
   if (hexPx < 9) return;
@@ -778,11 +785,11 @@ const ERA_STRIPE = ERA ? ERA.tags.map((t, k) => { const kd = String(t[3] || "").
   if (/\bMaya\b|Zapotec|Monte Alb/i.test(txt)) return 0;   // Maya and Zapotec lands count as full countries (user, 10-31)
   if (/Aboriginal|Khoisan|\bKhoe|\bSan\b|forager|Paleo-Eskimo|Dorset|Inuit|Eskimo|Saami|Yukaghir|Fuegian|Yaghan|Kaw[eé]sqar|Andaman|Pygmy|Batwa|Hadza|Vedda|Semang|Negrito|Tasmanian|Athabaskan|Na-Dene|Numic|Great Basin|Epi-Jomon|Ainu/i.test(t[4] || "")) return 2;   // peoples who were all hunter-gatherers then (user, 10-31: Aboriginal Australians are thick)
   return /hunt|gather|forag|\bbands?\b|fisher/i.test(txt) && !/farm|agricult|rice|millet|maize/i.test(txt) ? 2 : 1; }) : null;
-// 3 stripes per hex, parallel to two of its own edges: the middle one corner to corner, two on the borders (each hex shows half of a border stripe).
+// stripes cut the hex walls at their midpoints (north wall to lower-right wall, south wall to upper-left wall); same white per hex as before.
 // Every hex centre sits on the same stripe grid (hex steps project to whole multiples of the spacing), so stripes run on unbroken from hex to hex.
 const STRIPE_SEG = (() => {
-  const dx = 0.5, dy = Math.sqrt(3) / 2, nx = dy, ny = -dx, sp = S * Math.sqrt(3) / 2, out = [];   // 3 lines per hex: one corner to corner through the centre, two on its own borders (user, 10-31)
-  for (const j of [-1, 0, 1]) {
+  const dx = 0.5, dy = Math.sqrt(3) / 2, nx = dy, ny = -dx, sp = S * Math.sqrt(3) / 2, out = [];   // 2 lines per hex, each from the middle of the north (south) wall to the middle of the lower-right (upper-left) wall (user, 10-31)
+  for (const j of [-0.5, 0.5]) {
     const ox = nx * j * sp, oy = ny * j * sp; let t0 = -2 * S, t1 = 2 * S;
     for (let k = 0; k < 6; k++) {
       const ax = VX[k], ay = VY[k], ex = VX[(k + 1) % 6] - ax, ey = VY[(k + 1) % 6] - ay, inx = -ey, iny = ex;
@@ -845,12 +852,13 @@ function gameLabels(r, z, fits) {
     if (Math.sqrt(c.n) * hexPx < 26) continue;
     const size = Math.min(30, Math.max(9, Math.sqrt(c.n) * hexPx * 0.32));
     const sx = c.x * z + view.x, sy = c.y * z + view.y; if (sx < -100 || sy < -30 || sx > r.width + 100 || sy > r.height + 30) continue;
-    ctx.font = `800 ${size.toFixed(1)}px ${css("--display")}`;
-    const tm = ctx.measureText(c.name), w = tm.width + 6;
+    const fz = size.toFixed(1); ctx.font = `800 ${fz}px ${css("--display")}`;
+    const mk = "g" + fz + c.name; let tm = widthCache.get(mk); if (!tm) { const m = ctx.measureText(c.name); tm = { width: m.width, actualBoundingBoxRight: m.actualBoundingBoxRight, actualBoundingBoxLeft: m.actualBoundingBoxLeft, actualBoundingBoxDescent: m.actualBoundingBoxDescent, actualBoundingBoxAscent: m.actualBoundingBoxAscent }; widthCache.set(mk, tm); }
+    const w = tm.width + 6;
     if (w > Math.sqrt(c.n) * hexPx * 1.8) continue;
     if (!fits(sx - w / 2, sy - size * 0.6, w, size * 1.2)) continue;
     if (gameView === "political" || gameView === "population" || gameView === "era") drawFlag(c.k, sx + (tm.actualBoundingBoxRight - tm.actualBoundingBoxLeft) / 2, sy + (tm.actualBoundingBoxDescent - tm.actualBoundingBoxAscent) / 2 - size * 0.15, size);   // a little above the name   // centred behind the name's ink
-    ctx.font = `800 ${size.toFixed(1)}px ${css("--display")}`;
+    ctx.font = `800 ${fz}px ${css("--display")}`;
     ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = Math.max(1.6, size / 10); ctx.strokeText(c.name, sx, sy + size * 0.15);
     ctx.fillStyle = "#1f2133"; ctx.fillText(c.name, sx, sy + size * 0.15);
     if (++count > 350) break;
@@ -1816,7 +1824,7 @@ addEventListener("keydown", e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); step(redo, undo); }
 });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", buildBase);
-new MutationObserver(buildBase).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+new MutationObserver(() => { cssCache.clear(); buildBase(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 addEventListener("resize", () => { fit(); resize(); });
 // keep the canvas bitmap the same size as its box (header height changes when fonts load or buttons wrap);
 // otherwise the drawing is stretched and clicks land on the wrong hex
