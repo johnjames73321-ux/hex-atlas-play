@@ -5229,7 +5229,7 @@ function heroMesh() {   // an ordinary white stick figure (forward is +z, right 
 }
 
 function wildlife(me, scene, cam, H, r, lat, lon) {
-  const kinds = faunaOf(lat, lon).filter(k => AN[k]).map(k => regional(k, lat, lon)), mobs = [], W = 700, tmpV = new T.Vector3(), tmpW = new T.Vector3();
+  const kinds = faunaOf(lat, lon).filter(k => AN[k]).map(k => regional(k, lat, lon)), mobs = [], W = 1600, tmpV = new T.Vector3(), tmpW = new T.Vector3();
   const aqua = k => /croc|pin|hippo|snake/.test(AN[k][0]) || k === "hippo" || k === "capybara";
   const spawn = (k, far, boss) => {
     k = morphOf(k, r); const b = beast(k), a = AN[k].slice(); a[5] *= .75;   // everyone a bit slower (user, 11-01)
@@ -5249,6 +5249,45 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   const sizes = kinds.slice().sort((u, v) => AN[v][1] * AN[v][2] - AN[u][1] * AN[u][2]);
   for (let j = 0; j < 8; j++) spawn(sizes[j % sizes.length], false);
   if (sizes.length) spawn(sizes[0], true, 1);
+  // gates (user, 11-01): one at the edge toward every neighbouring land hex; walk in and the next land fades in around you
+  const gateMat = new T.MeshBasicMaterial({ color: 0x8fdcff, transparent: true, opacity: .35, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide }), gates = [];
+  for (let d = 0; d < 6; d++) { const j = nb(me.hex, d); if (j < 0 || D.reg[j] < 0) continue; const ang = Math.atan2(cy[j] - cy[me.hex], cx[j] - cx[me.hex]), gx = Math.cos(ang) * 1400, gz = Math.sin(ang) * 1400, gy = Math.max(H(gx, gz), -.3);
+    const beam = new T.Mesh(new T.CylinderGeometry(4, 4, 120, 20, 1, true), gateMat); beam.position.set(gx, gy + 60, gz); scene.add(beam);
+    const ring = new T.Mesh(new T.RingGeometry(4, 6, 32), gateMat); ring.rotation.x = -Math.PI / 2; ring.position.set(gx, gy + .2, gz); scene.add(ring); gates.push({ j, x: gx, z: gz, ang, ring }); }
+  me.ps.push((dt, t) => { if (open.seam || me.hp <= 0) return; for (const g of gates) { g.ring.rotation.z = t * .001; if (Math.hypot(me.pos.x - g.x, me.pos.z - g.z) < 6) {
+    let f = $("svFade"); if (!f) { f = document.createElement("div"); f.id = "svFade"; f.style.cssText = "position:absolute;inset:0;background:#fff;opacity:0;transition:opacity .25s;pointer-events:none;z-index:60"; ov.appendChild(f); }
+    f.style.opacity = 1; open.seam = { ang: g.ang + Math.PI, yaw: me.yaw, face: me.face }; setTimeout(() => open(g.j), 260); return; } } });
+  // villagers: wander, talk (T), and run from animals faster than any of them
+  const human = (fem, skin, cloth, hair) => {
+    const g = new T.Group(), L = c => new T.MeshLambertMaterial({ color: c, flatShading: true }), Sk = L(skin), Cl = L(cloth), Hr = L(hair), sph = new T.SphereGeometry(1, 10, 8), cyl = new T.CylinderGeometry(1, 1, 1, 8);
+    const add = (geo, m, x, y, z, sx, sy, sz) => { const o = new T.Mesh(geo, m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); g.add(o); return o; };
+    const limb = (x, y, w, l, m) => { const p = new T.Group(); p.position.set(x, y, 0); g.add(p); const o = new T.Mesh(cyl, m); o.scale.set(w, l, w); o.position.y = -l / 2; p.add(o); return p; };
+    const legs = [-1, 1].map(sd => limb(sd * (fem ? .1 : .12), .84, fem ? .08 : .09, .84, fem ? Sk : Cl));
+    if (fem) {   // hourglass: wide hips and seat, narrow waist, full bust
+      add(sph, Cl, 0, .92, -.03, .27, .2, .22); add(new T.ConeGeometry(1, 1, 12), Cl, 0, .78, 0, .3, .36, .26);
+      add(cyl, Cl, 0, 1.12, 0, .12, .3, .1); add(sph, Cl, 0, 1.31, 0, .21, .14, .13);
+      for (const sd of [-1, 1]) add(sph, Cl, sd * .09, 1.26, .1, .105, .105, .1);
+    } else { add(cyl, Cl, 0, 1.08, 0, .17, .5, .13); add(sph, Cl, 0, 1.3, 0, .28, .15, .16); add(sph, Cl, 0, .86, 0, .18, .12, .14); }   // broad chest and shoulders (still smaller than the knight)
+    add(cyl, Sk, 0, 1.46, 0, fem ? .045 : .065, .1, fem ? .045 : .065); add(sph, Sk, 0, 1.59, 0, .11, .13, .12); add(sph, Hr, 0, 1.64, -.03, .12, fem ? .15 : .1, .13);
+    const arms = [-1, 1].map(sd => limb(sd * (fem ? .23 : .3), 1.37, fem ? .045 : .07, .6, Sk));
+    return { root: g, legs, arms };
+  };
+  const NM = [["Aldric", "Bran", "Corin", "Dunstan", "Edric", "Godwin", "Hamon", "Osric"], ["Aelith", "Brenna", "Cerys", "Edith", "Isolde", "Maud", "Rowena", "Wynn"]];
+  const LINES = ["Safe travels, stranger.", "Keep your blade close, the beasts are bold here.", "They say a great beast rules this land.", "Coins? The wild ones carry them, oddly enough.", "The blue lights at the edge of the land lead elsewhere.", "I never fight. I just run, and I run fast.", "Fine armour. Is it heavy?"];
+  const npcs = [], SKIN = ["f1c9a5", "d9a27a", "b97a50", "8d5a3a", "5e3a26"], CLOTH = ["7a2f2f", "2f4f7a", "4f6a2f", "6a4f2f", "5a3a6a", "8a7a4a"], HAIR = ["2a1a10", "6a4020", "c8a050", "1a1a1a", "8a3a1a"];
+  for (let j = 0; j < 6; j++) { const fem = j % 2, pk = a => +("0x" + a[Math.floor(r() * a.length)]), h = human(fem, pk(SKIN), pk(CLOTH), pk(HAIR));
+    for (let t = 0; t < 30; t++) { const an = r() * 6.28, d = 25 + r() * 120, x = me.pos.x + Math.cos(an) * d, z = me.pos.z + Math.sin(an) * d; if (H(x, z) > 0) { h.root.position.set(x, H(x, z), z); break; } }
+    scene.add(h.root); npcs.push({ ...h, name: NM[fem][Math.floor(r() * 8)], hd: r() * 6.28, wt: 0, t: 0 }); }
+  me.talk = () => { let best = null, bd = 4; for (const n of npcs) { const d = Math.hypot(n.root.position.x - me.pos.x, n.root.position.z - me.pos.z); if (d < bd) { bd = d; best = n; } } if (best) say(`${best.name}: ${LINES[Math.floor(Math.random() * LINES.length)]}`, 3500); };
+  me.ps.push(dt => { const fast = Math.max(6, ...mobs.map(m => m.a[5])) * 1.3 + 2;
+    for (const n of npcs) { const R0 = n.root, p = R0.position; let th = null, td = 14;
+      for (const m of mobs) { if (m.dead || !(m.angry > 0 || /^(cat|dog|bear|croc|lizard|snake)$/.test(m.a[0]))) continue; const d = Math.hypot(m.root.position.x - p.x, m.root.position.z - p.z); if (d < td) { td = d; th = m; } }
+      let sp = 0; if (th) { n.hd = Math.atan2(p.x - th.root.position.x, p.z - th.root.position.z); sp = fast; }
+      else if (Math.hypot(me.pos.x - p.x, me.pos.z - p.z) < 3) n.hd = Math.atan2(me.pos.x - p.x, me.pos.z - p.z);
+      else { n.wt -= dt; if (n.wt <= 0) { n.wt = 2 + Math.random() * 5; n.hd += (Math.random() - .5) * 2.5; n.walk = Math.random() < .6; } sp = n.walk ? 1.3 : 0; }
+      let dh = n.hd - R0.rotation.y; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); R0.rotation.y += dh * Math.min(1, dt * 7);
+      const nx = p.x + Math.sin(R0.rotation.y) * sp * dt, nz = p.z + Math.cos(R0.rotation.y) * sp * dt; if (H(nx, nz) > 0 && Math.hypot(nx, nz) < 1600) { p.x = nx; p.z = nz; } else n.hd += 2; p.y = H(p.x, p.z);
+      n.t += dt * sp * 2.4; const sw = Math.sin(n.t) * (sp ? Math.min(.9, .4 + sp * .05) : 0); n.legs[0].rotation.x = sw; n.legs[1].rotation.x = -sw; n.arms[0].rotation.x = -sw; n.arms[1].rotation.x = sw; } });
   me.hp = 100; me.hurtT = 0; me.kills = 0; me.mobs = mobs;
   // HUD bits
   const hpEl = $("svHP"), msg = $("svMsg");
@@ -5572,7 +5611,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
       if (m.stun > 0) { m.stun -= dt; for (const mt of m.mats) mt.emissive.setHex(0x203060); continue; }   // stunned by a parry
       m.cd -= dt; m.angry -= dt; m.flash -= dt;
       for (const mt of m.mats) mt.emissive.setHex(m.flash > 0 ? 0x902010 : 0);
-      const dx = cp.x - R0.position.x, dz = cp.z - R0.position.z, dist = Math.hypot(dx, dz), chase = (a[8] && dist < a[8] && Math.hypot(cp.x, cp.z) > 9) || m.angry > 0;   // the spawn point is safe ground: only your own attacks start a fight there
+      const dx = cp.x - R0.position.x, dz = cp.z - R0.position.z, dist = Math.hypot(dx, dz), chase = (a[8] && dist < a[8] && Math.hypot(cp.x - (me.sx || 0), cp.z - (me.sz || 0)) > 9) || m.angry > 0;   // the spawn point is safe ground: only your own attacks start a fight there
       let sp = 0;
       if (chase && me.hp > 0) { m.hd = Math.atan2(dx, dz); sp = a[5] * (dist < 4 ? .2 : 1); }
       else { m.wt -= dt; if (m.wt <= 0) { m.wt = 2 + r() * 5; m.hd += (r() - .5) * 2; m.walk = r() < .6; } sp = m.walk ? a[5] * .22 : 0;
@@ -5627,7 +5666,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
         let gb = 0; if (blk) { me.st -= 18 - 4 * sk("guard"); if (me.st <= 0) { me.st = 0; gb = 1; me.gbT = me.tnow; me.block = false; say("Guard broken!", 900); tone(150, .1); } }
         if (blk && !gb) { R0.position.x -= dx / (dist || 1) * 1.6; R0.position.z -= dz / (dist || 1) * 1.6; tone(1200, .05); me.blockHitT = me.tnow; spark(handPos(new T.Vector3())); me.shake = .1; const nx = cp.x + dx / (dist || 1) * .35, nz = cp.z + dz / (dist || 1) * .35; if (H(nx, nz) > -.6) { cp.x = nx; cp.z = nz; } }
         me.hp -= a[7] * (blk && !gb ? [.15, .1, .05][sk("guard")] : 1) / me.up("hp"); me.hurtT = 1; hpDraw(); $("svHurt").style.opacity = .55; setTimeout(() => $("svHurt").style.opacity = 0, 180);
-        if (me.hp <= 0) { say(`Killed by a ${a[9]}. Respawning…`, 3000); setTimeout(() => { if (S3 !== me) return; me.hp = 100; cp.set(0, Math.max(H(0, 0), -.3), 0); mobs.forEach(x => { x.angry = 0; }); hpDraw(); }, 2500); }
+        if (me.hp <= 0) { say(`Killed by a ${a[9]}. Respawning…`, 3000); setTimeout(() => { if (S3 !== me) return; me.hp = 100; cp.set(me.sx || 0, Math.max(H(me.sx || 0, me.sz || 0), -.3), me.sz || 0); mobs.forEach(x => { x.angry = 0; }); hpDraw(); }, 2500); }
       }
     }
     if (me.hp > 0 && me.hp < 100) { me.hurtT -= dt; if (me.hurtT < -4) { me.hp = Math.min(100, me.hp + dt * 4); hpDraw(); } }
@@ -5754,7 +5793,7 @@ ov.addEventListener("pointerdown", e => { if (!S3 || e.target.closest("button, .
 ov.addEventListener("pointerup", e => { if (!S3) return; if (e.button === 0) S3.lmbUp && S3.lmbUp(); else if (e.button === 2) S3.block = false; });
 document.addEventListener("pointerlockchange", () => { if (S3 && document.pointerLockElement !== ov && document.hasFocus() && !ov.hidden && !S3.unlocking) close(); });   // Esc while the mouse is captured: straight back to the map
 ov.addEventListener("pointermove", e => { if (!S3) return; S3.mouse = [e.clientX, e.clientY];
-  if (!e.target.closest("button, .hud")) { S3.yaw -= e.movementX * .0026; S3.pitchC = clamp(S3.pitchC + e.movementY * .0026, -.45, 1.15); } });   // look: mouse turns the view, the hero turns with it
+  if (!e.target.closest("button, .hud")) { S3.yaw -= e.movementX * .0032; S3.pitchC = clamp(S3.pitchC + e.movementY * .0032, -.45, 1.15); } });   // look: mouse turns the view, the hero turns with it
 ov.addEventListener("wheel", e => { if (!S3) return; e.preventDefault(); S3.dist = clamp(S3.dist * Math.exp(e.deltaY * .001), 1.5, 10); try { localStorage.setItem("hexatlas-cam5", String(S3.dist)); } catch (err) {} }, { passive: false });
 ov.addEventListener("auxclick", e => e.preventDefault());
 
@@ -5779,12 +5818,12 @@ let S3 = null;
 async function open(i) {
   if (S3) close();
   let ac = null; try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
-  ov.hidden = false; $("svLoad").hidden = false; $("svLoad").textContent = "Loading…"; $("svHud").innerHTML = "";
+  ov.hidden = false; $("svLoad").hidden = !!open.seam; $("svLoad").textContent = "Loading…"; $("svHud").innerHTML = "";
   const me = S3 = { ac, keys: {}, joy: { x: 0, y: 0, run: 0 }, yaw: 0, pitch: 0, ps: [], soundOn: true };
   try { if (!T) T = await import(T3); } catch (e) { $("svLoad").textContent = "Couldn't load the 3D library. Check your connection and try again."; return; }
   if (S3 !== me) return;
   UP = new T.Vector3(0, 1, 0); P = (x, y, z) => new T.Vector3(x, y, z);
-  me.hex = i; build(me, i); $("svLoad").hidden = true;
+  me.hex = i; build(me, i); $("svLoad").hidden = true; if (open.seam) { open.seam = 0; setTimeout(() => { const f = $("svFade"); if (f) f.style.opacity = 0; }, 60); }
   const hp = ov.querySelector(".help"); hp.classList.remove("off"); clearTimeout(open.helpT); open.helpT = setTimeout(() => hp.classList.add("off"), 8000);
   try { const r = ov.requestPointerLock(); r && r.catch && r.catch(() => {}); } catch (e) {}   // capture the mouse at once: turning never runs out of screen
 }
@@ -5900,7 +5939,7 @@ function build(me, i) {
   }
   if (b.t === "aurora") aurora(me, scene, r);
   // the hero: third-person, Zelda / Pokemon style camera above and behind
-  me.pos = P(0, Math.max(H(0, 0), -.3), 0); me.face = 0; me.yaw = r() * 6.28; me.dist = 3.3; me.pitchC = .3; try { const c5 = localStorage.getItem("hexatlas-cam5"), c4 = localStorage.getItem("hexatlas-cam4"), c3 = localStorage.getItem("hexatlas-cam3"); me.dist = clamp(c5 ? +c5 : (c4 ? +c4 : c3 ? +c3 - .5 : 4) * .82, 1.5, 10); } catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
+  const s0 = open.seam, sx0 = s0 ? Math.cos(s0.ang) * 1340 : 0, sz0 = s0 ? Math.sin(s0.ang) * 1340 : 0; me.sx = sx0; me.sz = sz0; me.pos = P(sx0, Math.max(H(sx0, sz0), -.3), sz0); me.face = s0 ? s0.face : 0; me.yaw = s0 ? s0.yaw : r() * 6.28; me.dist = 3.3; me.pitchC = .3; try { const c5 = localStorage.getItem("hexatlas-cam5"), c4 = localStorage.getItem("hexatlas-cam4"), c3 = localStorage.getItem("hexatlas-cam3"); me.dist = clamp(c5 ? +c5 : (c4 ? +c4 : c3 ? +c3 - .5 : 4) * .82, 1.5, 10); } catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
   me.hero = heroMesh(); scene.add(me.hero.root);
   const apex = wildlife(me, scene, cam, H, r, lat, lon);
   // HUD
@@ -5922,7 +5961,7 @@ function build(me, i) {
     if (me.slide) {                                   // slide: a fast low burst along the run, steerable a little, slowing to a crouch
       const sl = me.slide; sl.t += dt; if (mv) { sl.x += (mx - sl.x) * dt * 2.5; sl.z += (mz - sl.z) * dt * 2.5; const n = Math.hypot(sl.x, sl.z) || 1; sl.x /= n; sl.z /= n; }
       const v = 20 * Math.max(0, 1 - sl.t / .75) ** 1.3 + 3, nx = pos.x + sl.x * v * dt, nz = pos.z + sl.z * v * dt;
-      if (H(nx, nz) > -.6 && Math.hypot(nx, nz) < 900) { pos.x = nx; pos.z = nz; }
+      if (H(nx, nz) > -.6 && Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; }
       for (const m of me.mobs || []) if (!m.dead && !m.hitSl && Math.hypot(m.root.position.x - pos.x, m.root.position.z - pos.z) < 1.2 + m.a[1] * .3) { m.hitSl = 1; m.stun = Math.max(m.stun || 0, .8); m.angry = 25; }   // slide into an animal's legs: it stumbles
       if (sl.t > .75 || me.jy || me.hp <= 0) { me.slide = null; for (const m of me.mobs || []) m.hitSl = 0; }
       me.walkT += dt * 4;
@@ -5930,7 +5969,7 @@ function build(me, i) {
       const kv = 1 - Math.exp(-dt * (mv ? 16 : 20)), tvx = mv ? mx * spd : 0, tvz = mv ? mz * spd : 0;   // smooth: reaches full speed in ~0.15 s, stops in ~0.1 s
       me.vx = (me.vx || 0) + (tvx - (me.vx || 0)) * kv; me.vz = (me.vz || 0) + (tvz - (me.vz || 0)) * kv;
       const nx = pos.x + me.vx * dt, nz = pos.z + me.vz * dt;
-      if (H(nx, nz) > -.6 && Math.hypot(nx, nz) < 900) { pos.x = nx; pos.z = nz; }
+      if (H(nx, nz) > -.6 && Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; }
       else if (H(nx, pos.z) > -.6) pos.x = nx; else if (H(pos.x, nz) > -.6) pos.z = nz;   // slide along the shore instead of stopping dead
       me.walkT += dt * Math.hypot(me.vx, me.vz) * 1.6;
     }
@@ -5962,13 +6001,13 @@ function build(me, i) {
   window.SV.last = { biome: b.n, hex: i, lat, lon };
 }
 function close() {
-  const me = S3; S3 = null; ov.hidden = true; if (document.pointerLockElement === ov) document.exitPointerLock(); if (!me) return;
+  const me = S3; S3 = null; if (!open.seam) { ov.hidden = true; if (document.pointerLockElement === ov) document.exitPointerLock(); }   // a gate keeps the view and mouse while the next land loads if (!me) return;
   cancelAnimationFrame(me.raf); me.stop ? me.stop() : me.ac && me.ac.close().catch(() => {});
   if (me.scene) { me.scene.traverse(o => { o.geometry && o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { m.map && m.map.dispose(); m.dispose(); }); }); me.R.dispose(); me.R.forceContextLoss(); me.R.domElement.remove(); }
 }
 $("svX").onclick = close;
 $("svSnd").onclick = () => { const me = S3; if (!me || !me.ac) return; me.soundOn = !me.soundOn; me.soundOn ? me.ac.resume() : me.ac.suspend(); $("svSnd").textContent = me.soundOn ? "🔊" : "🔇"; };
-addEventListener("keydown", e => { if (!S3) return; if (e.code === "Space" && !e.repeat) S3.jump && S3.jump(); if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "KeyF") S3.act("spear"); else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyZ") S3.roll && S3.roll(); else if (e.code === "KeyX" && !e.repeat) S3.turn && S3.turn(Math.PI / 2); else if (e.code === "KeyV" && !e.repeat) S3.turn && S3.turn(-Math.PI / 2); else if (e.code === "KeyK") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.act && S3.act("q"); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
+addEventListener("keydown", e => { if (!S3) return; if (e.code === "Space" && !e.repeat) { const nw = performance.now(); if (nw - (S3.spT || -1e4) < 280) { S3.spT = -1e4; S3.roll && S3.roll(); } else { S3.spT = nw; S3.jump && S3.jump(); } } if ((e.code === "ShiftLeft" || e.code === "ShiftRight") && !e.repeat) { const nw = performance.now(); if (nw - (S3.shT || -1e4) < 280) { S3.shT = -1e4; S3.act && S3.act("q"); } else S3.shT = nw; } if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "KeyF") S3.act("spear"); else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyT") S3.talk && S3.talk(); else if (e.code === "KeyZ") S3.roll && S3.roll(); else if (e.code === "KeyX" && !e.repeat) S3.turn && S3.turn(Math.PI / 2); else if (e.code === "KeyV" && !e.repeat) S3.turn && S3.turn(-Math.PI / 2); else if (e.code === "KeyK") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.act && S3.act("q"); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
 addEventListener("keyup", e => { if (!S3) return; S3.keys[e.code] = 0; if (e.code === "Tab") e.preventDefault(); if (e.code === "KeyE") S3.tabUp && S3.tabUp(); if (e.code === "KeyQ") S3.block = false; e.stopImmediatePropagation(); }, true);
 addEventListener("blur", () => { if (S3) S3.keys = {}; });
 addEventListener("resize", () => { const me = S3; if (!me || !me.R) return; me.R.setSize(innerWidth, innerHeight); me.pix.size(); me.cam.aspect = innerWidth / innerHeight; me.cam.updateProjectionMatrix(); });
