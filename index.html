@@ -5337,11 +5337,11 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   }
   me.act = act;
   me.lmbDown = () => { me.lmb = { t: me.tnow, charging: false }; act("swing"); };   // instant: the swing starts on the press
-  me.lmbUp = () => { const L = me.lmb; me.lmb = null; if (!L) return; if (L.charging) { me.chargeMul = .75 + clamp((me.tnow - L.t - .3) / .8, 0, 1) * .5; act("sweep"); } };   // sweep 1.5x .. 2.5x
+  me.lmbUp = () => { const L = me.lmb; me.lmb = null; if (!L || me.pwr != null) return; if (L.charging) { me.chargeMul = .75 + clamp((me.tnow - L.t - .3) / .8, 0, 1) * .5; act("sweep"); } };   // sweep 1.5x .. 2.5x
   me.mmb = () => act("jab");
   me.throwBlade = kind => act(kind || "spear");
   me.spinAttack = () => act("spin");
-  me.tabDown = () => { if (!me.tabT) me.tabT = me.tnow; };
+  me.tabDown = () => { if (!me.tabT) { me.tabT = me.tnow; const L = me.lmb; me.pwr = L && L.charging ? clamp((me.tnow - L.t - .3) / .8, 0, 1) : null; } };   // charge held when E goes down counts, even if LMB is let go first
   me.tabUp = () => { if (!me.tabT) return; const held = me.tnow - me.tabT; me.tabT = 0; act(held > .3 ? "lob" : "spear"); };   // E: tap = spear, hold = lob, again = recall
   const thr = swordMesh(); thr.visible = false; scene.add(thr);
   // ---- bow (2): hold LMB to draw, release to shoot; Multishot adds arrows ----
@@ -5385,11 +5385,11 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   const handPos = out => { hero.armR.updateMatrixWorld(); return out.setFromMatrixPosition(hero.armR.matrixWorld); };
   function throwBlade(kind) {
     if (!me.blade || me.hp <= 0) return; me.thrownT = me.tnow; me.blade = false; hero.sword.visible = false; thr.visible = true; swoosh();
-    const L = me.lmb, pw = L && L.charging ? clamp((me.tnow - L.t - .3) / .8, 0, 1) : -1, far = pw < 0 ? 1 : 1.4 + pw * .6;   // thrown out of a LMB charge (user, 11-01)
-    if (pw >= 0) { me.lmb = null; flash("POWER THROW!", 800); tone(1400, .08); me.shake = .2; }
+    const L = me.lmb, pw = me.pwr != null ? me.pwr : L && L.charging ? clamp((me.tnow - L.t - .3) / .8, 0, 1) : -1, far = pw < 0 ? 1 : 1.8 + pw * .8;   // thrown out of a LMB charge (user, 11-01)
+    me.pwr = null; if (pw >= 0) { me.lmb = null; tone(1400, .08); me.shake = .2; }
     const p0 = handPos(new T.Vector3()), dir = new T.Vector3(Math.sin(me.face), 0, Math.cos(me.face)), mul = me.bonus * me.riposte * (1 + .4 * sk("throwp")) * (pw < 0 ? 1 : 1.6 + pw * 1.4); me.bonus = 1; me.riposte = 1;
     if (kind === "lob") {                                              // underhand, 45° up: slow, short, lands with a wide hit
-      const d = me.aim ? clamp(Math.hypot(me.aim.x - me.pos.x, me.aim.z - me.pos.z), 4, 14 * far) : 12 * far, tx = me.pos.x + dir.x * d, tz = me.pos.z + dir.z * d;
+      const d = me.aim ? clamp(Math.hypot(me.aim.x - me.pos.x, me.aim.z - me.pos.z), 4, 14) * far : 12 * far, tx = me.pos.x + dir.x * d, tz = me.pos.z + dir.z * d;
       proj = { kind, p0, t: 0, dur: .85, tgt: new T.Vector3(tx, Math.max(H(tx, tz), -.3), tz), peak: d / 4 + 1, p: p0.clone(), dir, mul, out: 0 };
     } else proj = { kind, p: p0.clone(), dir, left: (26 + 6 * sk("throwp")) * far, speed: (45 + 5 * sk("throwp")) * (pw < 0 ? 1 : 1.35), mul, out: 0, pierce: sk("pierce"), done: new Set() };   // spear throw: fast, far, one target (chain length 26 m)
   }
@@ -5458,11 +5458,11 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     else if (me.weapon === "bow") { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0; tx = -.1; ty = .45 + c * .35; twist = .35; tz = me.draw != null && c >= 1 ? Math.sin(me.tnow * 40) * .02 : 0; }   // bow: right hand pulls the string
     else if (me.tabT && me.blade) { const c = clamp((me.tnow - me.tabT) / .5, 0, 1); tx = -2.3 * c; ty = -.6 * c; twist = .7 * c; tz = Math.sin(me.tnow * 40) * .06 * c; }   // E held: blade wound back over the shoulder
     else if (me.tnow - (me.thrownT ?? -9) < .3) { tx = -.1; ty = 0; twist = -.5; }               // follow-through after the throw
-    else if (me.moving) { tx = .8 + Math.sin(me.walkT || 0) * .25; ty = -.3; }
-    else { tx = .95 + Math.sin(me.tnow * 2) * .05; }                    // idle: breathing
+    else if (me.moving) { tx = 1.25 + Math.sin(me.walkT || 0) * .2; ty = -.15; }
+    else { tx = 1.3 + Math.sin(me.tnow * 2) * .04; ty = -.15; }                    // idle: breathing
     const rk = K ? 42 : 14;   // attacks follow their curve closely, everything else glides
     pv.rotation.x = damp(pv.rotation.x, tx, rk, dt); pv.rotation.y = damp(pv.rotation.y, ty, rk, dt);
-    sw.rotation.z = damp(sw.rotation.z, tz, rk, dt); sw.position.z = K === "jab" || K === "thrust" ? sz : damp(sw.position.z, sz, 20, dt);
+    sw.rotation.z = damp(sw.rotation.z, tz, rk, dt); sw.rotation.x = damp(sw.rotation.x, K || me.block || (me.lmb && me.lmb.charging) || me.tabT ? 0 : -1.15, rk, dt);   // at rest the arm hangs and the wrist tips the blade up and forward (user, 11-01) sw.position.z = K === "jab" || K === "thrust" ? sz : damp(sw.position.z, sz, 20, dt);
     me.twist = me.atk && me.atk.round ? twist : damp(me.twist, twist, K ? 30 : 12, dt);
     // body: lean, crouch, stance, off hand; the guard arc while blocking
     let lean = 0, crouch = 0, stance = 0, off = 0;
