@@ -774,11 +774,11 @@ const ERA_STRIPE = ERA ? ERA.tags.map(t => { const kd = String(t[3] || "").toLow
   if (/\bMaya\b|Zapotec|Monte Alb/i.test(txt)) return 0;   // Maya and Zapotec lands count as full countries (user, 10-31)
   if (/Aboriginal|Khoisan|\bKhoe|\bSan\b|forager|Paleo-Eskimo|Dorset|Inuit|Eskimo|Saami|Yukaghir|Fuegian|Yaghan|Kaw[eé]sqar|Andaman|Pygmy|Batwa|Hadza|Vedda|Semang|Negrito|Tasmanian|Athabaskan|Na-Dene|Numic|Great Basin|Epi-Jomon|Ainu/i.test(t[4] || "")) return 2;   // peoples who were all hunter-gatherers then (user, 10-31: Aboriginal Australians are thick)
   return /hunt|gather|forag|\bbands?\b|fisher/i.test(txt) && !/farm|agricult|rice|millet|maize/i.test(txt) ? 2 : 1; }) : null;
-// 5 stripes per hex counting the two lying on its borders, parallel to two of its own edges: the middle one runs corner to corner.
+// 4 stripes per hex, parallel to two of its own edges, evenly spaced and symmetric about the centre.
 // Every hex centre sits on the same stripe grid (hex steps project to whole multiples of the spacing), so stripes run on unbroken from hex to hex.
 const STRIPE_SEG = (() => {
-  const dx = 0.5, dy = Math.sqrt(3) / 2, nx = dy, ny = -dx, sp = S * Math.sqrt(3) / 4, out = [];   // 5 lines counting the two on the hex's own borders: 3 inside (user, 10-31)
-  for (let j = -2; j <= 2; j++) {
+  const dx = 0.5, dy = Math.sqrt(3) / 2, nx = dy, ny = -dx, sp = S * Math.sqrt(3) / 4, out = [];   // 4 lines per hex, none on the borders, symmetric about the centre (user, 10-31)
+  for (const j of [-1.5, -0.5, 0.5, 1.5]) {
     const ox = nx * j * sp, oy = ny * j * sp; let t0 = -2 * S, t1 = 2 * S;
     for (let k = 0; k < 6; k++) {
       const ax = VX[k], ay = VY[k], ex = VX[(k + 1) % 6] - ax, ey = VY[(k + 1) % 6] - ay, inx = -ey, iny = ex;
