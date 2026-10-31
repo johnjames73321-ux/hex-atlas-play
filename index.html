@@ -5303,7 +5303,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     slam: { from: .5, to: -.5, dur: .34, m: 2.2, reach: 1.2, lock: .55, lunge: .7, w: .5 },          // combo 4th: overhead slam with a shockwave
     whirl: { from: 0, to: -Math.PI * 3, dur: .55, m: 1.3, reach: 1.25, lock: .6, lunge: .4, w: .45, round: 1 },   // combo 5th: whirlwind
     thrust: { from: 0, to: 0, dur: .22, m: 2.6, reach: 1.7, w: .35, lock: .4, lunge: 1.4 },        // after a parry: riposte lunge
-    jab: { from: 0, to: 0, dur: .17, m: .9, reach: 1.3, w: .3, lock: .35, lunge: .25 },
+    jab: { from: 0, to: 0, dur: .24, m: .9, reach: 1.3, w: .3, lock: .35, lunge: .25 },
     dash: { from: 0, to: 0, dur: .2, m: 1.2, reach: 1, lock: .55 }                         // Tab: dash 6 m along your aim, cutting through
   };
   Object.assign(me, { st: 100, weapon: "sword", draw: null, rollT: 0, rollCd: 0, chain: 0, atk: null, combo: 0, comboT: -9, buf: null, blade: true, block: false, lmb: null, tnow: 0, fx: [], cdQ: 0, cdR: 0, bonus: 1, riposte: 1, tabT: 0, twist: 0 });
@@ -5449,7 +5449,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     if (K === "slam") { const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1); tx = p < .4 ? -2.7 : -2.7 + Math.min(1, (p - .4) / .2) * 3.9; ty = 0; twist = 0; }   // blade up over the head, then down
     else if (K === "jab" || K === "thrust") {   // pull back, punch straight out, ease home
       const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1), back = p < .25 ? Math.sin(p / .25 * Math.PI / 2) : 0, out = p < .25 ? 0 : p < .55 ? 1 - (1 - (p - .25) / .3) ** 3 : 1 - ss((p - .55) / .45);
-      tx = -.08 + back * .2; ty = .12 * back; sz = .6 - .25 * back + (K === "thrust" ? 1.2 : .95) * out; twist = .25 * back - .4 * out; }
+      tx = .1 * back - .12 * out; ty = .12 * back; sz = .6 - .25 * back + (K === "thrust" ? 1.2 : .95) * out; twist = .25 * back - .4 * out; }
     else if (K === "dash") { tx = -.05; ty = -.2; twist = -.2; }
     else if (me.atk && me.atk.round) { tx = -.1; ty = 0; twist = me.atk.cur; }
     else if (K) { tx = -.15 + (K === "sweep" ? .1 : 0); twist = me.atk.cur * .35; ty = me.atk.cur - twist; }   // body turns into the cut, arm does the rest
@@ -5469,6 +5469,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     if (me.slide) { lean = -.75; crouch = .75; stance = 1.1; off = 1.2; }
     else if (me.crouching && !K) { lean = .25; crouch = .5; stance = .65; off = -.4; }
     else if (K === "dash") { lean = .55; crouch = .1; stance = .7; off = -1.2; }
+    else if (K === "jab" || K === "thrust") { const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1), o = p < .25 ? -.4 * Math.sin(p / .25 * Math.PI / 2) : Math.sin(Math.min(1, (p - .25) / .35) * Math.PI / 2) * (p < .6 ? 1 : 1 - ss((p - .6) / .4)); lean = .6 * o; crouch = .2 * Math.abs(o); stance = 1.1 * Math.abs(o); off = -1.4 * o; }   // whole body drives the spear-like thrust (user, 11-01)
     else if (K === "spin") { crouch = .18; stance = .55; off = 1.5; }
     else if (K === "jab" || K === "thrust") { lean = K === "thrust" ? .5 : .3; stance = K === "thrust" ? .9 : .6; off = -.8; }
     else if (K === "slam") { const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1); lean = p < .4 ? -.3 : .55; crouch = p < .4 ? 0 : .3; stance = .7; off = p < .4 ? -2.4 : .4; }
@@ -5478,7 +5479,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     else if (me.lmb && me.lmb.charging) { lean = -.12; crouch = .15; stance = .5; off = .6; }
     else if (me.tabT && me.blade) { lean = -.2; crouch = .08; stance = .5; off = -1.3; }
     else if (me.tnow - (me.thrownT ?? -9) < .3) { lean = .35; stance = .6; off = .8; }
-    me.lean = damp(me.lean || 0, lean, 18, dt); me.crouch = damp(me.crouch || 0, crouch, 18, dt); me.stance = damp(me.stance || 0, stance, 18, dt); me.off = damp(me.off || 0, off, 14, dt);
+    me.lean = damp(me.lean || 0, lean, K === "jab" || K === "thrust" ? 40 : 18, dt); me.crouch = damp(me.crouch || 0, crouch, 18, dt); me.stance = damp(me.stance || 0, stance, 18, dt); me.off = damp(me.off || 0, off, 14, dt);
     hero.root.rotation.x = me.lean; hero.root.position.y -= me.crouch;
     if (me.rollT > 0) { hero.root.rotation.x = (1 - me.rollT / me.rollD) * Math.PI * 2; hero.root.position.y -= .45; }   // dodge: a forward roll
     { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0; sPts[1] = -.55; sPts[2] = 0; sPts[4] = 0; sPts[5] = -c * .4; sPts[7] = .55; sPts[8] = 0; sGeo.attributes.position.needsUpdate = true; nock.visible = me.draw != null; nock.position.set(0, 0, .1 - c * .4); }
