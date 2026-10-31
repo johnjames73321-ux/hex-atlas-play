@@ -772,6 +772,7 @@ const eraView = () => gameOn && gameView === "era", placeName = i => (eraView() 
 const ERA_STRIPE = ERA ? ERA.tags.map(t => { const kd = String(t[3] || "").toLowerCase(), txt = [t[0], t[3], t[4], t[6]].join(" ");
   if (/kingdom|empire|satrapy|city|polis|league|republic|state|principality|dynasty/.test(kd)) return 0;
   if (/\bMaya\b|Zapotec|Monte Alb/i.test(txt)) return 0;   // Maya and Zapotec lands count as full countries (user, 10-31)
+  if (/Aboriginal|Khoisan|\bKhoe|\bSan\b|forager|Paleo-Eskimo|Dorset|Inuit|Eskimo|Saami|Yukaghir|Fuegian|Yaghan|Kaw[eé]sqar|Andaman|Pygmy|Batwa|Hadza|Vedda|Semang|Negrito|Tasmanian|Athabaskan|Na-Dene|Numic|Great Basin|Epi-Jomon|Ainu/i.test(t[4] || "")) return 2;   // peoples who were all hunter-gatherers then (user, 10-31: Aboriginal Australians are thick)
   return /hunt|gather|forag|\bbands?\b|fisher/i.test(txt) && !/farm|agricult|rice|millet|maize/i.test(txt) ? 2 : 1; }) : null;
 function stripeHex(p, i) {   // straight "\" lines on one world-wide grid (so they run on unbroken from hex to hex), cut exactly to this hexagon
   const sp = S * 0.3, x = cx[i], y = cy[i], R = Math.SQRT1_2, uc = (y - x) * R;
