@@ -795,7 +795,7 @@ function drawStripes(c, list) {
   const P = [null, new Path2D(), new Path2D()];
   for (const i of list) { const k = eraOf(i); if (k < 0 || !ERA_STRIPE[k]) continue; const p = P[ERA_STRIPE[k]], x = cx[i], y = cy[i]; for (const g of STRIPE_SEG) { p.moveTo(x + g[0], y + g[1]); p.lineTo(x + g[2], y + g[3]); } }
   c.save(); c.strokeStyle = "#ffffff"; c.lineCap = "butt";   // widths: same white per hex as the 7-line version minus 10% (user, 10-31)
-  c.lineWidth = S * 0.0598; c.stroke(P[1]); c.lineWidth = S * 0.1455; c.stroke(P[2]); c.restore();
+  c.lineWidth = S * 0.0628; c.stroke(P[1]); c.lineWidth = S * 0.1528; c.stroke(P[2]); c.restore();
 }
 const relOf = i => G && D.reg[i] >= 0 && i < G.hrel.length ? G.hrel[i] : -1;
 const culOf = i => G && D.reg[i] >= 0 && i < G.hcul.length ? G.hcul[i] : -1;
