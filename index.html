@@ -4489,9 +4489,11 @@ function terrain(b, r) {
   const base = (x, z) => dune
     ? A * (Math.pow(Math.abs(Math.sin(x * .018 + Math.sin(z * .006 + ph[0]) * 2.2)), .7) - .5) + A * .4 * Math.sin(z * .009 + ph[1]) * Math.sin(x * .005 + ph[2])
     : A * (.55 * Math.sin(x * .004 + ph[0]) * Math.sin(z * .0037 + ph[1]) + .3 * Math.sin(x * .011 + z * .006 + ph[2]) + .15 * Math.sin(z * .023 + ph[3]) * Math.cos(x * .019 + ph[4])) + .35 * Math.sin(x * .21 + ph[5]) * Math.sin(z * .17 + ph[6]);
+  const bumps = Array.from({ length: 14 }, () => { const a = r() * 6.28, d = 60 + r() * 1300; return [Math.cos(a) * d, Math.sin(a) * d, 40 + r() * 170, (r() < .7 ? 1 : -.6) * (4 + r() * (A > 3 ? 22 : 14)), r() < .3]; });   // no land is ever dead flat (user, 11-01)
+  const extra = (x, z) => { let y = 0; for (const [bx, bz, br, bh, ridge] of bumps) { const dx = x - bx, dz = z - bz, q = ridge ? (dx * .35 - dz) ** 2 / (br * br * .15) + (dx + dz * .35) ** 2 / (br * br * 4) : (dx * dx + dz * dz) / (br * br); if (q < 9) y += bh * Math.exp(-q); } return y; };
   const b0 = base(0, 0);
   return (x, z) => {
-    let y = base(x, z) - b0 + (w ? 1.2 : 0);
+    let y = base(x, z) - b0 + extra(x, z) + (w ? 1.2 : 0);
     if (w === "coast") { const d = 70 + 25 * Math.sin(z * .01 + ph[7]) - x, k = clamp(d / 120, 0, 1); y = y * k + (d > 0 ? .6 + d * .012 : d * .06); }
     else if (w === "river") { const dz = Math.abs(z - 45 - 30 * Math.sin(x * .008 + ph[7])); y = lerp(-2.5, y, smooth(18, 40, dz)); }
     else if (w === "lake") { y = lerp(-3, y, smooth(80, 130, Math.hypot(x - 150, z + 40))); }
@@ -5300,6 +5302,16 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   for (let j = 0; j < 6; j++) { const fem = j % 2, pk = a => +("0x" + a[Math.floor(r() * a.length)]), h = human(fem, pk(SKIN), pk(CLOTH), pk(HAIR));
     for (let t = 0; t < 30; t++) { const an = r() * 6.28, d = 25 + r() * 120, x = me.pos.x + Math.cos(an) * d, z = me.pos.z + Math.sin(an) * d; if (H(x, z) > 0) { h.root.position.set(x, H(x, z), z); break; } }
     scene.add(h.root); npcs.push({ ...h, name: NM[fem][Math.floor(r() * 8)], hd: r() * 6.28, wt: 0, t: 0 }); }
+  // secret pouches (user, 11-01): coin pouches tucked away on every land: hilltop, deepest hollow, up a vine tree, out by the edge
+  const pouches = [], pm = new T.MeshLambertMaterial({ color: 0x7a5230, flatShading: true }), tie = new T.MeshLambertMaterial({ color: 0xd4af37 });
+  const pouch = (x, y, z) => { const g = new T.Group(), s1 = new T.Mesh(new T.SphereGeometry(.28, 8, 6), pm), s2 = new T.Mesh(new T.ConeGeometry(.12, .2, 6), pm), s3 = new T.Mesh(new T.TorusGeometry(.1, .03, 4, 8), tie);
+    s1.scale.y = .8; s1.position.y = .22; s2.position.y = .5; s3.rotation.x = Math.PI / 2; s3.position.y = .42; g.add(s1, s2, s3); g.position.set(x, y, z); scene.add(g); pouches.push(g); };
+  { let hi = null, lo = null; for (let k = 0; k < 400; k++) { const x = (r() - .5) * 1100, z = (r() - .5) * 1100, y = H(x, z); if (y < .3) continue; if (!hi || y > hi[1]) hi = [x, y, z]; if (!lo || y < lo[1]) lo = [x, y, z]; }
+    if (hi) pouch(...hi); if (lo) pouch(...lo);
+    const tt = me.trees || []; if (tt.length) { const c = tt[Math.floor(r() * tt.length)]; pouch(c[0] + .5, c[1] + c[3] * .85, c[2]); }
+    for (let k = 0; k < 2; k++) { const a = r() * 6.28, d = 520 + r() * 120, x = Math.cos(a) * d, z = Math.sin(a) * d; if (H(x, z) > .3) pouch(x, H(x, z), z); } }
+  me.ps.push(dt => { for (let j = pouches.length - 1; j >= 0; j--) { const g = pouches[j]; g.rotation.y += dt * .5;
+    if (Math.hypot(g.position.x - me.pos.x, g.position.z - me.pos.z) < 1.8 && Math.abs(g.position.y - me.pos.y) < 2.2) { scene.remove(g); pouches.splice(j, 1); dropCoins(g.position, 6 + Math.floor(Math.random() * 10)); say("A hidden pouch!", 1500); tone(1320, .1); } } });
   me.talk = () => { let best = null, bd = 4; for (const n of npcs) { const d = Math.hypot(n.root.position.x - me.pos.x, n.root.position.z - me.pos.z); if (d < bd) { bd = d; best = n; } } if (best) { say(`${best.name}: ${LINES[Math.floor(Math.random() * LINES.length)]}`, 3500); best.chat = 4; } return !!best; };
   let fast = 10, fastT = 0;   // Horizon rule: per-frame work reuses what it can, nothing allocated every frame
   me.ps.push(dt => { if ((fastT -= dt) <= 0) { fastT = 1; fast = 6; for (const m of mobs) fast = Math.max(fast, m.a[5]); fast = fast * 1.3 + 2; }
@@ -5372,7 +5384,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     popNum(m, dmg, crit); me.stopT = crit || heavy ? .07 : .035; me.shake = Math.max(me.shake || 0, crit || heavy ? .25 : .12);
     if (m.hp <= 0 && m.tr.has("explosive")) { const c = m.root.position; if (Math.hypot(me.pos.x - c.x, me.pos.z - c.z) < 4) { me.hp -= 15 / me.up("hp"); hpDraw(); } const ring = new T.Mesh(new T.RingGeometry(.3, .7, 32), new T.MeshBasicMaterial({ color: 0xff7a20, transparent: true, side: T.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.copy(c).y += .2; scene.add(ring); me.fx.push({ o: ring, t: 0, d: .45, s: 7 }); me.shake = .3; tone(80, .2); }
     if (m.hp <= 0) { m.dead = 3.5; me.kills++; me.hp = Math.min(100, me.hp + 4); hpDraw();
-      const lk = Math.random(), luck = lk < .002 ? 25 : lk < .025 ? 4 : 1, coin = Math.round((1 + Math.sqrt(m.a[1] * m.a[2]) * .6 + Math.random()) * luck * (m.boss ? 10 : 1));   // bigger = more, rarely a lucky haul
+      const lk = Math.random(), luck = lk < .002 ? 25 : lk < .025 ? 4 : 1, coin = Math.round((1 + Math.sqrt(m.a[1] * m.a[2]) * .6 + Math.random()) * luck * (m.boss ? 10 : 1) * 1.5);   // bigger = more, rarely a lucky haul
       dropCoins(m.root.position, coin); if (luck > 1) tone(1760, .12);
       say(`${m.a[9]} slain · +${Math.round(m.a[6] * .6 + 5)} XP · +${coin} 🪙${luck >= 25 ? " JACKPOT!" : luck > 1 ? " lucky!" : ""}`); gainXP(Math.round(m.a[6] * .6 + 5)); }
   };
@@ -5387,6 +5399,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     s1: { from: 1.25, to: -1.25, dur: .4, m: 1, reach: 1, lock: .42, lunge: .35 },          // left -> right
     s2: { from: -1.5, to: 1.5, dur: .54, m: 1.5, reach: 1.1, lock: .48, lunge: .6 },          // right -> left, 1.5x
     sweep: { from: -Math.PI / 2, to: Math.PI / 2, dur: .3, m: 2, reach: 1.35, lock: .55, lunge: .3 },
+    spin2: { from: 0, to: -Math.PI * 4, dur: .7, m: 1.6, reach: 1.25, lock: .55, lunge: 0, w: .45, round: 1 },   // charged LMB + spin: two full turns
     spin: { from: 0, to: -Math.PI * 2, dur: .4, m: 1.4, reach: 1.2, lock: .55, lunge: 0, w: .45, round: 1 },   // R: full circle
     slam: { from: .5, to: -.5, dur: .34, m: 2.2, reach: 1.2, lock: .55, lunge: .7, w: .5 },          // combo 4th: overhead slam with a shockwave
     whirl: { from: 0, to: -Math.PI * 3, dur: .55, m: 1.3, reach: 1.25, lock: .6, lunge: .4, w: .45, round: 1 },   // combo 5th: whirlwind
@@ -5404,13 +5417,13 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     o.rotation.order = "YXZ"; o.rotation.set(-Math.PI / 2, A.face, 0); o.position.set(me.pos.x, me.pos.y + .08, me.pos.z); scene.add(o); me.fx.push({ o, t: 0, d: A.dur + .2, s: 0, a: .5 });
   };
   const ss = u => u * u * (3 - 2 * u);
-  const startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
+  const startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * 1.5 * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
   const CHAIN = ["s0", "s1", "s2", "slam", "whirl"];
   const nextSwing = () => { if (me.riposte > 1) { me.combo = 0; return startAtk("thrust"); } if (me.tnow - me.comboT > 1.1) me.combo = 0; const len = 3 + sk("combo"); me.comboT = me.tnow; startAtk(CHAIN[me.combo % len]); me.combo = (me.combo + 1) % len; };
   const inWindow = () => !me.atk || (me.tnow - me.atk.t0) / me.atk.dur >= me.atk.lock;
   const RUN = {
     swing: nextSwing, jab: () => startAtk("jab"), sweep: () => { me.combo = 0; startAtk("sweep"); },
-    spin: () => { if (me.cdR > 0) return false; me.cdR = 1; me.combo = 0; startAtk("spin"); },
+    spin: () => { if (me.cdR > 0) return false; me.cdR = 1; me.combo = 0; const ch = me.lmb && me.lmb.charging; if (ch) me.lmb = null; startAtk(ch ? "spin2" : "spin"); },
     q: () => { if (me.cdQ > 0) return false; me.cdQ = 4; startAtk("dash"); },
     spear: () => throwBlade("spear"), lob: () => throwBlade("lob")
   };
@@ -5937,10 +5950,10 @@ function build(me, i) {
   scene.add(new T.Mesh(gg, new T.MeshLambertMaterial({ vertexColors: true, map: tex })));
   if (b.w) { const w = new T.Mesh(new T.PlaneGeometry(4000, 4000), new T.MeshPhongMaterial({ color: col(b.wc || "3d6a7a"), transparent: true, opacity: .86, shininess: 90, specular: 0x666666 })); w.rotation.x = -Math.PI / 2; scene.add(w); }
   // vegetation
-  const RS = 720, M = new T.Matrix4(), q = new T.Quaternion(), eu = new T.Euler(), sv3 = new T.Vector3(), pv = new T.Vector3(), mats = {};
+  const climb = me.trees = [], RS = 720, M = new T.Matrix4(), q = new T.Quaternion(), eu = new T.Euler(), sv3 = new T.Vector3(), pv = new T.Vector3(), mats = {};
   const mat = (c, leaf) => mats[c + leaf] || (mats[c + leaf] = new T.MeshLambertMaterial({ color: leaf ? 0xffffff : col(c), flatShading: true, side: leaf ? T.DoubleSide : T.FrontSide }));
   for (const [k, n0] of b.s) {
-    const sp = SP[k], h = sp[1], o = sp[4], rock = sp[0] === "rck" || sp[0] === "mnd", rad = Math.min(RS, Math.max(130, h * 19)), n = Math.round(n0 * (.8 + r() * .4) * Math.min(1.6, (rad / Math.min(380, Math.max(70, h * 10))) ** 2)), Ms = [];   // plants reach the gates, thinner far out (low-spec)
+    const sp = SP[k], h = sp[1], o = sp[4], rock = sp[0] === "rck" || sp[0] === "mnd", rad = Math.min(RS, Math.max(130, h * 19)), n = Math.round(n0 * (.8 + r() * .4) * Math.min(1.6, (rad / Math.min(380, Math.max(70, h * 10))) ** 2) * (h >= 4 && !rock ? 1.4 : 1)), Ms = [];   // plants reach the gates, thinner far out (low-spec)
     let grid = null;
     if (b.rows === k) { const s = Math.max(5, (o.cw || .3) * h * 2.4), a = r() * 3; grid = []; for (let gx = -30; gx <= 30; gx++) for (let gz = -30; gz <= 30; gz++) { const x = gx * s, z = gz * s; grid.push([x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)]); } grid.sort((u, v) => Math.hypot(...u) - Math.hypot(...v)); }
     for (let j = 0, tries = 0; Ms.length < n && tries < n * 6; tries++, j++) {
@@ -5950,9 +5963,10 @@ function build(me, i) {
       if (Math.hypot(x, z) < 3.5) continue;
       const y = H(x, z);
       if (b.w && (o.wet === 2 ? y > -1 : o.wet ? y < -2.5 || y > .5 : y < .25)) continue;
-      const s = rock ? .5 + r() * 1.1 : .85 + r() * .25, tl = rock ? (r() - .5) * .3 : (r() - .5) * .06;
+      const s = rock ? .5 + r() * 1.1 : .85 + r() * .25, tl = rock ? (r() - .5) * .3 : h >= 4 && r() < .3 ? (r() - .5) * 1 : (r() - .5) * .06;   // about a third of trees grow crooked
       M.compose(pv.set(x, y - (rock ? h * .12 * s : .2), z), q.setFromEuler(eu.set(tl, r() * 6.28, tl)), sv3.set(s * (.9 + r() * .2), s, s * (.9 + r() * .2)));
       Ms.push(M.clone());
+      if (!rock && h >= 6 && climb.length < 50 && Math.abs(tl) < .05 && r() < .25) climb.push([x, y, z, h * s]);   // vine-wrapped: climbable
     }
     if (!Ms.length) continue;
     // Horizon-style culling: plants split into 400 m sectors, each with its own bounds, so the GPU skips every sector behind or beside the camera
@@ -5963,6 +5977,8 @@ function build(me, i) {
       m.computeBoundingSphere(); scene.add(m);
     }
   }
+  if (climb.length) { const vg = new T.CylinderGeometry(.42, .5, 1, 7, 1, true), vm = new T.InstancedMesh(vg, new T.MeshLambertMaterial({ color: 0x3f7a2a, flatShading: true }), climb.length);
+    climb.forEach(([x, y, z, ht], j) => vm.setMatrixAt(j, M.compose(pv.set(x, y + ht * .42, z), q.identity(), sv3.set(1, ht * .84, 1)))); vm.computeBoundingSphere(); scene.add(vm); }
   // particles
   for (const pk of String(b.p || "").split(",")) {
     const pt = PT[pk]; if (!pt) continue;
@@ -5989,7 +6005,7 @@ function build(me, i) {
   $("svHud").innerHTML = `<h2>${esc(b.n)}</h2><div class="m">${esc([name, admin, country].filter(Boolean).join(", "))} · ${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lon).toFixed(1)}°${lon >= 0 ? "E" : "W"}</div>${spp.length ? `<ul>${spp.map(k => `<li>${esc(SP[k][5])} · ${SP[k][1]} m</li>`).join("")}</ul>` : ""}`;
   $("svHud").insertAdjacentHTML("beforeend", `<div class="fauna">⚠ ${apex.slice(0, 4).map(a => `${esc(a[9])} · ${(+a[1]).toFixed(1)} m`).join(" · ")}</div>`);
   // camera, controls, loop
-  Object.assign(me, { R, pix, scene, cam, H, sky, sun, sunDir, last: 0, jy: 0, vy: 0, walkT: 0, jump: () => { if (!me.jy) { me.vy = (me.slide ? 9.5 : 8) * (me.up ? me.up("jmp") : 1); me.slide = null; } }, crouchDown: () => { if (me.runNow && !me.slide && me.mdir && me.hp > 0) { me.slide = { t: 0, x: me.mdir[0], z: me.mdir[1] }; me.atk = null; } }, turn: (a = Math.PI) => { me.yaw += a; me.face += a; } });
+  Object.assign(me, { R, pix, scene, cam, H, sky, sun, sunDir, last: 0, jy: 0, vy: 0, walkT: 0, jump: () => { if (me.climbing) { me.climbing = 0; me.offTree = .6; me.vy = 6; return; } if (!me.jy) { me.vy = (me.slide ? 9.5 : 8) * (me.up ? me.up("jmp") : 1); me.slide = null; } }, crouchDown: () => { if (me.runNow && !me.slide && me.mdir && me.hp > 0) { me.slide = { t: 0, x: me.mdir[0], z: me.mdir[1] }; me.atk = null; } }, turn: (a = Math.PI) => { me.yaw += a; me.face += a; } });
   if (me.ac) { me.stop = ambience(me.ac, String(b.a || "wind,birds").split(",")); me.ac.resume && me.ac.resume(); }
   const ray = new T.Raycaster(), plane = new T.Plane(new T.Vector3(0, 1, 0), 0), aimV = new T.Vector3(), ndc = new T.Vector2();
   const loop = t => {
@@ -6000,7 +6016,7 @@ function build(me, i) {
     const mv = Math.hypot(f, s) > .05, l = Math.max(1, Math.hypot(f, s)), mx = (-sy * f + cyw * s) / l, mz = (-cyw * f - sy * s) / l;
     const run = k.ShiftLeft || k.ShiftRight || j.run, crouch = (k.ControlLeft || k.ControlRight) && !me.slide;
     me.runNow = mv && run && !me.jy; if (mv) me.mdir = [mx, mz]; me.crouching = crouch;
-    const spd = (run && !crouch ? 13 : 5.5) * (me.up ? me.up("spd") : 1) * (crouch ? .5 : 1) * (me.block ? .45 : 1) * (me.draw != null ? .55 : 1) * (me.lmb && me.lmb.charging ? .5 : 1) * (me.atk && me.atk.kind !== "jab" ? .9 : 1) * (me.hp > 0 ? 1 : 0);
+    const spd = (me.climbing ? 0 : 1) * (run && !crouch ? 13 : 5.5) * (me.up ? me.up("spd") : 1) * (crouch ? .5 : 1) * (me.block ? .45 : 1) * (me.draw != null ? .55 : 1) * (me.lmb && me.lmb.charging ? .5 : 1) * (me.atk && me.atk.kind !== "jab" ? .9 : 1) * (me.hp > 0 ? 1 : 0);
     if (me.slide) {                                   // slide: a fast low burst along the run, steerable a little, slowing to a crouch
       const sl = me.slide; sl.t += dt; if (mv) { sl.x += (mx - sl.x) * dt * 2.5; sl.z += (mz - sl.z) * dt * 2.5; const n = Math.hypot(sl.x, sl.z) || 1; sl.x /= n; sl.z /= n; }
       const v = 20 * Math.max(0, 1 - sl.t / .75) ** 1.3 + 3, nx = pos.x + sl.x * v * dt, nz = pos.z + sl.z * v * dt;
@@ -6017,6 +6033,10 @@ function build(me, i) {
       me.walkT += dt * Math.hypot(me.vx, me.vz) * 1.6;
     }
     me.by = lerp(me.by ?? pos.y, b.w ? Math.max(H(pos.x, pos.z), -.3) : H(pos.x, pos.z), 1 - Math.exp(-dt * 12));   /* only lands with water hold you at its surface; dry valleys used to leave you floating */
+    { let tr = null; if (!(me.offTree > 0)) for (const c of me.trees || []) if (Math.abs(c[0] - pos.x) < 1.3 && Math.abs(c[2] - pos.z) < 1.3) { tr = c; break; }   // climbing: W up, S down, Space leaps off
+      me.offTree = (me.offTree || 0) - dt;
+      if (tr && (k.KeyW || k.KeyS || me.jy > 0)) { me.vy = 0; if (k.KeyW) me.jy = Math.min(tr[3] * .85, me.jy + 3.2 * dt); else if (k.KeyS) me.jy = Math.max(0, me.jy - 4 * dt); me.climbing = me.jy > .2; }
+      else if (me.climbing) { me.climbing = 0; if (me.jy > 0 && !me.vy) me.vy = -.01; } }
     if (me.vy) { me.vy -= 22 * dt; me.jy += me.vy * dt; if (me.jy <= 0) me.jy = me.vy = 0; }
     pos.y = me.by + (me.jy || 0);
     // camera: above and behind, looking down at the hero
