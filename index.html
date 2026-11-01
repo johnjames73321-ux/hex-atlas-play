@@ -21,6 +21,14 @@ body { background: var(--bg); color: var(--ink); font-family: var(--body); displ
 header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
 h1 { font-family: var(--display); font-weight: 800; font-size: 1.25rem; margin: 0; letter-spacing: -.01em; }
 .group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mapfolder { position: relative; }
+.mapfolder > summary { list-style: none; cursor: pointer; font: inherit; font-size: .85rem; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; display: inline-flex; align-items: center; gap: 6px; user-select: none; }
+.mapfolder > summary::-webkit-details-marker { display: none; }
+.mapfolder > summary::after { content: "\25BE"; font-size: .7rem; opacity: .7; }
+.mapfolder[open] > summary::after { content: "\25B4"; }
+.mapfolder > summary:hover { border-color: var(--accent); }
+.mapfolder .mapmenu { position: absolute; z-index: 70; left: 0; top: calc(100% + 6px); display: flex; flex-direction: column; gap: 4px; min-width: 170px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(20,20,50,.25); }
+.mapfolder .mapmenu button { text-align: left; white-space: nowrap; }
 .label { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-right: 2px; }
 button { font: inherit; font-size: .85rem; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
 button:hover { border-color: var(--accent); }
@@ -102,9 +110,9 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
     <button id="t-grid" aria-pressed="true">Hex lines</button>
     <button id="t-borders" aria-pressed="true">Borders</button>
     <button id="t-countries" aria-pressed="false" title="Thick lines between countries">Countries</button>
-    <button id="t-azores" aria-pressed="false" title="Azores map (your picture), sized to the map; Drag maps to move it">Azores</button>
+    <details class="mapfolder" id="mapFolder"><summary title="Island maps, map copy, and THE MAP">Maps</summary><div class="mapmenu"><button id="t-azores" aria-pressed="false" title="Azores map (your picture), sized to the map; Drag maps to move it">Azores</button>
     <button id="t-madeira" aria-pressed="false" title="Madeira map, real size from the nearby coast; Drag maps to move it">Madeira</button><button id="t-canary" aria-pressed="false" title="Canary Islands map, real size, just off Africa; Drag maps to move it">Canary</button><button id="t-hawaii" aria-pressed="false" title="Hawaii map, real size, in the Pacific west of Mexico; Drag maps to move it">Hawaii</button><button id="t-capeverde" aria-pressed="false" title="Cape Verde map (your picture), sized to the map; Drag maps to move it">Cape Verde</button><button id="t-caribbean" aria-pressed="false" title="Caribbean map (your picture), fitted to the map; Drag maps to move it">Caribbean</button><button id="t-mapcopy" aria-pressed="false" title="A copy of THE MAP you can move: turn on Drag maps, drag it, mouse wheel resizes, arrows up/down change see-through">Map copy</button>
-    <button id="t-mapT" aria-pressed="false" title="THE MAP: your reference world map, unchanged (ref/the-map.webp)">THE MAP</button>
+    <button id="t-mapT" aria-pressed="false" title="THE MAP: your reference world map, unchanged (ref/the-map.webp)">THE MAP</button></div></details>
     <button id="t-drag" aria-pressed="false" title="Island maps: drag to move, mouse wheel = bigger/smaller, arrow up/down = more/less see-through (acts on the island map under the mouse)">Drag maps</button>
   </div>
   <button id="t-ck" aria-pressed="false" hidden title="Crowns of the Hex World: rule a dynasty from 1444 (CK3-style)">👑 Crowns</button>
