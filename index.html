@@ -5913,6 +5913,7 @@ peg.addEventListener("pointerup", endDrag); peg.addEventListener("pointercancel"
 
 // ---- the 3D scene ----
 let S3 = null;
+let FLYON = false;   /* god mode stays on across areas once the owner pressed J (owner, 11-01) */
 async function open(i) {
   if (S3) close();
   let ac = null; try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
@@ -6002,35 +6003,37 @@ function build(me, i) {
   scene.add(new T.Mesh(gg, new T.MeshLambertMaterial({ vertexColors: true, map: tex })));
   if (b.w) { const w = new T.Mesh(new T.PlaneGeometry(4000, 4000), new T.MeshPhongMaterial({ color: col(b.wc || "3d6a7a"), transparent: true, opacity: .86, shininess: 90, specular: 0x666666 })); w.rotation.x = -Math.PI / 2; scene.add(w); }
   // vegetation
-  const climb = me.trees = [], tgrid = me.tgrid = new Map(), RS = 720, COV = Math.min(2000, Math.max(620, (b.f || 700) * 1.05 + 600)), SEC = Math.max(400, COV / 3), M = new T.Matrix4(), q = new T.Quaternion(), eu = new T.Euler(), sv3 = new T.Vector3(), pv = new T.Vector3(), mats = {};
+  const climb = me.trees = [], tgrid = me.tgrid = new Map(), RS = 720, COV = Math.min(2000, Math.max(620, (b.f || 700) * 1.05 + 600)), SEC = Math.max(400, COV / 3), M = new T.Matrix4(), q = new T.Quaternion(), eu = new T.Euler(), sv3 = new T.Vector3(), pv = new T.Vector3(), mats = {}, cmem = {};
   const mat = (c, leaf) => mats[c + leaf] || (mats[c + leaf] = new T.MeshLambertMaterial({ color: leaf ? 0xffffff : col(c), flatShading: true, side: leaf ? T.DoubleSide : T.FrontSide }));
-  const plan = b.s.map(([k, n0]) => { const sp = SP[k], h = sp[1], rock = sp[0] === "rck" || sp[0] === "mnd", rad = Math.min(RS, Math.max(130, h * 19)), eff = n0 * Math.min(1.6, (rad / Math.min(380, Math.max(70, h * 10))) ** 2) * (h >= 4 && !rock ? 1.4 : 1), tall = rock || h >= 9, band = Math.min(COV, Math.max(tall ? 700 : h >= 4 ? 700 : h >= 1.2 ? 420 : 300, COV * (tall ? 1 : h >= 4 ? .62 : h >= 1.2 ? .42 : .3))), cap = tall ? 9000 : h >= 4 ? 12000 : h >= 1.2 ? 10000 : 8000; return [k, Math.min(cap, Math.max(n0, Math.round(eff / (Math.PI * rad * rad) * Math.PI * band * band))), band]; });   // small things only live where they can be seen at that size; trees and rocks go to the fog line, out-of-bounds included
-  const pTot = plan.reduce((a, p) => a + p[1], 0), pShrink = pTot > 65000 ? 65000 / pTot : 1;   // hard budget: the owner's machine never stutters
-  me.pTot = pTot; me.pShrink = pShrink; me.COV = COV; me.plan = plan;
-  for (const [k, nWant, bd] of plan) {
-    const n = Math.round(nWant * pShrink * (.85 + r() * .3));
+  const RING = Math.min(640, COV), innerA = Math.PI * RING * RING, base = b.s.map(([k, n0]) => { const sp = SP[k], h = sp[1], rock = sp[0] === "rck" || sp[0] === "mnd", dens = n0 * (h >= 4 && !rock ? 1.4 : 1) * 1.2 / (Math.PI * 130 * 130); return [k, h, rock, dens]; });   /* plants per m2 at the map centre: the density the owner wants everywhere, +20% because he asked for even more */
+  const bandOf = p => p[1] >= 1.2 ? COV : Math.min(COV, 900), wantOuter = base.reduce((x, p) => x + p[3] * Math.max(0, Math.PI * (bandOf(p) ** 2 - RING * RING)), 0), fOuter = Math.min(1, 170000 / Math.max(1, wantOuter)), plan = base.map(p => { const bd = bandOf(p), inner = Math.round(p[3] * innerA), nOut = Math.round(p[3] * fOuter * Math.max(0, Math.PI * (bd * bd - RING * RING))), cap = p[2] || p[1] >= 4 ? 46000 : 42000; return [p[0], Math.min(cap, inner + nOut), bd, inner / Math.max(1, inner + nOut)]; });   /* centre density inside the checkpoint ring, budgeted but still dense outside it, out to the fog line and past the gates */
+  const pTot = plan.reduce((x, p) => x + p[1], 0), pShrink = 1;   /* no global shrink any more: the middle keeps its full look */
+  me.pTot = pTot; me.pShrink = pShrink; me.COV = COV; me.plan = plan; me.RING = RING; me.fOuter = fOuter;
+  for (const [k, nWant, bd, iF] of plan) {
+    const n = Math.round(nWant * (.98 + r() * .04));
     const sp = SP[k], h = sp[1], o = sp[4], rock = sp[0] === "rck" || sp[0] === "mnd", Ms = [];
     let grid = null;
     if (b.rows === k) { const s = Math.max(5, (o.cw || .3) * h * 2.4), a = r() * 3; grid = []; for (let gx = -30; gx <= 30; gx++) for (let gz = -30; gz <= 30; gz++) { const x = gx * s, z = gz * s; grid.push([x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)]); } grid.sort((u, v) => Math.hypot(...u) - Math.hypot(...v)); }
-    for (let j = 0, tries = 0; Ms.length < n && tries < n * 6; tries++, j++) {
+    const MB = new Float32Array(Math.max(1, n) * 16), si = []; let kc = 0;   /* flat matrix buffer: 300k Matrix4 clones were the whole load hitch */
+    for (let j = 0, tries = 0; kc < n && tries < n * 6; tries++, j++) {
       let x, z;
       if (grid) { if (j >= grid.length) break; [x, z] = grid[j]; x += (r() - .5) * 1.5; z += (r() - .5) * 1.5; }
-      else { const near = h >= 6 && Ms.length < Math.max(2, n * .05), d = near ? 10 + r() * 45 : Math.sqrt(r()) * bd, a = r() * 6.28; x = Math.cos(a) * d; z = Math.sin(a) * d; }
-      if (Math.hypot(x, z) < 3.5) continue;
+      else { const near = h >= 6 && kc < Math.max(2, n * .05), d = near ? 10 + r() * 45 : r() < iF ? Math.sqrt(r()) * RING : Math.sqrt(RING * RING + r() * (bd * bd - RING * RING)), a = r() * 6.28; x = Math.cos(a) * d; z = Math.sin(a) * d; }
+      const rr0 = Math.hypot(x, z); if (rr0 < 3.5) continue;
       const y = H(x, z);
       if (b.w && (o.wet === 2 ? y > -1 : o.wet ? y < -2.5 || y > .5 : y < .25)) continue;
-      const s = rock ? .5 + r() * 1.1 : .85 + r() * .25, tl = rock ? (r() - .5) * .3 : h >= 4 && r() < .3 ? (r() - .5) * .5 : (r() - .5) * .06;   // about a third of trees lean a little
+      const s = (rock ? .5 + r() * 1.1 : .85 + r() * .25) * (rr0 > RING ? 1.22 : 1), tl = rock ? (r() - .5) * .3 : h >= 4 && r() < .3 ? (r() - .5) * .5 : (r() - .5) * .06;   // about a third of trees lean a little
       M.compose(pv.set(x, y - (rock ? h * .12 * s : .2), z), q.setFromEuler(eu.set(tl, r() * 6.28, tl)), sv3.set(s * (.9 + r() * .2), s, s * (.9 + r() * .2)));
-      Ms.push(M.clone());
-      if (!rock && h >= 6 && climb.length < 120 && Math.abs(tl) < .05 && r() < .35) climb.push([x, y, z, h * s]);   // vine-wrapped: climbable
-      if (h >= 3) { const ck = Math.floor(x / 8) * 4096 + Math.floor(z / 8); if (!tgrid.has(ck)) tgrid.set(ck, []); tgrid.get(ck).push(x, z, rock ? .5 * h * s : .45, rock ? y + h * s * .8 : 0); }   // trunks and rocks are solid
+      M.toArray(MB, kc * 16); si.push(Math.floor(x / SEC) * 8192 + Math.floor(z / SEC)); kc++;
+      if (!rock && h >= 6 && rr0 < 700 && climb.length < 120 && Math.abs(tl) < .05 && r() < .35) climb.push([x, y, z, h * s]);   // vine-wrapped: climbable
+      if (h >= 3 && rr0 < 700) { const ck = Math.floor(x / 8) * 4096 + Math.floor(z / 8); if (!tgrid.has(ck)) tgrid.set(ck, []); tgrid.get(ck).push(x, z, rock ? .5 * h * s : .45, rock ? y + h * s * .8 : 0); }   // trunks and rocks are solid
     }
-    if (!Ms.length) continue;
+    if (!kc) continue;
     // Horizon-style culling: plants split into sectors, each with its own bounds, so the GPU skips every sector behind or beside the camera
-    const secs = new Map(); for (const mm of Ms) { const sk = Math.floor(mm.elements[12] / SEC) + "," + Math.floor(mm.elements[14] / SEC); if (!secs.has(sk)) secs.set(sk, []); secs.get(sk).push(mm); }
+    const secs = new Map(); for (let q = 0; q < kc; q++) { const sk = si[q]; if (!secs.has(sk)) secs.set(sk, []); secs.get(sk).push(q); }
     for (const [geo, c, leaf] of shape(k)) for (const L of secs.values()) {
       const m = new T.InstancedMesh(geo, mat(c, leaf), L.length);
-      L.forEach((mm, j) => { m.setMatrixAt(j, mm); if (leaf) m.setColorAt(j, tmp.copy(col(c)).multiplyScalar(.82 + r() * .32)); });
+      L.forEach((q, j) => { m.setMatrixAt(j, M.fromArray(MB, q * 16)); if (leaf && Math.hypot(MB[q * 16 + 12], MB[q * 16 + 14]) < 900) m.setColorAt(j, tmp.copy(cmem[c] || (cmem[c] = col(c))).multiplyScalar(.82 + r() * .32)); });
       m.computeBoundingSphere(); scene.add(m);
     }
   }
@@ -6074,7 +6077,7 @@ function build(me, i) {
       jump: () => { if (me.perch) { me.perch = null; me.vy = 8; return; } if (!me.jy) { me.vy = (me.slide ? 9.5 : 8) * (me.up ? me.up("jmp") : 1); me.slide = null; } }, crouchDown: () => { if (me.runNow && !me.slide && me.mdir && me.hp > 0) { me.slide = { t: 0, x: me.mdir[0], z: me.mdir[1] }; me.atk = null; } }, turn: (a = Math.PI) => { me.yaw += a; me.face += a; },
       fly: () => {   /* J: god mode — noclip, fly fast anywhere (owner, 11-01) */
         const m = me, setBadge = () => { let b = document.getElementById("svFlyBadge"); if (!b) { b = document.createElement("div"); b.id = "svFlyBadge"; b.style.cssText = "position:fixed;left:50%;top:58px;transform:translateX(-50%);z-index:60;font:600 12px system-ui,sans-serif;letter-spacing:.14em;padding:6px 12px;border-radius:20px;background:rgba(154,205,50,.18);border:1px solid #9acd32;color:#c9e86b;pointer-events:none;text-shadow:0 1px 2px #000"; document.body.appendChild(b); } b.textContent = "GOD MODE · SPACE ↑ · CTRL ↓ · SHIFT turbo"; b.style.display = m.flying ? "" : "none"; };
-        const alt = m.pos.y; m.flying = !m.flying; m.slide = m.atk = m.perch = m.mantle = null; m.vy = 0; m.jy = 0;
+        const alt = m.pos.y; m.flying = !m.flying; FLYON = m.flying; m.slide = m.atk = m.perch = m.mantle = null; m.vy = 0; m.jy = 0;
         if (m.flying) { m.flyY = alt; } else { m.by = H(m.pos.x, m.pos.z); m.jy = Math.max(0, alt - m.by); m.vy = m.jy > .01 ? -.01 : 0; }
         setBadge(); try { tone(m.flying ? 660 : 300, .07); } catch (e) {}
       } });
@@ -6100,7 +6103,7 @@ function build(me, i) {
     } else if (me.slide) {                            // slide: a fast low burst along the run, steerable a little, slowing to a crouch
       const sl = me.slide; sl.t += dt; if (mv) { sl.x += (mx - sl.x) * dt * 2.5; sl.z += (mz - sl.z) * dt * 2.5; const n = Math.hypot(sl.x, sl.z) || 1; sl.x /= n; sl.z /= n; }
       const v = 20 * Math.max(0, 1 - sl.t / .75) ** 1.3 + 3, nx = pos.x + sl.x * v * dt, nz = pos.z + sl.z * v * dt;
-      if (Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */ if (!me.perch && !me.mantle && me.tgrid) { const gx = Math.floor(pos.x / 8), gz = Math.floor(pos.z / 8); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) { const L = me.tgrid.get((gx + a) * 4096 + gz + c); if (L) for (let q = 0; q < L.length; q += 4) { const ex = pos.x - L[q], ez = pos.z - L[q + 1], ed = Math.hypot(ex, ez), rr = L[q + 2] + .35; if (ed < rr && ed > 1e-4) { pos.x = L[q] + ex / ed * rr; pos.z = L[q + 1] + ez / ed * rr; } } } }
+      if (Math.hypot(nx, nz) < 645) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */ if (!me.perch && !me.mantle && me.tgrid) { const gx = Math.floor(pos.x / 8), gz = Math.floor(pos.z / 8); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) { const L = me.tgrid.get((gx + a) * 4096 + gz + c); if (L) for (let q = 0; q < L.length; q += 4) { const ex = pos.x - L[q], ez = pos.z - L[q + 1], ed = Math.hypot(ex, ez), rr = L[q + 2] + .35; if (ed < rr && ed > 1e-4) { pos.x = L[q] + ex / ed * rr; pos.z = L[q + 1] + ez / ed * rr; } } } }
       for (const m of me.mobs || []) if (!m.dead && !m.hitSl && Math.hypot(m.root.position.x - pos.x, m.root.position.z - pos.z) < 1.2 + m.a[1] * .3) { m.hitSl = 1; m.stun = Math.max(m.stun || 0, .8); m.angry = 25; }   // slide into an animal's legs: it stumbles
       if (sl.t > .75 || me.jy || me.hp <= 0) { me.slide = null; for (const m of me.mobs || []) m.hitSl = 0; }
       me.walkT += dt * 4;
@@ -6108,7 +6111,7 @@ function build(me, i) {
       const kv = 1 - Math.exp(-dt * (mv ? 16 : 20)), tvx = mv ? mx * spd : 0, tvz = mv ? mz * spd : 0;   // smooth: reaches full speed in ~0.15 s, stops in ~0.1 s
       me.vx = (me.vx || 0) + (tvx - (me.vx || 0)) * kv; me.vz = (me.vz || 0) + (tvz - (me.vz || 0)) * kv;
       const nx = pos.x + me.vx * dt, nz = pos.z + me.vz * dt;
-      if (Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */ if (!me.perch && !me.mantle && me.tgrid) { const gx = Math.floor(pos.x / 8), gz = Math.floor(pos.z / 8); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) { const L = me.tgrid.get((gx + a) * 4096 + gz + c); if (L) for (let q = 0; q < L.length; q += 4) { const ex = pos.x - L[q], ez = pos.z - L[q + 1], ed = Math.hypot(ex, ez), rr = L[q + 2] + .35; if (ed < rr && ed > 1e-4) { pos.x = L[q] + ex / ed * rr; pos.z = L[q + 1] + ez / ed * rr; } } } }
+      if (Math.hypot(nx, nz) < 645) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */ if (!me.perch && !me.mantle && me.tgrid) { const gx = Math.floor(pos.x / 8), gz = Math.floor(pos.z / 8); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) { const L = me.tgrid.get((gx + a) * 4096 + gz + c); if (L) for (let q = 0; q < L.length; q += 4) { const ex = pos.x - L[q], ez = pos.z - L[q + 1], ed = Math.hypot(ex, ez), rr = L[q + 2] + .35; if (ed < rr && ed > 1e-4) { pos.x = L[q] + ex / ed * rr; pos.z = L[q + 1] + ez / ed * rr; } } } }
       else if (H(nx, pos.z) > -.6) pos.x = nx; else if (H(pos.x, nz) > -.6) pos.z = nz;   // slide along the shore instead of stopping dead
       me.walkT += dt * Math.hypot(me.vx, me.vz) * 1.6;
     }
@@ -6143,6 +6146,7 @@ function build(me, i) {
     pix.render(scene);
   };
   me.raf = requestAnimationFrame(loop); me.loop = loop;   // me.loop: tests can step frames while the tab is hidden
+  if (FLYON) me.fly();   /* the owner already pressed J: every new area opens in god mode */
   window.SV.last = { biome: b.n, hex: i, lat, lon };
 }
 function close() {
