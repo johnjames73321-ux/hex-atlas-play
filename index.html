@@ -5701,7 +5701,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
         else if (tg.atk && tg.d < 4 && r() < .55) m.mv = r() < .5 ? { k: "back", a: to + Math.PI, d: .45, s: 1.6, hop: .5 } : { k: "dash", a: to + side * 1.5, d: .35, s: 2.2 };   // a swing coming: hop back or dart aside
         else if (tg.blk && tg.d < 5 && r() < .6) m.mv = { k: "circle", a: to + side * 1.3, d: .7, s: 1.2 };              // guard up: go round it
         else if (tg.d > 3 && tg.d < 9 && m.cd <= .2 && r() < (m.tr.has("leaper") ? .85 : .45)) m.mv = { k: "pounce", a: to, d: .55, s: 2.4, hop: Math.min(1.6, .5 + a[2]) * (m.tr.has("leaper") ? 1.6 : 1) };   // in range: leap in
-        else if (tg.d < 12 && r() < .25) m.mv = { k: "dash", a: to + side * .4, d: .4, s: 2 };                           // sudden burst
+        else if (tg.d < 12 && r() < .25) m.mv = { k: "circle", a: to + side * (.9 + r() * .6), d: .4, s: 2 };   // sudden dart to the side                           // sudden burst
         if (m.mv) { m.mv.t = 0; m.mv.f = to; }
       }
       if (m.mv) { m.hd = m.mv.k === "back" || m.mv.k === "circle" ? m.mv.f : m.mv.a; sp = a[5] * m.mv.s; }
@@ -5721,7 +5721,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
       if (chase && d3 < reach && m.cd <= 0 && me.hp > 0) {
         if (me.rollT > 0) { m.cd = .6; continue; }   // rolled through the bite
         if (me.block && me.tnow - (me.blockT ?? -9) < .3 + .08 * sk("guard")) { m.cd = 1.6; me.parried(m); continue; }   // Q pressed just before the bite: parried, no damage
-        m.cd = m.tr.has("quick-biter") ? .8 : 1.3; if (m.tr.has("venomous")) me.poison = 3; if (m.tr.has("vampiric")) m.hp = Math.min(m.mx, m.hp + a[7] * .5); if (r() < .55) m.mv = { k: "dash", a: Math.atan2(dx, dz) + (r() - .5) * .7, d: .75, s: 2, t: 0, f: 0 };   // bite and run past: no endless chewing on a standing player
+        m.cd = m.tr.has("quick-biter") ? .8 : 1.3; if (m.tr.has("venomous")) me.poison = 3; if (m.tr.has("vampiric")) m.hp = Math.min(m.mx, m.hp + a[7] * .5); { const to = Math.atan2(dx, dz), u = r(), sd = r() < .5 ? 1 : -1; m.mv = u < .15 ? { k: "dash", a: to + (r() - .5) * .7, d: .6, s: 2, t: 0, f: to } : u < .6 ? { k: "circle", a: to + sd * (1.3 + r() * .5), d: .45, s: 1.8, t: 0, f: to } : u < .85 ? { k: "back", a: to + Math.PI + (r() - .5) * .8, d: .4, s: 1.6, hop: .3, t: 0, f: to } : null; }   // after a bite: mostly sidestep or hop back, only sometimes run past   // bite and run past: no endless chewing on a standing player
         const blk = me.block && Math.abs(Math.atan2(Math.sin(Math.atan2(-dx, -dz) - me.face), Math.cos(Math.atan2(-dx, -dz) - me.face))) < 1.2;   // RMB block: 85% less from the front, knocks it back
         let gb = 0; if (blk) { me.st -= 18 - 4 * sk("guard"); if (me.st <= 0) { me.st = 0; gb = 1; me.gbT = me.tnow; me.block = false; say("Guard broken!", 900); tone(150, .1); } }
         if (blk && !gb) { R0.position.x -= dx / (dist || 1) * 1.6; R0.position.z -= dz / (dist || 1) * 1.6; tone(1200, .05); me.blockHitT = me.tnow; spark(handPos(new T.Vector3())); me.shake = .1; const nx = cp.x + dx / (dist || 1) * .35, nz = cp.z + dz / (dist || 1) * .35; if (H(nx, nz) > -.6) { cp.x = nx; cp.z = nz; } }
