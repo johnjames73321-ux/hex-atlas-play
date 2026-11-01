@@ -19,3 +19,10 @@ Method: each region is fixed as a block. Modern hidden name (field 10) and the t
 - US Plains: `Wi` 34, `Mni` 31, `Tte` 18, `Ta` 15, `Ni` 14.
 - Brazil: `Ybytyra` 30, `Yby` 24, `Yvy` 13, `Ywy` 12, `Y` 10, `Taba` 11.
 - 7 placeholder hexes.
+
+## Caribbean / Mesoamerica coordinate-mismatch fix (2026-11-01)
+
+- Found records whose country/admin label disagrees with their coordinates. Names had been chosen from the label, not the place.
+- Renamed 10 whose name belonged to another country: Tolima (El Salvador coords) -> Chaparrastique; Ibague (Panama) -> Ngabe; Guacara (Nicaragua) -> Ometepe; Chiaquyn -> Moyogalpa; Tawan Tara -> Solentiname; Coji (El Salvador) -> Cihuatan; Refundores (Costa Rica) -> Nosara; Piyo'o -> Diriá; Pillcopata (Colombia) -> Macuna; Yakuna (Peru) -> Yagua.
+- Open issue: many 28000+ records have lat/lon that do not match their hex position on the map. A full fix needs names assigned from the hex grid, not the record coordinates.
+
