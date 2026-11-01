@@ -624,7 +624,7 @@ function render() {
 
 // ---------- animated ocean (WebGL): domain-warped noise in map coordinates, so it is different everywhere and pans/zooms with the map ----------
 (function () {
-  const oc = document.getElementById("ocean"), gl = oc.getContext("webgl", { premultipliedAlpha: false, antialias: false });
+  const oc = document.getElementById("ocean"), gl = oc.getContext("webgl", { premultipliedAlpha: false, antialias: false, preserveDrawingBuffer: true });
   if (!gl) { oc.style.background = css("--sea"); return; }
   const VS = "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }";
   const FS = `precision highp float;
@@ -714,20 +714,22 @@ void main(){
   const t0 = performance.now();
   let lastV = "", lastT = -1e9;
   function frame(now) {
-    if (!document.getElementById("sv")?.hidden) { requestAnimationFrame(frame); return; }   // street view open: no ocean behind it
     requestAnimationFrame(frame);
-    if (document.hidden || window.SV?.S3) return;   // the sword game covers the map: no ocean then
-    const vk = view.x + "," + view.y + "," + view.s;
+    if (document.hidden) return;
+    const mini = window.SV?.S3 ? document.getElementById("svMini") : null;   // in the 3D game the same animated sea fills the minimap (user, 11-01)
+    if (!mini && !document.getElementById("sv")?.hidden) return;
+    const vk = mini ? "mini" : view.x + "," + view.y + "," + view.s;
     if (vk === lastV && now - lastT < 90) return;   // idle: the waves animate at ~11 fps instead of every frame (was a constant GPU load)
     lastV = vk; lastT = now;
-    const r = oc.getBoundingClientRect(), px = Math.min(window.devicePixelRatio || 1, 1.5) * 0.85;
-    const w = Math.max(1, Math.round(r.width * px)), h = Math.max(1, Math.round(r.height * px));
+    let w, h, px, vx = view.x, vy = view.y, vs = view.s;
+    if (mini) { w = mini.width; h = mini.height; px = 1; vs = Math.min(w / W, h / H); vx = (w - W * vs) / 2; vy = (h - H * vs) / 2; }
+    else { const r = oc.getBoundingClientRect(); px = Math.min(window.devicePixelRatio || 1, 1.5) * 0.85; w = Math.max(1, Math.round(r.width * px)); h = Math.max(1, Math.round(r.height * px)); }
     if (oc.width !== w || oc.height !== h) { oc.width = w; oc.height = h; }
     gl.viewport(0, 0, w, h);
-    gl.uniform2f(uRes, w, h); gl.uniform3f(uView, view.x, view.y, view.s); gl.uniform1f(uPx, px);
-    gl.uniform1f(uFp, 0.004); gl.uniform1f(uT, reduce.matches ? 0 : (now - t0) / 1000); gl.uniform2f(uWH, W, H - 4); gl.uniform3fv(uBg, hex(css("--bg")));
+    gl.uniform2f(uRes, w, h); gl.uniform3f(uView, vx, vy, vs); gl.uniform1f(uPx, px);
+    gl.uniform1f(uFp, 0.004); gl.uniform1f(uT, reduce.matches ? 0 : (now - t0) / 1000 * 1.6);   // livelier waves gl.uniform2f(uWH, W, H - 4); gl.uniform3fv(uBg, hex(css("--bg")));
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, dtex); gl.uniform1i(uDepthL, 0); gl.uniform1f(uCutLL, CUTL); gl.uniform1f(uCutLc, CUT);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.drawArrays(gl.TRIANGLES, 0, 3); if (mini) window.oceanMiniT = now;
   }
   requestAnimationFrame(frame);
 })();
@@ -5439,12 +5441,12 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   const RUN = {
     swing: nextSwing, jab: () => startAtk("jab"), sweep: () => { me.combo = 0; startAtk("sweep"); },
     spin: () => { if (me.cdR > 0) return false; me.cdR = 1; me.combo = 0; const ch = me.lmb && me.lmb.charging; if (ch) me.lmb = null; startAtk(ch ? "spin2" : "spin"); },
-    q: () => { if (me.cdQ > 0 || me.st < 45) return false; me.cdQ = .3; me.st -= 45; startAtk("dash");   // a short dash toward whatever WASD you hold, 2 in a row on full stamina
+    q: () => { const both = me.rollT > 0, cost = both ? 67.5 : 45; if (me.cdQ > 0 || me.st < cost) return false; me.cdQ = .3; me.st -= cost; if (both) me.rollT = 0; /* dashing out of a roll: 50% more, cuts the roll */ startAtk("dash");   // a short dash toward whatever WASD you hold, 2 in a row on full stamina
       const k = me.keys, f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0), sd = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0); if (f || sd) { const sf = Math.sin(me.face), cf = Math.cos(me.face); me.atk.face = Math.atan2(f * sf - sd * cf, f * cf + sd * sf); } },
     spear: () => throwBlade("spear"), lob: () => throwBlade("lob")
   };
   function act(kind) {
-    if (me.hp <= 0 || me.rollT > 0) return;
+    if (me.hp <= 0 || (me.rollT > 0 && kind !== "q")) return;
     if (me.weapon === "bow") setWeapon("sword");   // any sword move swaps back at once
     if (!me.blade) { if (proj && /swing|spear|lob|jab/.test(kind)) recall(); return; }   // the blade is out on its chain: pull it back
     if ((kind === "q" && me.cdQ > 0) || (kind === "spin" && me.cdR > 0)) return;
@@ -5486,7 +5488,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   me.lmbUp = () => { if (me.weapon === "bow") { if (me.draw != null) fire(); return; } lmbUpSword(); };
   // ---- V: dodge roll (no damage while rolling), costs stamina ----
   me.roll = () => {
-    if (me.hp <= 0 || me.rollT > 0 || me.rollCd > 0 || me.st < 20) return; me.st -= 20; me.atk = null; me.draw = null;
+    const both = me.atk && me.atk.kind === "dash", cost = both ? 30 : 20; if (me.hp <= 0 || me.rollT > 0 || me.rollCd > 0 || me.st < cost) return; me.st -= cost; me.atk = null; /* rolling out of a dash: costs 50% more, cuts the dash */ me.draw = null;
     const k = me.keys, f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0), sd = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0), sf = Math.sin(me.face), cf = Math.cos(me.face);
     let dx = f * sf - sd * cf, dz = f * cf + sd * sf; if (!f && !sd) { dx = -sf; dz = -cf; } const l = Math.hypot(dx, dz) || 1;
     me.rollDir = [dx / l, dz / l]; me.rollT = me.rollD = .38 * (1 - .12 * sk("roll")); me.rollCd = .9 - .3 * sk("roll"); tone(500, .03);
@@ -5829,8 +5831,8 @@ window.svNav = me => {
     });
     m.style.borderRadius = Math.min(...rad) + 8 + "px";   // one radius for all four corners: just past the largest that clears land (user: a bit more)
   }
-  if (!me.miniBg) { const c2 = me.miniBg = document.createElement("canvas"); c2.width = m.width; c2.height = m.height; const g2 = c2.getContext("2d"); g2.fillStyle = "#6fb3d9"; g2.fillRect(0, 0, m.width, m.height); g2.imageSmoothingEnabled = true; g2.drawImage(base, ox, oy, W * k, H * k); }
-  g.drawImage(me.miniBg, 0, 0);
+  if (!me.miniBg) { const c2 = me.miniBg = document.createElement("canvas"); c2.width = m.width; c2.height = m.height; const g2 = c2.getContext("2d"); g2.imageSmoothingEnabled = true; g2.drawImage(base, ox, oy, W * k, H * k); }
+  g.clearRect(0, 0, m.width, m.height); const ocv = document.getElementById("ocean"); if (ocv && ocv.width === m.width && performance.now() - (window.oceanMiniT || -1e9) < 1000) g.drawImage(ocv, 0, 0); else { g.fillStyle = "#6fb3d9"; g.fillRect(0, 0, m.width, m.height); } g.drawImage(me.miniBg, 0, 0);
   const px = ox + cx[i] * k, py = oy + cy[i] * k;
   g.save(); g.translate(px, py); g.rotate(head); g.fillStyle = "#ff3b30"; g.strokeStyle = "#fff"; g.lineWidth = 1.5;
   g.beginPath(); g.moveTo(0, -8); g.lineTo(6, 6); g.lineTo(0, 3); g.lineTo(-6, 6); g.closePath(); g.fill(); g.stroke(); g.restore();
