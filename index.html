@@ -5261,11 +5261,11 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   for (let j = 0; j < 8; j++) spawn(sizes[j % sizes.length], false);
   if (sizes.length) spawn(sizes[0], true, 1);
   // gates (user, 11-01): one at the edge toward every neighbouring land hex; walk in and the next land fades in around you
-  const gateMat = new T.MeshBasicMaterial({ color: 0x8fdcff, transparent: true, opacity: .35, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide }), gates = [];
-  for (let d = 0; d < 6; d++) { const j = nb(me.hex, d); if (j < 0 || D.reg[j] < 0) continue; const ang = Math.atan2(cy[j] - cy[me.hex], cx[j] - cx[me.hex]), gx = Math.cos(ang) * 1400, gz = Math.sin(ang) * 1400, gy = Math.max(H(gx, gz), -.3);
-    const beam = new T.Mesh(new T.CylinderGeometry(4, 4, 120, 20, 1, true), gateMat); beam.position.set(gx, gy + 60, gz); scene.add(beam);
-    const ring = new T.Mesh(new T.RingGeometry(4, 6, 32), gateMat); ring.rotation.x = -Math.PI / 2; ring.position.set(gx, gy + .2, gz); scene.add(ring); gates.push({ j, x: gx, z: gz, ang, ring }); }
-  me.ps.push((dt, t) => { if (open.seam || me.hp <= 0) return; for (const g of gates) { g.ring.rotation.z = t * .001; if (Math.hypot(me.pos.x - g.x, me.pos.z - g.z) < 6) {
+  const gateMat = new T.MeshBasicMaterial({ color: 0x8fdcff, fog: false, transparent: true, opacity: .55, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide }), gates = [];
+  for (let d = 0; d < 6; d++) { const j = nb(me.hex, d); if (j < 0 || D.reg[j] < 0) continue; const ang = Math.atan2(cy[j] - cy[me.hex], cx[j] - cx[me.hex]), gx = Math.cos(ang) * 600, gz = Math.sin(ang) * 600, gy = Math.max(H(gx, gz), -.3);
+    const beam = new T.Mesh(new T.CylinderGeometry(7, 7, 400, 20, 1, true), gateMat); beam.position.set(gx, gy + 200, gz); scene.add(beam);
+    const ring = new T.Mesh(new T.RingGeometry(7, 11, 32), gateMat); ring.rotation.x = -Math.PI / 2; ring.position.set(gx, gy + .2, gz); scene.add(ring); gates.push({ j, x: gx, z: gz, ang, ring }); }
+  me.ps.push((dt, t) => { if (open.seam || me.hp <= 0) return; for (const g of gates) { g.ring.rotation.z = t * .001; if (Math.hypot(me.pos.x - g.x, me.pos.z - g.z) < 11) {
     let f = $("svFade"); if (!f) { f = document.createElement("div"); f.id = "svFade"; f.style.cssText = "position:absolute;inset:0;background:#fff;opacity:0;transition:opacity .25s;pointer-events:none;z-index:60"; ov.appendChild(f); }
     f.style.opacity = 1; open.seam = { ang: g.ang + Math.PI, yaw: me.yaw, face: me.face }; setTimeout(() => open(g.j), 260); return; } } });
   // villagers: wander, talk (T), and run from animals faster than any of them
@@ -5299,12 +5299,12 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   for (let j = 0; j < 6; j++) { const fem = j % 2, pk = a => +("0x" + a[Math.floor(r() * a.length)]), h = human(fem, pk(SKIN), pk(CLOTH), pk(HAIR));
     for (let t = 0; t < 30; t++) { const an = r() * 6.28, d = 25 + r() * 120, x = me.pos.x + Math.cos(an) * d, z = me.pos.z + Math.sin(an) * d; if (H(x, z) > 0) { h.root.position.set(x, H(x, z), z); break; } }
     scene.add(h.root); npcs.push({ ...h, name: NM[fem][Math.floor(r() * 8)], hd: r() * 6.28, wt: 0, t: 0 }); }
-  me.talk = () => { let best = null, bd = 4; for (const n of npcs) { const d = Math.hypot(n.root.position.x - me.pos.x, n.root.position.z - me.pos.z); if (d < bd) { bd = d; best = n; } } if (best) say(`${best.name}: ${LINES[Math.floor(Math.random() * LINES.length)]}`, 3500); };
+  me.talk = () => { let best = null, bd = 4; for (const n of npcs) { const d = Math.hypot(n.root.position.x - me.pos.x, n.root.position.z - me.pos.z); if (d < bd) { bd = d; best = n; } } if (best) { say(`${best.name}: ${LINES[Math.floor(Math.random() * LINES.length)]}`, 3500); best.chat = 4; } return !!best; };
   me.ps.push(dt => { const fast = Math.max(6, ...mobs.map(m => m.a[5])) * 1.3 + 2;
-    for (const n of npcs) { const R0 = n.root, p = R0.position; let th = null, td = 14;
-      for (const m of mobs) { if (m.dead || !(m.angry > 0 || /^(cat|dog|bear|croc|lizard|snake)$/.test(m.a[0]))) continue; const d = Math.hypot(m.root.position.x - p.x, m.root.position.z - p.z); if (d < td) { td = d; th = m; } }
+    for (const n of npcs) { const R0 = n.root, p = R0.position; let th = null, td = 9; n.chat = (n.chat || 0) - dt;
+      for (const m of mobs) { if (m.dead || !(m.angry > 0 || m.foe || m.mv)) continue; /* only animals actually on the attack scare them, never you */ const d = Math.hypot(m.root.position.x - p.x, m.root.position.z - p.z); if (d < td) { td = d; th = m; } }
       let sp = 0; if (th) { n.hd = Math.atan2(p.x - th.root.position.x, p.z - th.root.position.z); sp = fast; }
-      else if (Math.hypot(me.pos.x - p.x, me.pos.z - p.z) < 3) n.hd = Math.atan2(me.pos.x - p.x, me.pos.z - p.z);
+      else if (n.chat > 0 || Math.hypot(me.pos.x - p.x, me.pos.z - p.z) < 6) n.hd = Math.atan2(me.pos.x - p.x, me.pos.z - p.z);
       else { n.wt -= dt; if (n.wt <= 0) { n.wt = 2 + Math.random() * 5; n.hd += (Math.random() - .5) * 2.5; n.walk = Math.random() < .6; } sp = n.walk ? 1.3 : 0; }
       let dh = n.hd - R0.rotation.y; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); R0.rotation.y += dh * Math.min(1, dt * 7);
       const nx = p.x + Math.sin(R0.rotation.y) * sp * dt, nz = p.z + Math.cos(R0.rotation.y) * sp * dt; if (H(nx, nz) > 0 && Math.hypot(nx, nz) < 1600) { p.x = nx; p.z = nz; } else n.hd += 2; p.y = H(p.x, p.z);
@@ -5427,8 +5427,8 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   me.mmb = () => act("jab");
   me.throwBlade = kind => act(kind || "spear");
   me.spinAttack = () => act("spin");
-  me.tabDown = () => { if (!me.tabT) { me.tabT = me.tnow; const L = me.lmb; me.pwr = L && L.charging ? clamp((me.tnow - L.t - .3) / .8, 0, 1) : null; } };   // charge held when E goes down counts, even if LMB is let go first
-  me.tabUp = () => { if (!me.tabT) return; const held = me.tnow - me.tabT; me.tabT = 0; act(held > .3 ? "lob" : "spear"); };   // E: tap = spear, hold = lob, again = recall
+  me.tabDown = () => { if (me.talk && me.talk()) { me.talked = 1; return; } if (!me.tabT) { me.tabT = me.tnow; const L = me.lmb; me.pwr = L && L.charging ? clamp((me.tnow - L.t - .3) / .8, 0, 1) : null; } };   // charge held when E goes down counts, even if LMB is let go first
+  me.tabUp = () => { if (me.talked) { me.talked = 0; return; } if (!me.tabT) return; const held = me.tnow - me.tabT; me.tabT = 0; act(held > .3 ? "lob" : "spear"); };   // E: tap = spear, hold = lob, again = recall
   const thr = swordMesh(); thr.visible = false; scene.add(thr);
   // ---- bow (2): hold LMB to draw, release to shoot; Multishot adds arrows ----
   const wood = new T.MeshLambertMaterial({ color: 0x6b4423, emissive: 0x201008 }), strMat = new T.LineBasicMaterial({ color: 0xeeeeee });
@@ -5818,7 +5818,7 @@ $("svSpin").onclick = e => { e.stopPropagation(); S3 && S3.spinAttack && S3.spin
 ov.addEventListener("contextmenu", e => { e.preventDefault(); });
 let tap = null;
 // combat input (third person): LMB swing / hold to charge / double = lob · MMB jab / double = spear throw · RMB block · wheel zoom
-ov.addEventListener("pointerdown", e => { if (!S3 || e.target.closest("button, .joy, .hud")) return; e.preventDefault(); ov.setPointerCapture(e.pointerId); S3.mouse = [e.clientX, e.clientY];
+ov.addEventListener("pointerdown", e => { if (!S3 || e.target.closest("button, .joy, .hud")) return; e.preventDefault(); try { ov.setPointerCapture(e.pointerId); } catch (err) {} /* throws under pointer lock in Chrome and used to kill every attack */ S3.mouse = [e.clientX, e.clientY];
   if (document.pointerLockElement !== ov && e.pointerType === "mouse") try { const r = ov.requestPointerLock(); r && r.catch && r.catch(() => {}); } catch (err) {}   // mouse look
   if (e.button === 0) S3.lmbDown && S3.lmbDown(); else if (e.button === 1) S3.mmb && S3.mmb(); else if (e.button === 2) { S3.block = true; S3.blockT = S3.tnow; } });
 ov.addEventListener("pointerup", e => { if (!S3) return; if (e.button === 0) S3.lmbUp && S3.lmbUp(); else if (e.button === 2) S3.block = false; });
@@ -5970,7 +5970,7 @@ function build(me, i) {
   }
   if (b.t === "aurora") aurora(me, scene, r);
   // the hero: third-person, Zelda / Pokemon style camera above and behind
-  const s0 = open.seam, sx0 = s0 ? Math.cos(s0.ang) * 1340 : 0, sz0 = s0 ? Math.sin(s0.ang) * 1340 : 0; me.sx = sx0; me.sz = sz0; me.pos = P(sx0, Math.max(H(sx0, sz0), -.3), sz0); me.face = s0 ? s0.face : 0; me.yaw = s0 ? s0.yaw : r() * 6.28; me.dist = 3.3; me.pitchC = .3; try { const c5 = localStorage.getItem("hexatlas-cam5"), c4 = localStorage.getItem("hexatlas-cam4"), c3 = localStorage.getItem("hexatlas-cam3"); me.dist = clamp(c5 ? +c5 : (c4 ? +c4 : c3 ? +c3 - .5 : 4) * .82, 1.5, 10); } catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
+  const s0 = open.seam, sx0 = s0 ? Math.cos(s0.ang) * 570 : 0, sz0 = s0 ? Math.sin(s0.ang) * 570 : 0; me.sx = sx0; me.sz = sz0; me.pos = P(sx0, Math.max(H(sx0, sz0), -.3), sz0); me.face = s0 ? s0.face : 0; me.yaw = s0 ? s0.yaw : r() * 6.28; me.dist = 3.3; me.pitchC = .3; try { const c5 = localStorage.getItem("hexatlas-cam5"), c4 = localStorage.getItem("hexatlas-cam4"), c3 = localStorage.getItem("hexatlas-cam3"); me.dist = clamp(c5 ? +c5 : (c4 ? +c4 : c3 ? +c3 - .5 : 4) * .82, 1.5, 10); } catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
   me.hero = heroMesh(); scene.add(me.hero.root);
   const apex = wildlife(me, scene, cam, H, r, lat, lon);
   // HUD
@@ -6038,7 +6038,7 @@ function close() {
 }
 $("svX").onclick = close;
 $("svSnd").onclick = () => { const me = S3; if (!me || !me.ac) return; me.soundOn = !me.soundOn; me.soundOn ? me.ac.resume() : me.ac.suspend(); $("svSnd").textContent = me.soundOn ? "🔊" : "🔇"; };
-addEventListener("keydown", e => { if (!S3) return; if (e.code === "Space" && !e.repeat) { const nw = performance.now(); if (nw - (S3.spT || -1e4) < 280) { S3.spT = -1e4; S3.roll && S3.roll(); } else { S3.spT = nw; S3.jump && S3.jump(); } } if ((e.code === "ShiftLeft" || e.code === "ShiftRight") && !e.repeat) { const nw = performance.now(); if (nw - (S3.shT || -1e4) < 280) { S3.shT = -1e4; S3.act && S3.act("q"); } else S3.shT = nw; } if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "KeyF") S3.act("spear"); else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyT") S3.talk && S3.talk(); else if (e.code === "KeyZ") S3.roll && S3.roll(); else if (e.code === "KeyX" && !e.repeat) S3.turn && S3.turn(Math.PI / 2); else if (e.code === "KeyV" && !e.repeat) S3.turn && S3.turn(-Math.PI / 2); else if (e.code === "KeyK") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.act && S3.act("q"); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
+addEventListener("keydown", e => { if (!S3) return; if (e.code === "Space" && !e.repeat) { const nw = performance.now(); if (nw - (S3.spT || -1e4) < 280) { S3.spT = -1e4; S3.roll && S3.roll(); } else { S3.spT = nw; S3.jump && S3.jump(); } } if ((e.code === "ShiftLeft" || e.code === "ShiftRight") && !e.repeat) { const nw = performance.now(); if (nw - (S3.shT || -1e4) < 280) { S3.shT = -1e4; S3.act && S3.act("q"); } else S3.shT = nw; } if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "KeyF") S3.act("spear"); else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyT") S3.spinAttack && S3.spinAttack(); else if (e.code === "KeyZ") S3.roll && S3.roll(); else if (e.code === "KeyX" && !e.repeat) S3.turn && S3.turn(Math.PI / 2); else if (e.code === "KeyV" && !e.repeat) S3.turn && S3.turn(-Math.PI / 2); else if (e.code === "KeyK") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.act && S3.act("q"); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
 addEventListener("keyup", e => { if (!S3) return; S3.keys[e.code] = 0; if (e.code === "Tab") e.preventDefault(); if (e.code === "KeyE") S3.tabUp && S3.tabUp(); if (e.code === "KeyQ") S3.block = false; e.stopImmediatePropagation(); }, true);
 addEventListener("blur", () => { if (S3) S3.keys = {}; });
 addEventListener("resize", () => { const me = S3; if (!me || !me.R) return; me.R.setSize(innerWidth, innerHeight); me.pix.size(); me.cam.aspect = innerWidth / innerHeight; me.cam.updateProjectionMatrix(); });
