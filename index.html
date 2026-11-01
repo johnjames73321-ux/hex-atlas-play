@@ -5391,7 +5391,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     if (!m.named) { m.named = 1; say(m.a[9], 1400); }
     if (m.tr.has("pack-leader")) for (const o of mobs) if (o.k === m.k && !o.dead && o.root.position.distanceTo(m.root.position) < 35) o.angry = 25;
     m.hp -= dmg; if (m.bar) m.bar.fill.scale.x = Math.max(0, m.hp / m.mx); m.angry = m.tr.has("relentless") ? 60 : 25;   // bar drops on every hit, stunned or not m.flash = .15; if (heavy || crit) m.stun = Math.max(m.stun || 0, .4);
-    const k = tmpW.subVectors(m.root.position, from).setY(0).normalize().multiplyScalar(Math.min(2.5, 60 / m.a[6] + .4) * (heavy ? 1.8 : 1)); m.root.position.add(k);
+    const k = tmpW.subVectors(m.root.position, from).setY(0).normalize().multiplyScalar(Math.min(.8, 30 / m.a[6] + .15) * (heavy ? 1.5 : 1)); m.root.position.add(k);
     popNum(m, dmg, crit); me.stopT = crit || heavy ? .07 : .035; me.shake = Math.max(me.shake || 0, crit || heavy ? .25 : .12);
     if (m.hp <= 0 && m.tr.has("explosive")) { const c = m.root.position; if (Math.hypot(me.pos.x - c.x, me.pos.z - c.z) < 4) { me.hp -= 15 / me.up("hp"); hpDraw(); } const ring = new T.Mesh(new T.RingGeometry(.3, .7, 32), new T.MeshBasicMaterial({ color: 0xff7a20, transparent: true, side: T.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.copy(c).y += .2; scene.add(ring); me.fx.push({ o: ring, t: 0, d: .45, s: 7 }); me.shake = .3; tone(80, .2); }
     if (m.hp <= 0) { m.dead = 3.5; me.kills++; me.hp = Math.min(100, me.hp + 4); hpDraw();
