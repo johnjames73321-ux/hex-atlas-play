@@ -144,7 +144,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
   <div class="card" id="card" hidden></div>
   <div class="legend" id="legend" hidden></div>
   <section class="dev" id="dev" hidden aria-label="Map editor">
-    <div class="row" role="group" aria-label="Editor tools"><button id="e-land" aria-pressed="true">Land <small>L</small></button><button id="e-sea" aria-pressed="false">Water <small>W</small></button><button id="e-bar" aria-pressed="false" title="Between two land hexes: a strait. Between two water hexes: a land barrage.">Barrage <small>B</small></button><button id="e-river" aria-pressed="false" title="Draw a river: along hex edges or across a hex, corner to corner or side to side">River <small>R</small></button><button id="e-move" aria-pressed="false" title="Draw around land to select it, drag the selection to move it. X: make it water. Q: resize mode">Move <small>M</small></button><button id="e-sq" aria-pressed="false" title="Resize: a box with handles around the selection. Sides widen or narrow it, corners both ways, the top knob turns it">Resize <small>Q</small></button><button id="e-sqok" hidden title="Put the resized shape on the map (Enter)">Apply <small>Enter</small></button><button id="e-save" title="Keep your changes on this map">Save here</button><button id="e-send" title="Send your changes to Claude to bake into the next version; they leave this map until then">Send to Claude</button><button id="e-both" title="Keep your changes here and send them to Claude">Both</button></div>
+    <div class="row" role="group" aria-label="Editor tools"><button id="e-land" aria-pressed="true">Land <small>L</small></button><button id="e-sea" aria-pressed="false">Water <small>W</small></button><button id="e-bar" aria-pressed="false" title="Between two land hexes: a strait. Between two water hexes: a land barrage.">Barrage <small>B</small></button><button id="e-river" aria-pressed="false" title="Draw a river: along hex edges or across a hex, corner to corner or side to side">River <small>R</small></button><button id="e-move" aria-pressed="false" title="Draw around land to select it, drag the selection to move it. X: make it water. Q: resize mode">Move <small>M</small></button><button id="e-sq" aria-pressed="false" title="Resize: a box with handles around the selection. Sides widen or narrow it, corners both ways, the top knob turns it">Resize <small>Q</small></button><button id="e-sqok" hidden title="Put the resized shape on the map (Enter)">Apply <small>Enter</small></button><button id="e-save" title="Keep your changes on this map">Save here</button><button id="e-send" title="Send your changes to all four AIs at once to bake into the next version; they leave this map until then">Send to all AIs</button><button id="e-both" title="Keep your changes here and send them to all four AIs">Both</button></div>
     <div class="muted" id="selinfo">Drag to draw · right-click deletes</div>
   </section>
 <!--CK-BEGIN crowns-->
@@ -1454,10 +1454,11 @@ addEventListener("keydown", e => {
 // outside the artifact (a downloaded copy, the browser pane): marks and sends go to the PC's local game server (tools/serve.py), which hands them to Claude
 const LOCALSRV = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "" : "http://127.0.0.1:8766";
 async function tellClaude(text) {
+  // local game server first: it bakes the edits and broadcasts the note to every Code tab (all four accounts)
+  try { const r = await fetch(LOCALSRV + "/edit", { method: "POST", body: JSON.stringify({ at: new Date().toISOString(), text, edits: [...saved, ...draft] }) }); if (r.ok) return; } catch (e) {}
+  // fallback: the Claude pane connector (current session only)
   const anchor = cm ? await cm.anchorFor($("dev")) : null;
   if (cm && anchor) { await cm.sendToClaude({ anchor, text }); return; }
-  // Claude's browser pane / any local copy: tools/serve.py takes the edits into marks/ for the Claude session watching it
-  try { const r = await fetch(LOCALSRV + "/edit", { method: "POST", body: JSON.stringify({ at: new Date().toISOString(), text, edits: [...saved, ...draft] }) }); if (r.ok) return; } catch (e) {}
   throw 0;
 }
 function saveHere() {
@@ -1473,17 +1474,17 @@ $("e-save").onclick = () => {
 $("e-send").onclick = async () => {
   if (!draft.size && !saved.size) { flash("e-send", "No changes"); return; }
   if (!draft.size) {                                   // nothing new: ask Claude to bake what is already saved here
-    try { await tellClaude(`Editor: please bake my saved changes (${summary(saved)}) from the 'edits' collection into the map.`); flash("e-send", "Sent to Claude"); }
+    try { await tellClaude(`Editor: please bake my saved changes (${summary(saved)}) from the 'edits' collection into the map.`); flash("e-send", "Sent to all AIs"); }
     catch (err) { flash("e-send", "Saved here"); }
     return;
   }
-  if (!obx) { saveHere(); try { await tellClaude(`Editor: please bake my saved changes (${summary(saved)}) into the map.`); flash("e-send", "Sent to Claude"); } catch (err) { flash("e-send", "Saved here"); } return; }
+  if (!obx) { saveHere(); try { await tellClaude(`Editor: please bake my saved changes (${summary(saved)}) into the map.`); flash("e-send", "Sent to all AIs"); } catch (err) { flash("e-send", "Saved here"); } return; }
   const batch = new Map(draft);
   try { await tellClaude(`Editor: sent to Claude only, ${summary(batch)}. Bake the 'outbox' collection into the map.`); }
   catch (err) { flash("e-send", "Kept here"); return; }
   for (const [id, e] of batch) { try { await obx.doc(id).set(e || { do: "undo", at: new Date().toISOString() }); } catch (err) {} }
   for (const id of batch.keys()) draft.delete(id);
-  keepDraft(); mergeEdits(); applyEdits(); flash("e-send", "Sent to Claude");
+  keepDraft(); mergeEdits(); applyEdits(); flash("e-send", "Sent to all AIs");
 };
 $("e-both").onclick = async () => {
   if (!draft.size && !saved.size) { flash("e-both", "No changes"); return; }
