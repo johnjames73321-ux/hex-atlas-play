@@ -5981,7 +5981,7 @@ function build(me, i) {
   }
   if (b.t === "aurora") aurora(me, scene, r);
   // the hero: third-person, Zelda / Pokemon style camera above and behind
-  const s0 = open.seam, sx0 = s0 ? Math.cos(s0.ang) * 570 : 0, sz0 = s0 ? Math.sin(s0.ang) * 570 : 0; me.sx = sx0; me.sz = sz0; me.pos = P(sx0, Math.max(H(sx0, sz0), -.3), sz0); me.face = s0 ? s0.face : 0; me.yaw = s0 ? s0.yaw : r() * 6.28; me.dist = 3.3; me.pitchC = .3; try { const c5 = localStorage.getItem("hexatlas-cam5"), c4 = localStorage.getItem("hexatlas-cam4"), c3 = localStorage.getItem("hexatlas-cam3"); me.dist = clamp(c5 ? +c5 : (c4 ? +c4 : c3 ? +c3 - .5 : 4) * .82, 1.5, 10); } catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
+  const s0 = open.seam, sx0 = s0 ? Math.cos(s0.ang) * 570 : 0, sz0 = s0 ? Math.sin(s0.ang) * 570 : 0; me.sx = sx0; me.sz = sz0; me.pos = P(sx0, b.w ? Math.max(H(sx0, sz0), -.3) : H(sx0, sz0), sz0); me.face = s0 ? s0.face : 0; me.yaw = s0 ? s0.yaw : r() * 6.28; me.dist = 3.3; me.pitchC = .3; try { const c5 = localStorage.getItem("hexatlas-cam5"), c4 = localStorage.getItem("hexatlas-cam4"), c3 = localStorage.getItem("hexatlas-cam3"); me.dist = clamp(c5 ? +c5 : (c4 ? +c4 : c3 ? +c3 - .5 : 4) * .82, 1.5, 10); } catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
   me.hero = heroMesh(); scene.add(me.hero.root);
   const apex = wildlife(me, scene, cam, H, r, lat, lon);
   // HUD
@@ -6016,7 +6016,7 @@ function build(me, i) {
       else if (H(nx, pos.z) > -.6) pos.x = nx; else if (H(pos.x, nz) > -.6) pos.z = nz;   // slide along the shore instead of stopping dead
       me.walkT += dt * Math.hypot(me.vx, me.vz) * 1.6;
     }
-    me.by = lerp(me.by ?? pos.y, Math.max(H(pos.x, pos.z), -.3), 1 - Math.exp(-dt * 12));
+    me.by = lerp(me.by ?? pos.y, b.w ? Math.max(H(pos.x, pos.z), -.3) : H(pos.x, pos.z), 1 - Math.exp(-dt * 12));   /* only lands with water hold you at its surface; dry valleys used to leave you floating */
     if (me.vy) { me.vy -= 22 * dt; me.jy += me.vy * dt; if (me.jy <= 0) me.jy = me.vy = 0; }
     pos.y = me.by + (me.jy || 0);
     // camera: above and behind, looking down at the hero
