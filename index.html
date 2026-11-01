@@ -5860,7 +5860,7 @@ async function open(i) {
 }
 // Sombie-style pixel art: the scene renders at 1/PX resolution, then one pass posterizes the colors and draws dark
 // outlines where depth jumps; the canvas is upscaled nearest-neighbour so every pixel is a crisp block (and it's ~9x cheaper)
-const PX = 1.5;
+const PX = 2;   // render at half resolution: the pixel look stays, a quarter of the pixels
 function pixelPass(R, cam) {
   const sz = new T.Vector2(), rt = new T.WebGLRenderTarget(1, 1, { minFilter: T.NearestFilter, magFilter: T.NearestFilter, depthTexture: new T.DepthTexture(1, 1) });
   const mat = new T.ShaderMaterial({ uniforms: { tC: { value: rt.texture }, tD: { value: rt.depthTexture }, px: { value: new T.Vector2() }, nf: { value: new T.Vector2(cam.near, cam.far) } },
@@ -5928,10 +5928,10 @@ function build(me, i) {
   scene.add(new T.Mesh(gg, new T.MeshLambertMaterial({ vertexColors: true, map: tex })));
   if (b.w) { const w = new T.Mesh(new T.PlaneGeometry(4000, 4000), new T.MeshPhongMaterial({ color: col(b.wc || "3d6a7a"), transparent: true, opacity: .86, shininess: 90, specular: 0x666666 })); w.rotation.x = -Math.PI / 2; scene.add(w); }
   // vegetation
-  const RS = 380, M = new T.Matrix4(), q = new T.Quaternion(), eu = new T.Euler(), sv3 = new T.Vector3(), pv = new T.Vector3(), mats = {};
+  const RS = 720, M = new T.Matrix4(), q = new T.Quaternion(), eu = new T.Euler(), sv3 = new T.Vector3(), pv = new T.Vector3(), mats = {};
   const mat = (c, leaf) => mats[c + leaf] || (mats[c + leaf] = new T.MeshLambertMaterial({ color: leaf ? 0xffffff : col(c), flatShading: true, side: leaf ? T.DoubleSide : T.FrontSide }));
   for (const [k, n0] of b.s) {
-    const sp = SP[k], h = sp[1], o = sp[4], rock = sp[0] === "rck" || sp[0] === "mnd", rad = Math.min(RS, Math.max(70, h * 10)), n = Math.round(n0 * (.8 + r() * .4)), Ms = [];
+    const sp = SP[k], h = sp[1], o = sp[4], rock = sp[0] === "rck" || sp[0] === "mnd", rad = Math.min(RS, Math.max(130, h * 19)), n = Math.round(n0 * (.8 + r() * .4) * Math.min(1.6, (rad / Math.min(380, Math.max(70, h * 10))) ** 2)), Ms = [];   // plants reach the gates, thinner far out (low-spec)
     let grid = null;
     if (b.rows === k) { const s = Math.max(5, (o.cw || .3) * h * 2.4), a = r() * 3; grid = []; for (let gx = -30; gx <= 30; gx++) for (let gz = -30; gz <= 30; gz++) { const x = gx * s, z = gz * s; grid.push([x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)]); } grid.sort((u, v) => Math.hypot(...u) - Math.hypot(...v)); }
     for (let j = 0, tries = 0; Ms.length < n && tries < n * 6; tries++, j++) {
@@ -5983,6 +5983,7 @@ function build(me, i) {
   const ray = new T.Raycaster(), plane = new T.Plane(new T.Vector3(0, 1, 0), 0), aimV = new T.Vector3(), ndc = new T.Vector2();
   const loop = t => {
     if (S3 !== me) return; me.raf = requestAnimationFrame(loop);
+    if (me.last && t - me.last < 24) return;   // low-spec rule (user, 11-01): never more than ~40 fps, saves CPU/GPU on every machine
     const dt0 = Math.max(0, Math.min(.05, me.last ? (t - me.last) / 1000 : 0)); me.last = t; me.stopT = (me.stopT || 0) - dt0; me.slowT = (me.slowT || 0) - dt0; const dt = dt0 * (me.stopT > 0 ? .04 : me.slowT > 0 ? .35 : 1);   /* hit-stop / parry slow motion */ const k = me.keys, j = me.joy, pos = me.pos, hero = me.hero;
     const f = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) + j.y, s = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + j.x, sy = Math.sin(me.yaw), cyw = Math.cos(me.yaw);
     const mv = Math.hypot(f, s) > .05, l = Math.max(1, Math.hypot(f, s)), mx = (-sy * f + cyw * s) / l, mz = (-cyw * f - sy * s) / l;
@@ -5992,7 +5993,7 @@ function build(me, i) {
     if (me.slide) {                                   // slide: a fast low burst along the run, steerable a little, slowing to a crouch
       const sl = me.slide; sl.t += dt; if (mv) { sl.x += (mx - sl.x) * dt * 2.5; sl.z += (mz - sl.z) * dt * 2.5; const n = Math.hypot(sl.x, sl.z) || 1; sl.x /= n; sl.z /= n; }
       const v = 20 * Math.max(0, 1 - sl.t / .75) ** 1.3 + 3, nx = pos.x + sl.x * v * dt, nz = pos.z + sl.z * v * dt;
-      if (H(nx, nz) > -.6 && Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; }
+      if (Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */
       for (const m of me.mobs || []) if (!m.dead && !m.hitSl && Math.hypot(m.root.position.x - pos.x, m.root.position.z - pos.z) < 1.2 + m.a[1] * .3) { m.hitSl = 1; m.stun = Math.max(m.stun || 0, .8); m.angry = 25; }   // slide into an animal's legs: it stumbles
       if (sl.t > .75 || me.jy || me.hp <= 0) { me.slide = null; for (const m of me.mobs || []) m.hitSl = 0; }
       me.walkT += dt * 4;
@@ -6000,7 +6001,7 @@ function build(me, i) {
       const kv = 1 - Math.exp(-dt * (mv ? 16 : 20)), tvx = mv ? mx * spd : 0, tvz = mv ? mz * spd : 0;   // smooth: reaches full speed in ~0.15 s, stops in ~0.1 s
       me.vx = (me.vx || 0) + (tvx - (me.vx || 0)) * kv; me.vz = (me.vz || 0) + (tvz - (me.vz || 0)) * kv;
       const nx = pos.x + me.vx * dt, nz = pos.z + me.vz * dt;
-      if (H(nx, nz) > -.6 && Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; }
+      if (Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */
       else if (H(nx, pos.z) > -.6) pos.x = nx; else if (H(pos.x, nz) > -.6) pos.z = nz;   // slide along the shore instead of stopping dead
       me.walkT += dt * Math.hypot(me.vx, me.vz) * 1.6;
     }
