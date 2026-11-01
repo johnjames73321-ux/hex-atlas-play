@@ -5326,7 +5326,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
       n.t += dt * sp * 2.4; const sw = Math.sin(n.t) * (sp ? Math.min(.9, .4 + sp * .05) : 0); n.legs[0].rotation.x = sw; n.legs[1].rotation.x = -sw; n.arms[0].rotation.x = -sw; n.arms[1].rotation.x = sw; } });
   me.hp = 100; me.hurtT = 0; me.kills = 0; me.mobs = mobs;
   // HUD bits
-  const hpEl = $("svHP"), msg = $("svMsg");
+  const hpEl = $("svHP"), stEl = (() => { let e = $("svSt"); if (!e) { e = document.createElement("div"); e.id = "svSt"; e.style.cssText = "height:5px;margin:3px 0;border-radius:3px;background:rgba(255,255,255,.18);overflow:hidden"; e.innerHTML = '<i style="display:block;height:100%;width:100%;background:#8ef0e6"></i>'; $("svHP").insertBefore(e, $("svHP").lastElementChild); } return e; })(), msg = $("svMsg");
   const say = (t, ms = 2600) => { msg.textContent = t; msg.hidden = false; clearTimeout(say.t); say.t = setTimeout(() => msg.hidden = true, ms); };
   const hpDraw = () => { hpEl.firstElementChild.style.width = Math.max(0, me.hp) + "%"; hpEl.lastElementChild.textContent = `${Math.max(0, Math.ceil(me.hp))} HP · ${me.kills} slain`; };
   hpDraw();
@@ -5341,7 +5341,9 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     draw: { n: "Quick Draw", max: 3, cost: l => 1 + l, req: l => 1 + l * 2, d: "Bow draws 20% faster per rank" },
     multi: { n: "Multishot", max: 4, cost: l => [2, 5, 8, 12][l], req: l => [4, 14, 24, 36][l], d: "Arrows per shot: 2, then 3, 4, 5 (very hard beyond 2)" },
     throwp: { n: "Throw Power", max: 3, cost: l => [2, 4, 7][l], req: l => [3, 11, 20][l], d: "Chain throw +40% damage and +6 m range per rank" },
-    pierce: { n: "Piercing Throw", max: 2, cost: l => [5, 10][l], req: l => [12, 26][l], d: "Spear throw passes through 1 / 2 more animals" }
+    pierce: { n: "Piercing Throw", max: 2, cost: l => [5, 10][l], req: l => [12, 26][l], d: "Spear throw passes through 1 / 2 more animals" },
+    dashr: { n: "Long Dash", max: 3, cost: l => 1 + l, req: l => 2 + l * 2, d: "Dash goes 25% farther per rank" },
+    stam: { n: "Endurance", max: 3, cost: l => 1 + l, req: l => 1 + l * 2, d: "+25% stamina and stamina recovery per rank" }
   };
   const SKEY = "hexatlas-sv-skills", prog = { xp: 0, lvl: 1, pts: 0, sk: {} };
   try { Object.assign(prog, JSON.parse(localStorage.getItem(SKEY) || "{}")); } catch (e) {}
@@ -5357,7 +5359,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   const drawTree0 = () => { if (tree.hidden) return; tree.innerHTML = `<h3>Skills · Lv ${prog.lvl} · ${prog.pts} pts</h3>` + Object.entries(SK).map(([k, q]) => { const l = sk(k), mx = l >= q.max, c = mx ? 0 : q.cost(l), rq = mx ? 0 : q.req(l), ok = !mx && prog.pts >= c && prog.lvl >= rq; return `<button data-k="${k}"${ok ? "" : " disabled"}><b>${q.n} ${"●".repeat(l)}${"○".repeat(q.max - l)}</b><i>${mx ? "max" : `${c} pts · Lv ${rq}`}</i></button>`; }).join(""); };
   const UPS = { dmg: "⚔️ Damage|hit harder", spd: "👟 Speed|run faster", dex: "🤺 Dexterity|faster attacks", car: "🫁 Cardio|faster recovery", hp: "❤️ Health|take less damage", jmp: "🦘 Jump|jump higher" }, upL = k => (prog.up && prog.up[k]) || 0, upCost = k => 2 ** upL(k);
   me.up = k => 1 + .01 * upL(k);
-  me.ps.push(() => { if (prog.god) { me.hp = 100; me.st = 100; me.cdQ = me.cdR = 0; me.poison = 0; } });
+  me.ps.push(() => { if (prog.god) { me.hp = 100; me.st = me.stMax || 100; me.cdQ = me.cdR = 0; me.poison = 0; } });
   const drawTree = () => { drawTree0(); if (tree.hidden) return; tree.insertAdjacentHTML("beforeend", `<h3>Training · ${prog.coins || 0} 🪙</h3>` + Object.entries(UPS).map(([k, n]) => `<button data-u="${k}"${(prog.coins || 0) >= upCost(k) ? "" : " disabled"}><b>${n.split("|")[0]} +${upL(k)}%</b><span>${n.split("|")[1]}</span><i>${upCost(k)} 🪙</i></button>`).join("") + `<div style="grid-column:1/-1;display:flex;gap:6px;margin-top:4px"><button data-g style="flex:1;text-align:center">♾ God mode: ${prog.god ? "ON" : "OFF"}</button><button data-x title="Reset everything" style="width:44px;text-align:center">🗑</button></div>`); };
   tree.onclick = e => {
     if (e.target.closest("button[data-g]")) {   // god mode (user, 11-01): everything unlimited; turning it off gives your real progress back
@@ -5414,7 +5416,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     whirl: { from: 0, to: -Math.PI * 3, dur: .55, m: 1.3, reach: 1.25, lock: .6, lunge: .4, w: .45, round: 1 },   // combo 5th: whirlwind
     thrust: { from: 0, to: 0, dur: .22, m: 2.6, reach: 1.7, w: .35, lock: .4, lunge: 1.4 },        // after a parry: riposte lunge
     jab: { from: 0, to: 0, dur: .24, m: .9, reach: 1.3, w: .3, lock: .35, lunge: .25 },
-    dash: { from: 0, to: 0, dur: .2, m: 1.2, reach: 1, lock: .55 }                         // Tab: dash 6 m along your aim, cutting through
+    dash: { from: 0, to: 0, dur: .2, m: 1.2, reach: 1, lock: .2 }                         // Tab: dash 6 m along your aim, cutting through
   };
   Object.assign(me, { st: 100, weapon: "sword", draw: null, rollT: 0, rollCd: 0, chain: 0, atk: null, combo: 0, comboT: -9, buf: null, blade: true, block: false, lmb: null, tnow: 0, fx: [], cdQ: 0, cdR: 0, bonus: 1, riposte: 1, tabT: 0, twist: 0 });
   const angD = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
@@ -5433,7 +5435,8 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   const RUN = {
     swing: nextSwing, jab: () => startAtk("jab"), sweep: () => { me.combo = 0; startAtk("sweep"); },
     spin: () => { if (me.cdR > 0) return false; me.cdR = 1; me.combo = 0; const ch = me.lmb && me.lmb.charging; if (ch) me.lmb = null; startAtk(ch ? "spin2" : "spin"); },
-    q: () => { if (me.cdQ > 0) return false; me.cdQ = 1.5; startAtk("dash"); },
+    q: () => { if (me.cdQ > 0 || me.st < 45) return false; me.cdQ = .3; me.st -= 45; startAtk("dash");   // a short dash toward whatever WASD you hold, 2 in a row on full stamina
+      const k = me.keys, f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0), sd = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0); if (f || sd) { const sf = Math.sin(me.face), cf = Math.cos(me.face); me.atk.face = Math.atan2(f * sf - sd * cf, f * cf + sd * sf); } },
     spear: () => throwBlade("spear"), lob: () => throwBlade("lob")
   };
   function act(kind) {
@@ -5529,7 +5532,8 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     me.tnow += dt; const pv = hero.armR, sw = hero.sword;
     me.cdQ = Math.max(0, me.cdQ - dt); me.cdR = Math.max(0, me.cdR - dt); me.rollCd = Math.max(0, me.rollCd - dt);
     if (me.weapon === "bow" || me.tnow - (me.gbT ?? -9) < 1) me.block = false;   // no guard with the bow, or for 1 s after a guard break
-    me.st = Math.min(100, me.st + dt * (me.block ? 6 : 28));
+    me.stMax = 100 * (1 + .25 * sk("stam")); const runK = (me.keys.ShiftLeft || me.keys.ShiftRight) && me.moving;   // stamina: no recovery while sprinting
+    me.st = Math.min(me.stMax, me.st + (runK ? 0 : dt * (me.block ? 6 : 28) * (1 + .25 * sk("stam")))); stEl.firstChild.style.width = (me.st / me.stMax * 100).toFixed(1) + "%";
     if (me.weapon === "bow") hero.sword.visible = false; else if (me.blade) hero.sword.visible = true;
     hero.shield.visible = me.weapon !== "bow";
     if (me.rollT > 0) { me.rollT -= dt; const nx = me.pos.x + me.rollDir[0] * 15 * dt, nz = me.pos.z + me.rollDir[1] * 15 * dt; if (H(nx, nz) > -.6) { me.pos.x = nx; me.pos.z = nz; } }
@@ -5541,7 +5545,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     if (me.atk) {
       const A = me.atk, p = clamp((me.tnow - A.t0) / A.dur, 0, 1), cur = swingAt(A, p), w = A.w || .25;
       if (A.kind === "dash") {
-        const f = new T.Vector3(Math.sin(A.face), 0, Math.cos(A.face)), step = 30 * dt, nx = me.pos.x + f.x * step, nz = me.pos.z + f.z * step;
+        const f = new T.Vector3(Math.sin(A.face), 0, Math.cos(A.face)), step = 10 * (1 + .25 * sk("dashr")) * dt, nx = me.pos.x + f.x * step, nz = me.pos.z + f.z * step;
         if (H(nx, nz) > -.6) { me.pos.x = nx; me.pos.z = nz; }
         for (const m of mobs) if (!m.dead && !A.hit.has(m) && Math.hypot(m.root.position.x - me.pos.x, m.root.position.z - me.pos.z) < 1.8 + m.a[1] * .35 * GS) { A.hit.add(m); hurtMob(m, BASE * A.m * A.mul, me.pos); tone(200, .08); }
       } else {
