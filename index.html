@@ -5931,7 +5931,7 @@ function build(me, i) {
   const td = TOD[b.t] || TOD.day, col = c => new T.Color(+("0x" + c)), K = Math.PI;
   const R = new T.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
   R.setPixelRatio(1 / PX); R.setSize(innerWidth, innerHeight); ov.prepend(R.domElement);
-  const scene = new T.Scene(), cam = new T.PerspectiveCamera(70, innerWidth / innerHeight, .3, 9000);
+  const scene = new T.Scene(), cam = new T.PerspectiveCamera(78, innerWidth / innerHeight, .3, 9000);
   const pix = pixelPass(R, cam);
   const hor = col(td[1]); if (b.fc) hor.lerp(col(b.fc), .6);
   scene.fog = new T.Fog(hor, (b.f || 700) * .04, b.f || 700);
@@ -6017,7 +6017,7 @@ function build(me, i) {
   }
   if (b.t === "aurora") aurora(me, scene, r);
   // the hero: third-person, Zelda / Pokemon style camera above and behind
-  const s0 = open.seam, sx0 = s0 ? Math.cos(s0.ang) * 570 : 0, sz0 = s0 ? Math.sin(s0.ang) * 570 : 0; me.sx = sx0; me.sz = sz0; me.pos = P(sx0, b.w ? Math.max(H(sx0, sz0), -.3) : H(sx0, sz0), sz0); me.face = s0 ? s0.face : 0; me.yaw = s0 ? s0.yaw : r() * 6.28; me.dist = 1.9; me.pitchC = .3; try { }  /* close behind the shoulder, feet just in frame (user, 11-01) */ catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
+  const s0 = open.seam, sx0 = s0 ? Math.cos(s0.ang) * 570 : 0, sz0 = s0 ? Math.sin(s0.ang) * 570 : 0; me.sx = sx0; me.sz = sz0; me.pos = P(sx0, b.w ? Math.max(H(sx0, sz0), -.3) : H(sx0, sz0), sz0); me.face = s0 ? s0.face : 0; me.yaw = s0 ? s0.yaw : r() * 6.28; me.dist = 2.2; me.pitchC = .3; try { }  /* close behind the shoulder, feet just in frame (user, 11-01) */ catch (e) {}   // camera: over the right shoulder, the mouse looks around (Fortnite style); wheel zoom is remembered
   me.hero = heroMesh(); scene.add(me.hero.root);
   const apex = wildlife(me, scene, cam, H, r, lat, lon);
   // HUD
