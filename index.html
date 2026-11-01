@@ -6172,6 +6172,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
 
 })();
 /* ---- province search ---- */
+(() => {
   const btn = document.getElementById("searchbtn");
   const panel = document.getElementById("searchpanel");
   const input = document.getElementById("searchinput");
@@ -6184,6 +6185,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   for (const [g, k] of hexOf) {
     const r = D.regions[g]; if (!r) continue;
     items.push({ g, k, n: String(r[0]), f: fold(r[0]), c: String(r[1] || ""), a: String(r[2] || "") });
+  }
   function lev(a, b) {
     const m = a.length, n = b.length;
     if (!m) return n; if (!n) return m;
@@ -6192,7 +6194,9 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
       const cur = [i];
       for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
       prev = cur;
+    }
     return prev[n];
+  }
   function rank(q) {
     const out = [];
     for (const it of items) {
@@ -6205,9 +6209,13 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
         else if (q.length >= 2) {
           const d = lev(it.f, q);
           if (d <= Math.max(2, Math.floor(q.length / 3) + 1)) s = 10 + d + it.f.length / 10000;
+        }
+      }
       if (s >= 0) out.push([s, it]);
+    }
     out.sort((x, y) => x[0] - y[0] || x[1].n.length - y[1].n.length || x[1].n.localeCompare(y[1].n));
     return out.slice(0, 10).map(x => x[1]);
+  }
   let active = -1, list = [];
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   function show(q) {
@@ -6223,6 +6231,8 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
       b.innerHTML = "<span>" + esc(it.n) + "</span><small>" + esc(it.c) + (it.a ? " · " + esc(it.a) : "") + "</small>";
       b.addEventListener("click", () => go(it));
       results.appendChild(b);
+    });
+  }
   function go(it) {
     const r = cv.getBoundingClientRect();
     const z = Math.max(2.6, Math.min(8, view.s));
@@ -6232,12 +6242,14 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     draw();
     panel.hidden = true;
     input.blur();
+  }
   function move(d) {
     const bs = [...results.querySelectorAll("button")];
     if (!bs.length) return;
     active = (active + d + bs.length) % bs.length;
     bs.forEach((b, i) => b.classList.toggle("active", i === active));
     bs[active].scrollIntoView({ block: "nearest" });
+  }
   input.addEventListener("input", () => show(fold(input.value.trim())));
   input.addEventListener("keydown", e => {
     if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
@@ -6245,12 +6257,17 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     else if (e.key === "Enter") { e.preventDefault(); if (active >= 0 && list[active]) go(list[active]); else if (list[0]) go(list[0]); }
     else if (e.key === "Escape") { panel.hidden = true; input.blur(); }
     e.stopPropagation();
+  });
   btn.addEventListener("click", () => {
-    if (panel.hidden) { panel.hidden = false; input.focus(); input.select(); show(fold(input.value.trim())); }
+    if (panel.hidden) { panel.hidden = false; input.focus(); input.select(); const q = fold(input.value.trim()); if (q) show(q); else { results.innerHTML = ""; } }
     else panel.hidden = true;
+  });
   document.addEventListener("keydown", e => {
     if (e.key === "/" && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) {
       e.preventDefault(); panel.hidden = false; input.focus(); input.select();
+    }
+  });
+})();
 </script>
 <!--SV-END-->
 
