@@ -5416,7 +5416,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     whirl: { from: 0, to: -Math.PI * 3, dur: .55, m: 1.3, reach: 1.25, lock: .6, lunge: .4, w: .45, round: 1 },   // combo 5th: whirlwind
     thrust: { from: 0, to: 0, dur: .22, m: 2.6, reach: 1.7, w: .35, lock: .4, lunge: 1.4 },        // after a parry: riposte lunge
     jab: { from: 0, to: 0, dur: .24, m: .9, reach: 1.3, w: .3, lock: .35, lunge: .25 },
-    dash: { from: 0, to: 0, dur: .2, m: 1.2, reach: 1, lock: .2 }                         // Tab: dash 6 m along your aim, cutting through
+    dash: { from: 0, to: 0, dur: .12, m: 1.2, reach: 1, lock: .15 }   // a snap: same 3 m, over in a blink                         // Tab: dash 6 m along your aim, cutting through
   };
   Object.assign(me, { st: 100, weapon: "sword", draw: null, rollT: 0, rollCd: 0, chain: 0, atk: null, combo: 0, comboT: -9, buf: null, blade: true, block: false, lmb: null, tnow: 0, fx: [], cdQ: 0, cdR: 0, bonus: 1, riposte: 1, tabT: 0, twist: 0 });
   const angD = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
@@ -5428,7 +5428,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     o.rotation.order = "YXZ"; o.rotation.set(-Math.PI / 2, A.face, 0); o.position.set(me.pos.x, me.pos.y + .08, me.pos.z); scene.add(o); me.fx.push({ o, t: 0, d: A.dur + .2, s: 0, a: .5 });
   };
   const ss = u => u * u * (3 - 2 * u);
-  const startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * 1.5 * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
+  const startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (kind === "dash" ? 1 : 1.5) * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
   const CHAIN = ["s0", "s1", "s2", "slam", "whirl"];
   const nextSwing = () => { if (me.riposte > 1) { me.combo = 0; return startAtk("thrust"); } if (me.tnow - me.comboT > 1.1) me.combo = 0; const len = 3 + sk("combo"); me.comboT = me.tnow; startAtk(CHAIN[me.combo % len]); me.combo = (me.combo + 1) % len; };
   const inWindow = () => !me.atk || (me.tnow - me.atk.t0) / me.atk.dur >= me.atk.lock;
@@ -5545,7 +5545,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     if (me.atk) {
       const A = me.atk, p = clamp((me.tnow - A.t0) / A.dur, 0, 1), cur = swingAt(A, p), w = A.w || .25;
       if (A.kind === "dash") {
-        const f = new T.Vector3(Math.sin(A.face), 0, Math.cos(A.face)), step = 10 * (1 + .25 * sk("dashr")) * dt, nx = me.pos.x + f.x * step, nz = me.pos.z + f.z * step;
+        const f = new T.Vector3(Math.sin(A.face), 0, Math.cos(A.face)), step = 25 * (1 + .25 * sk("dashr")) * dt, nx = me.pos.x + f.x * step, nz = me.pos.z + f.z * step;
         if (H(nx, nz) > -.6) { me.pos.x = nx; me.pos.z = nz; }
         for (const m of mobs) if (!m.dead && !A.hit.has(m) && Math.hypot(m.root.position.x - me.pos.x, m.root.position.z - me.pos.z) < 1.8 + m.a[1] * .35 * GS) { A.hit.add(m); hurtMob(m, BASE * A.m * A.mul, me.pos); tone(200, .08); }
       } else {
