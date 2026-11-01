@@ -6167,16 +6167,12 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   document.head.appendChild(st);
   const m = document.createElement("div"); m.id = "hxStart";
   m.innerHTML = `<div class="box"><h1>HEX<span>QUESTS</span></h1>
-  <button data-a="play">▶ Play</button><button class="alt" data-a="new">🎲 Random land</button><button class="alt" data-a="map">🗺 Explore the map</button><button class="alt" data-a="keys">⌨ Controls</button>
+  <button data-a="play">▶ Play</button><button class="alt" data-a="new">🎲 Random land</button>
   <div class="keys"><span><kbd>WASD</kbd> move · <kbd>Shift</kbd> run</span><span><kbd>LMB</kbd> swing · hold to charge</span><span><kbd>Space</kbd> jump · double = roll</span><span><kbd>Shift</kbd> ×2 dash</span><span><kbd>F</kbd> throw · hold = lob</span><span><kbd>R</kbd>/<kbd>T</kbd> spin</span><span><kbd>Tab</kbd> climb</span><span><kbd>E</kbd> talk</span><span><kbd>1</kbd> sword · <kbd>2</kbd> bow</span><span><kbd>K</kbd> / <kbd>"</kbd> skills &amp; shop</span><span><kbd>X</kbd>/<kbd>V</kbd> turn</span><span><kbd>Esc</kbd> back to map</span></div>
   <small>Blue light beams at the edge of each land lead to the next one</small></div>`;
   document.body.appendChild(m);
   const land = () => { const L = []; for (let k = 0; k < D.reg.length; k++) if (D.reg[k] >= 0) L.push(k); return L[Math.floor(Math.random() * L.length)]; };
-  m.onclick = e => { const a = e.target.closest("button")?.dataset.a; if (!a) return;
-    if (a === "keys") { m.querySelector(".keys").classList.toggle("on"); return; }
-    m.hidden = true; if (a === "map") return;
-    let i = a === "play" ? +(localStorage.getItem("hexatlas-last") || -1) : -1; if (!(i >= 0 && D.reg[i] >= 0)) i = land();
-    open(i); };
+  m.onclick = e => { const a = e.target.closest("button")?.dataset.a; if (!a) return; m.hidden = true; if (a === "new") open(land()); };
 }
 
 })();
