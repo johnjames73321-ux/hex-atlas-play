@@ -68,6 +68,16 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
 .dev ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
 .dev li button { padding: 0 6px; margin-left: 6px; font-size: .75rem; }
 .dev .muted { color: var(--muted); font-size: .78rem; }
+/* province search */
+.searchbox{position:absolute;left:14px;top:12px;z-index:30}
+.searchbox>button{background:var(--panel);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.searchpanel{position:absolute;left:0;top:38px;width:min(320px,calc(100vw - 28px));max-height:min(60vh,460px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:8px}
+.searchpanel input{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font:inherit;background:var(--bg);color:var(--ink)}
+.searchresults{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.searchresults button{display:flex;align-items:baseline;justify-content:space-between;gap:10px;width:100%;text-align:left;border:0;background:transparent;padding:6px 8px;border-radius:6px;cursor:pointer}
+.searchresults button:hover,.searchresults button.active{background:rgba(0,0,0,.07)}
+.searchresults small{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+.searchempty{color:var(--muted);font-size:.8rem;padding:6px 8px}
 </style>
 
 <header>
@@ -113,6 +123,12 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
   <canvas id="bloom" aria-hidden="true" style="pointer-events:none"></canvas>
   <div aria-hidden="true" style="position:absolute;inset:0;overflow:hidden;pointer-events:none"><canvas id="lab" style="pointer-events:none"></canvas></div>
   <div class="status" id="status"></div>
+  <div class="searchbox" id="searchbox">
+  <button id="searchbtn" type="button" title="Search provinces (press /)">🔍 Search</button>
+  <div class="searchpanel" id="searchpanel" hidden>
+    <input id="searchinput" type="text" placeholder="Province name…" autocomplete="off" spellcheck="false" aria-label="Search provinces">
+    <div class="searchresults" id="searchresults"></div>
+<div class="status" id="status"></div>
   <div class="markbox" id="markbox" hidden><p class="where" id="mark-where"></p><textarea id="mark-text" placeholder="What should Claude do with this place? Enter sends, Shift+Enter new line, Esc cancels"></textarea></div>
   <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zfit" aria-label="Fit map">⤢</button></div>
   <div class="card" id="card" hidden></div>
@@ -719,7 +735,7 @@ void main(){
     const mini = null;   // the 3D game has its own minimap sea
     if (!mini && !document.getElementById("sv")?.hidden) return;
     const vk = mini ? "mini" : view.x + "," + view.y + "," + view.s;
-    if (vk === lastV && now - lastT < 90) return;   // idle: the waves animate at ~11 fps instead of every frame (was a constant GPU load)
+    if (vk === lastV && now - lastT < 33) return; /* idle: waves at ~30 fps, smooth but not every frame (user, 11-01) */
     lastV = vk; lastT = now;
     let w, h, px, vx = view.x, vy = view.y, vs = view.s;
     if (mini) { w = mini.width; h = mini.height; px = 1; vs = Math.min(w / W, h / H); vx = (w - W * vs) / 2; vy = (h - H * vs) / 2; }
@@ -6155,6 +6171,86 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
 }
 
 })();
+/* ---- province search ---- */
+  const btn = document.getElementById("searchbtn");
+  const panel = document.getElementById("searchpanel");
+  const input = document.getElementById("searchinput");
+  const results = document.getElementById("searchresults");
+  if (!btn || !panel || !input || !results) return;
+  const fold = s => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const hexOf = new Map();
+  for (let k = 0; k < D.reg.length; k++) { const g = D.reg[k]; if (g >= 0 && !hexOf.has(g)) hexOf.set(g, k); }
+  const items = [];
+  for (const [g, k] of hexOf) {
+    const r = D.regions[g]; if (!r) continue;
+    items.push({ g, k, n: String(r[0]), f: fold(r[0]), c: String(r[1] || ""), a: String(r[2] || "") });
+  function lev(a, b) {
+    const m = a.length, n = b.length;
+    if (!m) return n; if (!n) return m;
+    let prev = new Array(n + 1); for (let j = 0; j <= n; j++) prev[j] = j;
+    for (let i = 1; i <= m; i++) {
+      const cur = [i];
+      for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    return prev[n];
+  function rank(q) {
+    const out = [];
+    for (const it of items) {
+      let s = -1;
+      if (it.f === q) s = 0;
+      else if (it.f.startsWith(q)) s = 1 + it.f.length / 1000;
+      else {
+        const idx = it.f.indexOf(q);
+        if (idx >= 0) s = 2 + idx / 1000 + it.f.length / 10000;
+        else if (q.length >= 2) {
+          const d = lev(it.f, q);
+          if (d <= Math.max(2, Math.floor(q.length / 3) + 1)) s = 10 + d + it.f.length / 10000;
+      if (s >= 0) out.push([s, it]);
+    out.sort((x, y) => x[0] - y[0] || x[1].n.length - y[1].n.length || x[1].n.localeCompare(y[1].n));
+    return out.slice(0, 10).map(x => x[1]);
+  let active = -1, list = [];
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function show(q) {
+    list = q ? rank(q) : [];
+    active = -1;
+    results.innerHTML = "";
+    if (!q) { panel.hidden = true; return; }
+    panel.hidden = false;
+    if (!list.length) { results.innerHTML = '<div class="searchempty">No match</div>'; return; }
+    list.forEach(it => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = "<span>" + esc(it.n) + "</span><small>" + esc(it.c) + (it.a ? " · " + esc(it.a) : "") + "</small>";
+      b.addEventListener("click", () => go(it));
+      results.appendChild(b);
+  function go(it) {
+    const r = cv.getBoundingClientRect();
+    const z = Math.max(2.6, Math.min(8, view.s));
+    view.s = z;
+    view.x = r.width / 2 - z * cx[it.k];
+    view.y = r.height / 2 - z * cy[it.k];
+    draw();
+    panel.hidden = true;
+    input.blur();
+  function move(d) {
+    const bs = [...results.querySelectorAll("button")];
+    if (!bs.length) return;
+    active = (active + d + bs.length) % bs.length;
+    bs.forEach((b, i) => b.classList.toggle("active", i === active));
+    bs[active].scrollIntoView({ block: "nearest" });
+  input.addEventListener("input", () => show(fold(input.value.trim())));
+  input.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+    else if (e.key === "Enter") { e.preventDefault(); if (active >= 0 && list[active]) go(list[active]); else if (list[0]) go(list[0]); }
+    else if (e.key === "Escape") { panel.hidden = true; input.blur(); }
+    e.stopPropagation();
+  btn.addEventListener("click", () => {
+    if (panel.hidden) { panel.hidden = false; input.focus(); input.select(); show(fold(input.value.trim())); }
+    else panel.hidden = true;
+  document.addEventListener("keydown", e => {
+    if (e.key === "/" && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) {
+      e.preventDefault(); panel.hidden = false; input.focus(); input.select();
 </script>
 <!--SV-END-->
 
