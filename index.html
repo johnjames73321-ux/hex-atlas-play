@@ -5571,6 +5571,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     let lean = 0, crouch = 0, stance = 0, off = 0;
     if (me.slide) { lean = -.75; crouch = .75; stance = 1.1; off = 1.2; }
     else if (me.crouching && !K) { lean = .25; crouch = .5; stance = .65; off = -.4; }
+    else if (me.mantle) { lean = .55; crouch = .3; stance = .9; off = -2.4; }   // hands up, pulling over the edge
     else if (K === "dash") { lean = .55; crouch = .1; stance = .7; off = -1.2; }
     else if (K === "jab" || K === "thrust") { const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1), o = p < .25 ? -.4 * Math.sin(p / .25 * Math.PI / 2) : Math.sin(Math.min(1, (p - .25) / .35) * Math.PI / 2) * (p < .6 ? 1 : 1 - ss((p - .6) / .4)); lean = .6 * o; crouch = .2 * Math.abs(o); stance = 1.1 * Math.abs(o); off = -1.4 * o; }   // whole body drives the spear-like thrust (user, 11-01)
     else if (K === "spin") { crouch = .18; stance = .55; off = 1.5; }
@@ -5969,7 +5970,7 @@ function build(me, i) {
       M.compose(pv.set(x, y - (rock ? h * .12 * s : .2), z), q.setFromEuler(eu.set(tl, r() * 6.28, tl)), sv3.set(s * (.9 + r() * .2), s, s * (.9 + r() * .2)));
       Ms.push(M.clone());
       if (!rock && h >= 6 && climb.length < 120 && Math.abs(tl) < .05 && r() < .35) climb.push([x, y, z, h * s]);   // vine-wrapped: climbable
-      if (h >= 3) { const ck = Math.floor(x / 8) * 4096 + Math.floor(z / 8); if (!tgrid.has(ck)) tgrid.set(ck, []); tgrid.get(ck).push(x, z, rock ? .5 * h * s : .45); }   // trunks and rocks are solid
+      if (h >= 3) { const ck = Math.floor(x / 8) * 4096 + Math.floor(z / 8); if (!tgrid.has(ck)) tgrid.set(ck, []); tgrid.get(ck).push(x, z, rock ? .5 * h * s : .45, rock ? y + h * s * .8 : 0); }   // trunks and rocks are solid
     }
     if (!Ms.length) continue;
     // Horizon-style culling: plants split into 400 m sectors, each with its own bounds, so the GPU skips every sector behind or beside the camera
@@ -6008,7 +6009,16 @@ function build(me, i) {
   $("svHud").innerHTML = `<h2>${esc(b.n)}</h2><div class="m">${esc([name, admin, country].filter(Boolean).join(", "))} · ${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lon).toFixed(1)}°${lon >= 0 ? "E" : "W"}</div>${spp.length ? `<ul>${spp.map(k => `<li>${esc(SP[k][5])} · ${SP[k][1]} m</li>`).join("")}</ul>` : ""}`;
   $("svHud").insertAdjacentHTML("beforeend", `<div class="fauna">⚠ ${apex.slice(0, 4).map(a => `${esc(a[9])} · ${(+a[1]).toFixed(1)} m`).join(" · ")}</div>`);
   // camera, controls, loop
-  Object.assign(me, { R, pix, scene, cam, H, sky, sun, sunDir, last: 0, jy: 0, vy: 0, walkT: 0, jump: () => { if (me.climbing) { me.climbing = 0; me.offTree = .6; me.vy = 6; return; } if (!me.jy) { me.vy = (me.slide ? 9.5 : 8) * (me.up ? me.up("jmp") : 1); me.slide = null; } }, crouchDown: () => { if (me.runNow && !me.slide && me.mdir && me.hp > 0) { me.slide = { t: 0, x: me.mdir[0], z: me.mdir[1] }; me.atk = null; } }, turn: (a = Math.PI) => { me.yaw += a; me.face += a; } });
+  Object.assign(me, { R, pix, scene, cam, H, sky, sun, sunDir, last: 0, jy: 0, vy: 0, walkT: 0, climbTab: () => {   // up to 1.5x your height above your feet; jump first (Space, then Tab) to reach higher
+        if (me.mantle || me.hp <= 0) return; const pos = me.pos, fx = Math.sin(me.face), fz = Math.cos(me.face), feet = me.by + (me.jy || 0), reach = feet + 2.7; let best = null;
+        const consider = (x, z, r, top, perch) => { const dx = x - pos.x, dz = z - pos.z, d = Math.hypot(dx, dz); if (d > r + 1.3 || dx * fx + dz * fz < -.2) return; if (top < feet + .35 || top > reach) return; if (!best || top > best.top) best = { x, z, r, top, perch }; };
+        for (const c of me.trees || []) consider(c[0], c[2], .9, c[1] + c[3] * .85, 1);
+        if (me.tgrid) { const gx = Math.floor(pos.x / 8), gz = Math.floor(pos.z / 8); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) { const L = me.tgrid.get((gx + a) * 4096 + gz + c); if (L) for (let q = 0; q < L.length; q += 4) if (L[q + 3]) consider(L[q], L[q + 1], L[q + 2], L[q + 3], 1); } }
+        const ax = pos.x + fx * 1.4, az = pos.z + fz * 1.4; consider(ax, az, .1, H(ax, az), 0);   // a steep step of ground
+        if (!best) return; me.perch = null; tone(520, .04);
+        me.mantle = { t: 0, d: .38, x0: pos.x, z0: pos.z, x1: best.x, z1: best.z, y0: feet, y1: best.top, perch: best.perch ? { x: best.x, z: best.z, r: Math.max(.8, best.r), y: best.top } : null };
+      },
+      jump: () => { if (me.perch) { me.perch = null; me.vy = 8; return; } if (!me.jy) { me.vy = (me.slide ? 9.5 : 8) * (me.up ? me.up("jmp") : 1); me.slide = null; } }, crouchDown: () => { if (me.runNow && !me.slide && me.mdir && me.hp > 0) { me.slide = { t: 0, x: me.mdir[0], z: me.mdir[1] }; me.atk = null; } }, turn: (a = Math.PI) => { me.yaw += a; me.face += a; } });
   if (me.ac) { me.stop = ambience(me.ac, String(b.a || "wind,birds").split(",")); me.ac.resume && me.ac.resume(); }
   const ray = new T.Raycaster(), plane = new T.Plane(new T.Vector3(0, 1, 0), 0), aimV = new T.Vector3(), ndc = new T.Vector2();
   const loop = t => {
@@ -6023,7 +6033,7 @@ function build(me, i) {
     if (me.slide) {                                   // slide: a fast low burst along the run, steerable a little, slowing to a crouch
       const sl = me.slide; sl.t += dt; if (mv) { sl.x += (mx - sl.x) * dt * 2.5; sl.z += (mz - sl.z) * dt * 2.5; const n = Math.hypot(sl.x, sl.z) || 1; sl.x /= n; sl.z /= n; }
       const v = 20 * Math.max(0, 1 - sl.t / .75) ** 1.3 + 3, nx = pos.x + sl.x * v * dt, nz = pos.z + sl.z * v * dt;
-      if (Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */ if (!me.climbing && me.tgrid) { const gx = Math.floor(pos.x / 8), gz = Math.floor(pos.z / 8); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) { const L = me.tgrid.get((gx + a) * 4096 + gz + c); if (L) for (let q = 0; q < L.length; q += 3) { const ex = pos.x - L[q], ez = pos.z - L[q + 1], ed = Math.hypot(ex, ez), rr = L[q + 2] + .35; if (ed < rr && ed > 1e-4) { pos.x = L[q] + ex / ed * rr; pos.z = L[q + 1] + ez / ed * rr; } } } }
+      if (Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */ if (!me.perch && !me.mantle && me.tgrid) { const gx = Math.floor(pos.x / 8), gz = Math.floor(pos.z / 8); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) { const L = me.tgrid.get((gx + a) * 4096 + gz + c); if (L) for (let q = 0; q < L.length; q += 4) { const ex = pos.x - L[q], ez = pos.z - L[q + 1], ed = Math.hypot(ex, ez), rr = L[q + 2] + .35; if (ed < rr && ed > 1e-4) { pos.x = L[q] + ex / ed * rr; pos.z = L[q + 1] + ez / ed * rr; } } } }
       for (const m of me.mobs || []) if (!m.dead && !m.hitSl && Math.hypot(m.root.position.x - pos.x, m.root.position.z - pos.z) < 1.2 + m.a[1] * .3) { m.hitSl = 1; m.stun = Math.max(m.stun || 0, .8); m.angry = 25; }   // slide into an animal's legs: it stumbles
       if (sl.t > .75 || me.jy || me.hp <= 0) { me.slide = null; for (const m of me.mobs || []) m.hitSl = 0; }
       me.walkT += dt * 4;
@@ -6031,15 +6041,16 @@ function build(me, i) {
       const kv = 1 - Math.exp(-dt * (mv ? 16 : 20)), tvx = mv ? mx * spd : 0, tvz = mv ? mz * spd : 0;   // smooth: reaches full speed in ~0.15 s, stops in ~0.1 s
       me.vx = (me.vx || 0) + (tvx - (me.vx || 0)) * kv; me.vz = (me.vz || 0) + (tvz - (me.vz || 0)) * kv;
       const nx = pos.x + me.vx * dt, nz = pos.z + me.vz * dt;
-      if (Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */ if (!me.climbing && me.tgrid) { const gx = Math.floor(pos.x / 8), gz = Math.floor(pos.z / 8); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) { const L = me.tgrid.get((gx + a) * 4096 + gz + c); if (L) for (let q = 0; q < L.length; q += 3) { const ex = pos.x - L[q], ez = pos.z - L[q + 1], ed = Math.hypot(ex, ez), rr = L[q + 2] + .35; if (ed < rr && ed > 1e-4) { pos.x = L[q] + ex / ed * rr; pos.z = L[q + 1] + ez / ed * rr; } } } }
+      if (Math.hypot(nx, nz) < 1600) { pos.x = nx; pos.z = nz; } /* water no longer walls you in: wade or swim through */ if (!me.perch && !me.mantle && me.tgrid) { const gx = Math.floor(pos.x / 8), gz = Math.floor(pos.z / 8); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) { const L = me.tgrid.get((gx + a) * 4096 + gz + c); if (L) for (let q = 0; q < L.length; q += 4) { const ex = pos.x - L[q], ez = pos.z - L[q + 1], ed = Math.hypot(ex, ez), rr = L[q + 2] + .35; if (ed < rr && ed > 1e-4) { pos.x = L[q] + ex / ed * rr; pos.z = L[q + 1] + ez / ed * rr; } } } }
       else if (H(nx, pos.z) > -.6) pos.x = nx; else if (H(pos.x, nz) > -.6) pos.z = nz;   // slide along the shore instead of stopping dead
       me.walkT += dt * Math.hypot(me.vx, me.vz) * 1.6;
     }
     me.by = lerp(me.by ?? pos.y, b.w ? Math.max(H(pos.x, pos.z), -.3) : H(pos.x, pos.z), 1 - Math.exp(-dt * 12));   /* only lands with water hold you at its surface; dry valleys used to leave you floating */
-    { let tr = null; if (!(me.offTree > 0)) for (const c of me.trees || []) if (Math.abs(c[0] - pos.x) < 1.4 && Math.abs(c[2] - pos.z) < 1.4) { tr = c; break; }   // climbing: W up, S down, Space leaps off
-      me.offTree = (me.offTree || 0) - dt;
-      if (tr && (k.KeyW || k.KeyS || me.jy > 0)) { me.vy = 0; if (k.KeyW) me.jy = Math.min(tr[3] * .85, me.jy + 3.2 * dt); else if (k.KeyS) me.jy = Math.max(0, me.jy - 4 * dt); me.climbing = me.jy > .2; }
-      else if (me.climbing) { me.climbing = 0; if (me.jy > 0 && !me.vy) me.vy = -.01; } }
+    { // Tab: quick climb onto what is in front, then stand on it until you step off (user, 11-01)
+      const ml = me.mantle;
+      if (ml) { ml.t += dt; const e = Math.min(1, ml.t / ml.d), q2 = e * e * (3 - 2 * e); pos.x = ml.x0 + (ml.x1 - ml.x0) * q2; pos.z = ml.z0 + (ml.z1 - ml.z0) * q2; me.by = H(pos.x, pos.z); me.jy = ml.y0 + (ml.y1 - ml.y0) * Math.min(1, e * 1.6) - me.by; me.vy = 0; if (e >= 1) { me.mantle = null; me.perch = ml.perch; if (!ml.perch) me.jy = Math.max(0, me.jy); } }
+      else if (me.perch) { const pc = me.perch; if (Math.hypot(pos.x - pc.x, pos.z - pc.z) < pc.r) { me.jy = pc.y - me.by; me.vy = 0; } else { me.perch = null; me.vy = -.01; } }
+    }
     if (me.vy) { me.vy -= 22 * dt; me.jy += me.vy * dt; if (me.jy <= 0) me.jy = me.vy = 0; }
     pos.y = me.by + (me.jy || 0);
     // camera: above and behind, looking down at the hero
@@ -6073,7 +6084,7 @@ function close() {
 }
 $("svX").onclick = close;
 $("svSnd").onclick = () => { const me = S3; if (!me || !me.ac) return; me.soundOn = !me.soundOn; me.soundOn ? me.ac.resume() : me.ac.suspend(); $("svSnd").textContent = me.soundOn ? "🔊" : "🔇"; };
-addEventListener("keydown", e => { if (!S3) return; if (e.code === "Space" && !e.repeat) { const nw = performance.now(); if (nw - (S3.spT || -1e4) < 280) { S3.spT = -1e4; S3.roll && S3.roll(); } else { S3.spT = nw; S3.jump && S3.jump(); } } if ((e.code === "ShiftLeft" || e.code === "ShiftRight") && !e.repeat) { const nw = performance.now(); if (nw - (S3.shT || -1e4) < 280) { S3.shT = -1e4; S3.act && S3.act("q"); } else S3.shT = nw; } if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE") S3.talk && S3.talk(); else if (e.code === "KeyF") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyT") S3.spinAttack && S3.spinAttack(); else if (e.code === "KeyX" && !e.repeat) S3.turn && S3.turn(Math.PI / 2); else if (e.code === "KeyV" && !e.repeat) S3.turn && S3.turn(-Math.PI / 2); else if (e.code === "KeyK") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.act && S3.act("q"); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
+addEventListener("keydown", e => { if (!S3) return; if (e.code === "Space" && !e.repeat) { const nw = e.timeStamp; if (nw - (S3.spT || -1e4) < 320) { S3.spT = -1e4; if (S3.jy < 1.2) { S3.jy = S3.vy = 0; } S3.roll && S3.roll(); } else { S3.spT = nw; S3.jump && S3.jump(); } } if ((e.code === "ShiftLeft" || e.code === "ShiftRight") && !e.repeat) { const nw = e.timeStamp; if (nw - (S3.shT || -1e4) < 320) { S3.shT = -1e4; S3.act && S3.act("q"); } else S3.shT = nw; } if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE") S3.talk && S3.talk(); else if (e.code === "KeyF") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyT") S3.spinAttack && S3.spinAttack(); else if (e.code === "KeyX" && !e.repeat) S3.turn && S3.turn(Math.PI / 2); else if (e.code === "KeyV" && !e.repeat) S3.turn && S3.turn(-Math.PI / 2); else if (e.code === "KeyK") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.climbTab && S3.climbTab(); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
 addEventListener("keyup", e => { if (!S3) return; S3.keys[e.code] = 0; if (e.code === "Tab") e.preventDefault(); if (e.code === "KeyF") S3.tabUp && S3.tabUp(); if (e.code === "KeyQ") S3.block = false; e.stopImmediatePropagation(); }, true);
 addEventListener("blur", () => { if (S3) S3.keys = {}; });
 addEventListener("resize", () => { const me = S3; if (!me || !me.R) return; me.R.setSize(innerWidth, innerHeight); me.pix.size(); me.cam.aspect = innerWidth / innerHeight; me.cam.updateProjectionMatrix(); });
