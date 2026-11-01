@@ -5301,7 +5301,8 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     for (let t = 0; t < 30; t++) { const an = r() * 6.28, d = 25 + r() * 120, x = me.pos.x + Math.cos(an) * d, z = me.pos.z + Math.sin(an) * d; if (H(x, z) > 0) { h.root.position.set(x, H(x, z), z); break; } }
     scene.add(h.root); npcs.push({ ...h, name: NM[fem][Math.floor(r() * 8)], hd: r() * 6.28, wt: 0, t: 0 }); }
   me.talk = () => { let best = null, bd = 4; for (const n of npcs) { const d = Math.hypot(n.root.position.x - me.pos.x, n.root.position.z - me.pos.z); if (d < bd) { bd = d; best = n; } } if (best) { say(`${best.name}: ${LINES[Math.floor(Math.random() * LINES.length)]}`, 3500); best.chat = 4; } return !!best; };
-  me.ps.push(dt => { const fast = Math.max(6, ...mobs.map(m => m.a[5])) * 1.3 + 2;
+  let fast = 10, fastT = 0;   // Horizon rule: per-frame work reuses what it can, nothing allocated every frame
+  me.ps.push(dt => { if ((fastT -= dt) <= 0) { fastT = 1; fast = 6; for (const m of mobs) fast = Math.max(fast, m.a[5]); fast = fast * 1.3 + 2; }
     for (const n of npcs) { const R0 = n.root, p = R0.position; let th = null, td = 9; n.chat = (n.chat || 0) - dt;
       for (const m of mobs) { if (m.dead || !(m.angry > 0 || m.foe || m.mv)) continue; /* only animals actually on the attack scare them, never you */ const d = Math.hypot(m.root.position.x - p.x, m.root.position.z - p.z); if (d < td) { td = d; th = m; } }
       let sp = 0; if (th) { n.hd = Math.atan2(p.x - th.root.position.x, p.z - th.root.position.z); sp = fast; }
@@ -5631,7 +5632,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     me.fx = me.fx.filter(f => f.t < f.d);
     if ((me.hudT = (me.hudT || 0) + dt) > .2) { me.hudT = 0; hpEl.lastElementChild.textContent = `${Math.max(0, Math.ceil(me.hp))} HP · ${me.kills} slain · Tab ${me.cdQ ? me.cdQ.toFixed(1) + "s" : "ready"} · R ${me.cdR ? me.cdR.toFixed(1) + "s" : "ready"}${me.riposte > 1 ? " · riposte ready" : ""}${me.blade ? "" : " · blade out: E to pull back"} · stamina ${Math.round(me.st)} · ${me.weapon === "bow" ? "🏹 bow ×" + (1 + sk("multi")) : "⚔ sword"} · ${prog.coins || 0} 🪙 · Lv ${prog.lvl} (${prog.xp}/${xpNeed(prog.lvl)} XP${prog.pts ? ", " + prog.pts + " pt: K" : ""})${me.chain >= 3 && me.tnow - me.chainT < 2 ? " · combo ×" + me.chain : ""}`; }
     // animals
-    const cp = me.pos, HUNT = /^(cat|dog|bear|croc|lizard|snake|fly)$/, PREY = /^(hoof|roo|ape|bird|tort)$/;
+    const TG = {}, cp = me.pos, HUNT = /^(cat|dog|bear|croc|lizard|snake|fly)$/, PREY = /^(hoof|roo|ape|bird|tort)$/;
     for (const m of mobs.slice()) {
       const a = m.a, R0 = m.root, plan = a[0];
       if (m.dead) { m.dead -= dt; R0.rotation.z = Math.min(Math.PI / 2, R0.rotation.z + dt * 3); R0.position.y -= dt * (m.dead < 1.5 ? .6 : 0); if (m.dead <= 0) { scene.remove(R0); mobs.splice(mobs.indexOf(m), 1); setTimeout(() => { if (S3 === me) spawn(m.k, true, m.boss); }, m.boss ? 60000 : 4000); } continue; }
@@ -5664,7 +5665,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
         } else if (m.flee) { const o = m.flee.root.position, ex = R0.position.x - o.x, ez = R0.position.z - o.z; if (Math.hypot(ex, ez) > 45) m.flee = null; else { m.hd = Math.atan2(ex, ez); sp = a[5]; } }
       }
       // fight tactics (user, 11-01): every half second or so a fighter reads the situation and pounces, backs off, dashes aside or circles
-      const tg = chase && me.hp > 0 ? { x: cp.x, z: cp.z, d: dist, atk: !!me.atk, blk: !!me.block } : m.foe ? { x: m.foe.root.position.x, z: m.foe.root.position.z, d: m.foe.root.position.distanceTo(R0.position), atk: m.foe.cd > .8, blk: false } : null;
+      const tg = chase && me.hp > 0 ? (TG.x = cp.x, TG.z = cp.z, TG.d = dist, TG.atk = !!me.atk, TG.blk = !!me.block, TG) : m.foe ? (TG.x = m.foe.root.position.x, TG.z = m.foe.root.position.z, TG.d = m.foe.root.position.distanceTo(R0.position), TG.atk = m.foe.cd > .8, TG.blk = false, TG) : null;
       if (m.mv && (m.mv.t += dt) >= m.mv.d) m.mv = null;
       if (tg && plan !== "fly" && !m.mv && (m.think = (m.think ?? r()) - dt) <= 0) {
         m.think = .35 + r() * .6; const to = Math.atan2(tg.x - R0.position.x, tg.z - R0.position.z), hpf = m.hp / a[6], side = r() < .5 ? 1 : -1;
