@@ -28,6 +28,7 @@ h1 { font-family: var(--display); font-weight: 800; font-size: 1.25rem; margin: 
 .mapfolder[open] > summary::after { content: "\25B4"; }
 .mapfolder > summary:hover { border-color: var(--accent); }
 .mapfolder .mapmenu { position: absolute; z-index: 70; left: 0; top: calc(100% + 6px); display: flex; flex-direction: column; gap: 4px; min-width: 170px; padding: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(20,20,50,.25); }
+.mapfolder:not([open]) .mapmenu { display: none; }
 .mapfolder .mapmenu button { text-align: left; white-space: nowrap; }
 .label { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-right: 2px; }
 button { font: inherit; font-size: .85rem; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
