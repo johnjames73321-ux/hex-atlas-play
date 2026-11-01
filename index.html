@@ -5404,7 +5404,8 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   //      E throw on a chain (tap = spear, hold = lob); it stays where it lands, E or LMB again yanks it back (a speared animal is dragged to you)
   //      Tab dash strike · Q block (tap right before a bite = parry) · animation cancels: an action pressed in the last part of an
   //      animation cuts its recovery for +25%, pressed earlier it waits. Angles: yaw like the animals (0 = +z), + = to the hero's left ----
-  const hero = me.hero, BASE = 12, REACH = 2.4;   // starting damage halved (user, 11-01); training raises it
+  const hero = me.hero, BASE = 12, REACH = 2.4, TIP = { sword: 1.16, axe: 1.07, hammer: 1.16, spear: 1.68 };
+  const reachOf = A => (.9 + TIP[MELEE]) * (1 + (A.reach - 1) * .5) + .25;   // where the blade tip really is: shoulder + arm + weapon, so hits match what you see (user, 11-01)   // starting damage halved (user, 11-01); training raises it
   const ATK = {
     s0: { from: -1.25, to: 1.25, dur: .4, m: 1, reach: 1, lock: .42, lunge: .35 },          // right -> left
     s1: { from: 1.25, to: -1.25, dur: .4, m: 1, reach: 1, lock: .42, lunge: .35 },          // left -> right
@@ -5424,7 +5425,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   const flash = (t, ms = 650) => say(t, ms);
   const zoneMat = new T.MeshBasicMaterial({ color: 0x8fdcff, transparent: true, opacity: .45, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending });
   const zone = A => {   // the reach of a thrust, drawn flat on the ground in front (user, 11-01)
-    const o = new T.Mesh(new T.RingGeometry(.4, REACH * A.reach + A.lunge, 18, 1, -Math.PI / 2 - A.w, A.w * 2), zoneMat.clone());
+    const o = new T.Mesh(new T.RingGeometry(.4, reachOf(A) + A.lunge, 18, 1, -Math.PI / 2 - A.w, A.w * 2), zoneMat.clone());
     o.rotation.order = "YXZ"; o.rotation.set(-Math.PI / 2, A.face, 0); o.position.set(me.pos.x, me.pos.y + .08, me.pos.z); scene.add(o); me.fx.push({ o, t: 0, d: A.dur + .2, s: 0, a: .5 });
   };
   const ss = u => u * u * (3 - 2 * u);
@@ -5516,7 +5517,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
       if (Math.abs(m.root.position.y + m.a[2] * .5 * GS - me.pos.y - 1) > rr + 2) continue;
       const rel = angD(A.face, Math.atan2(dx, dz)), pad = Math.atan2(rr, Math.max(d, .1));
       const inArc = A.round ? ((-rel + Math.PI * 2) % (Math.PI * 2)) <= -A.cur + pad : rel >= lo - pad && rel <= hi + pad;   // spin: everything the turning blade has passed
-      if (d < REACH * A.reach + rr && inArc) { A.hit.add(m); hurtMob(m, BASE * A.m * A.mul * (.9 + Math.random() * .2), me.pos, A.m >= 2); tone(180, .08); }
+      if (d < reachOf(A) + rr && inArc) { A.hit.add(m); hurtMob(m, BASE * A.m * A.mul * (.9 + Math.random() * .2), me.pos, A.m >= 2); tone(180, .08); }
     }
   };
   // swing curve: short wind-up behind the start, fast cut, follow-through past the end, settle
