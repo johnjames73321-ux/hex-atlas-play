@@ -5997,7 +5997,7 @@ async function open(i) {
   if (S3) close();
   let ac = null; try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
   ov.hidden = false; $("svLoad").hidden = !!open.seam; $("svLoad").textContent = "Loading…"; $("svHud").innerHTML = "";
-  const me = S3 = { ac, keys: {}, joy: { x: 0, y: 0, run: 0 }, yaw: 0, pitch: 0, ps: [], soundOn: false };   // owner, 11-01: the game always opens silent, on every map, every time
+  const me = S3 = { ac, keys: {}, joy: { x: 0, y: 0, run: 0 }, yaw: 0, pitch: 0, off: 0, /* the bow arm reads me.off on frame 1, before the pose code first writes it; undefined would NaN the arm quaternion and the bow string (user, 11-02) */ ps: [], soundOn: false };   // owner, 11-01: the game always opens silent, on every map, every time
   try { if (!T) T = await import(T3); } catch (e) { $("svLoad").textContent = "Couldn't load the 3D library. Check your connection and try again."; return; }
   if (S3 !== me) return;
   UP = new T.Vector3(0, 1, 0); P = (x, y, z) => new T.Vector3(x, y, z);
