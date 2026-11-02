@@ -6094,13 +6094,14 @@ function build(me, i) {
     const sp = SP[k], h = sp[1], o = sp[4], rock = sp[0] === "rck" || sp[0] === "mnd", Ms = [];
     let grid = null;
     if (b.rows === k) { const s = Math.max(5, (o.cw || .3) * h * 2.4), a = r() * 3; grid = []; for (let gx = -30; gx <= 30; gx++) for (let gz = -30; gz <= 30; gz++) { const x = gx * s, z = gz * s; grid.push([x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)]); } grid.sort((u, v) => Math.hypot(...u) - Math.hypot(...v)); }
-    const MB = new Float32Array(Math.max(1, n) * 16), si = []; let kc = 0;   /* flat matrix buffer: 300k Matrix4 clones were the whole load hitch */
+    const MB = new Float32Array(Math.max(1, n) * 16), si = []; let kc = 0; const tallOcc = new Set();   /* flat matrix buffer: 300k Matrix4 clones were the whole load hitch */
     for (let j = 0, tries = 0; kc < n && tries < n * 9; tries++, j++) {
       let x, z;
       if (grid) { if (j >= grid.length) break; [x, z] = grid[j]; x += (r() - .5) * 1.5; z += (r() - .5) * 1.5; }
-      else { const near = h >= 6 && kc < Math.max(2, n * .05), d = near ? 10 + r() * 45 : r() < iF ? Math.sqrt(r()) * RING : Math.sqrt(RING * RING + r() * (bd * bd - RING * RING)), a = r() * 6.28; x = Math.cos(a) * d; z = Math.sin(a) * d; }
+      else { const near = h >= 6 && kc < Math.max(1, Math.round(n * .01)), d = near ? 60 + r() * 90 : r() < iF ? Math.sqrt(r()) * RING : Math.sqrt(RING * RING + r() * (bd * bd - RING * RING)), a = r() * 6.28; x = Math.cos(a) * d; z = Math.sin(a) * d; }
       const rr0 = Math.hypot(x, z); if (rr0 < 3.5) continue;
       if (h >= 4 && !rock && !grid) { const gn = (Math.sin(x * .0131 + 11.3) + Math.cos(z * .0117 + 5.1) + Math.sin((x + z) * .0067 + 3.3)) / 3; if (gn < -.14) continue; }   /* groves with real clearings, not a uniform lawn of trunks */
+      if (h >= 6 && !rock && !grid) { const cx0 = Math.floor(x / 14), cz0 = Math.floor(z / 14); let busy = false; for (let ax = -1; ax <= 1 && !busy; ax++) for (let az = -1; az <= 1 && !busy; az++) if (tallOcc.has((cx0 + ax) * 4096 + (cz0 + az))) busy = true; if (busy) continue; tallOcc.add(cx0 * 4096 + cz0); }   /* no big trunks growing inside each other */
       const y = H(x, z);
       if (b.w && (o.wet === 2 ? y > -1 : o.wet ? y < -2.5 || y > .5 : y < .25)) continue;
       const s = (rock ? .5 + r() * 1.1 : .85 + r() * .25) * (1 + Math.min(1, Math.max(0, (rr0 - 100) / 900)) * .35), tl = rock ? (r() - .5) * .3 : h >= 4 && r() < .3 ? (r() - .5) * .5 : (r() - .5) * .06;   // about a third of trees lean a little
