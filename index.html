@@ -5682,7 +5682,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     else if (K) { tx = -.15 + (K === "sweep" ? .1 : 0); twist = me.atk.cur * .35; ty = me.atk.cur - twist; }   // body turns into the cut, arm does the rest
     else if (me.lmb && me.lmb.charging) { tx = -.7; ty = -2.3; twist = .5; tz = Math.sin(me.tnow * 30) * .05; }
     else if (me.block) { const rc = Math.max(0, 1 - (me.tnow - (me.blockHitT ?? -9)) / .18); tx = -.35 + rc * .6; ty = .95; tz = 1.25; twist = -.2 - rc * .25; }   // guard: blade raised across the body, knocked back by each blocked hit
-    else if (me.weapon === "bow") { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0, pull = 1 - (1 - c) ** 3; tx = -.5 - .25 * pull; ty = 1.55 + .65 * pull; twist = .3; tz = me.draw != null && c >= 1 ? Math.sin(me.tnow * 34) * .02 : 0; }   // Far Cry Primal: draw hand at the cheek, elbow high (user, 11-02)
+    else if (me.weapon === "bow") { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0, pull = 1 - (1 - c) ** 3; tx = -.5 - .25 * pull; ty = 1.35 + .55 * pull;   /* anchor down at the jaw, not beside the ear; the draw arm reaches instead of folding (user, 11-03) */ twist = .3; tz = me.draw != null && c >= 1 ? Math.sin(me.tnow * 34) * .02 : 0; }   // Far Cry Primal: draw hand at the cheek, elbow high (user, 11-02)
     else if (me.tabT && me.blade) { const c = clamp((me.tnow - me.tabT) / .5, 0, 1); tx = -2.3 * c; ty = -.6 * c; twist = .7 * c; tz = Math.sin(me.tnow * 40) * .06 * c; }   // E held: blade wound back over the shoulder
     else if (me.tnow - (me.thrownT ?? -9) < .35) { const p = (me.tnow - me.thrownT) / .35, e = 1 - (1 - p) ** 3; tx = -2.3 + 2.5 * e; ty = -.6 + .6 * e; twist = .7 - 1.3 * e; }   // the throw: whip from over the shoulder through to the front               // follow-through after the throw
     else if (me.moving) { tx = 1.25 + Math.sin(me.walkT || 0) * .2; ty = -.15; }
@@ -5703,7 +5703,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     else if (K === "slam") { const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1); lean = p < .4 ? -.3 : .55; crouch = p < .4 ? 0 : .3; stance = .7; off = p < .4 ? -2.4 : .4; }
     else if (K) { lean = .25; crouch = .1; stance = .5; off = -.9; }
     else if (me.block) { const rc = Math.max(0, 1 - (me.tnow - (me.blockHitT ?? -9)) / .18); lean = .12 - rc * .35; crouch = .25; stance = .55; off = -1.6; }   // braced, off hand on the blade
-    else if (me.weapon === "bow") { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0; lean = .06; crouch = .05; stance = .82; off = -1.66; }   // planted archer stance (user, 11-02)
+    else if (me.weapon === "bow") { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0; lean = .1; crouch = .05; stance = .82; off = -1.66;   /* 6 deg forward lean out of the hips, planted (user, 11-03) */ }   // planted archer stance (user, 11-02)
     else if (me.lmb && me.lmb.charging) { lean = -.12; crouch = .15; stance = .5; off = .6; }
     else if (me.tabT && me.blade) { lean = -.2; crouch = .08; stance = .5; off = -1.3; }
     else if (me.tnow - (me.thrownT ?? -9) < .3) { lean = .35; stance = .6; off = .8; }
