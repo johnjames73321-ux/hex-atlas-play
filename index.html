@@ -1865,7 +1865,7 @@ ovp.innerHTML = '<div id="ovname" style="font-weight:600;color:#9acd32;margin-bo
  '<div style="display:flex;gap:4px;margin-bottom:4px"><button id="ovw-">&#9664; narrow</button><button id="ovw+">wider &#9654;</button></div>' +
  '<div style="display:flex;gap:4px;margin-bottom:4px"><button id="ovh-">&#9650; shorter</button><button id="ovh+">taller &#9660;</button></div>' +
  '<div style="display:flex;gap:4px;margin-bottom:4px"><button id="ovs-">- smaller</button><button id="ovs+">+ bigger</button></div>' +
- '<button id="ovbuild" style="width:100%;margin-bottom:4px">build hexes from map</button>' +
+ '<button id="ovbuild" style="width:100%;margin-bottom:4px">fill empty hexes from map</button>' +
   '<button id="ovlock" style="width:100%;margin-bottom:4px">lock placement</button>' +
  '<div style="display:flex;gap:4px"><button id="ovr">reset size</button><button id="ovx">close</button></div>';
 document.body.appendChild(ovp);
@@ -1909,10 +1909,10 @@ $("ovbuild").onclick = () => {
     const c = ovClass(d, w, h, (mx - m.x) * w / m.w, (my - m.y) * h / m.h);
     if (!c) continue;
     const land = D.reg[i] >= 0;
-    if (c === 1 && !land) add.push(i); else if (c === 2 && land) rem.push(i);
+    if (c === 1 && !land) add.push(i);   /* fill only: this never removes a hex */
   }
-  if (!add.length && !rem.length) { $("status").textContent = "map already matches this placement"; return; }
-  if (!confirm("Build hexes from " + ovName() + " at its exact placement?\n\n+" + add.length + " land, -" + rem.length + " land.\n\nThese become normal edits (same as painting them by hand), so they can be undone in the editor.")) return;
+  if (!add.length) { $("status").textContent = "nothing empty: every hex inside this placement is already land"; return; }
+  if (!confirm("Fill the empty hexes inside " + ovName() + " at its exact placement?\n\n+" + add.length + " land.\n\nThese become normal edits (same as painting them by hand), so they can be undone in the editor.")) return;
   for (const i of add) setLand(i, null, at);
   for (const i of rem) setWater(i, at);
   applyEdits(); draw();
