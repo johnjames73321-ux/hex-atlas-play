@@ -5761,7 +5761,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
         if (!A.m && A.p.y < H(A.p.x, A.p.z)) { A.stuck = 1; A.stickT = A.t; A.t = Math.max(A.t, 2); spark(A.p, 3); }
         A.o.position.copy(A.p); if (!A.stuck && !A.m) { A.o.lookAt(tmpV.copy(A.p).add(A.v)); A.o.rotateZ(A.t * 16); }
       }
-      if (A.stuck && A.t - (A.stickT || 0) < .45) A.o.rotateZ(Math.sin((A.t - A.stickT) * 46) * .03); else if (A.m) A.o.rotateZ(Math.sin(A.t * 30) * .02); if (A.tl) { A.tp.pop(); A.tp.unshift(A.o.position.clone()); const pa = A.tl.geometry.attributes.position; for (let j = 0; j < 4; j++) pa.setXYZ(j, A.tp[j].x, A.tp[j].y, A.tp[j].z); pa.needsUpdate = true; } if (A.t > 8) { scene.remove(A.o); if (A.tl) { scene.remove(A.tl); A.tl.geometry.dispose(); A.tl = null; } }
+      if (A.stuck && A.t - (A.stickT || 0) < .45) A.o.rotateZ(Math.sin((A.t - A.stickT) * 46) * .03); else if (A.m) A.o.rotateZ(Math.sin(A.t * 30) * .02); if (A.tl) { const cp = A.o.position; if (isFinite(cp.x) && isFinite(cp.y) && isFinite(cp.z)) { A.tp.pop(); A.tp.unshift(cp.clone()); } const pa = A.tl.geometry.attributes.position; for (let j = 0; j < 4; j++) { const q = A.tp[j] || cp; if (isFinite(q.x) && isFinite(q.y) && isFinite(q.z)) pa.setXYZ(j, q.x, q.y, q.z); } pa.needsUpdate = true; } if (A.t > 8) { scene.remove(A.o); if (A.tl) { scene.remove(A.tl); A.tl.geometry.dispose(); A.tl = null; } }
     }
     for (let i = arrows.length - 1; i >= 0; i--) if (arrows[i].t > 8) arrows.splice(i, 1);
     for (const q of sparks) { q.t += dt; q.v.y -= 14 * dt; q.o.position.addScaledVector(q.v, dt); q.o.scale.setScalar(Math.max(.01, 1 - q.t / .5)); if (q.t > .5) scene.remove(q.o); }
