@@ -1838,7 +1838,7 @@ PALETTE.forEach(c => { const b = document.createElement("button"); b.className =
 custom.type = "color"; custom.id = "custom"; custom.title = "Any colour"; custom.oninput = () => selectColor(custom.value); pal.appendChild(custom);
 $("undo").onclick = () => step(undo, redo); $("redo").onclick = () => step(redo, undo);
 $("clear").onclick = () => { stroke = []; for (const u of Object.keys(colors)) setUnit(u, null); endStroke(); draw(); };
-const toggle = (id, get, set) => { $(id).onclick = () => { set(!get()); $(id).setAttribute("aria-pressed", get()); draw(); }; };
+const toggle = (id, get, set) => { const t = $(id); t.onclick = () => { set(!get()); t.setAttribute("aria-pressed", get()); draw(); }; t.setAttribute("aria-pressed", !!get()); };   /* sync every registered toggle at startup too - restored overlays now show blue */
 toggle("t-names", () => showNames, v => showNames = v);
 toggle("t-grid", () => showGrid, v => { showGrid = v; buildBase(); });
 toggle("t-borders", () => showBorders, v => { showBorders = v; buildBase(); });
