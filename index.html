@@ -5816,7 +5816,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
         else if (tg.d < 12 && r() < .25) m.mv = { k: "circle", a: to + side * (.9 + r() * .6), d: .4, s: 2 };   // sudden dart to the side                           // sudden burst
         if (m.mv) { m.mv.t = 0; m.mv.f = to; }
       }
-      if (m.mv) { m.hd = m.mv.k === "back" || m.mv.k === "circle" ? m.mv.f : m.mv.a; const sz = Math.min(1, Math.max(0, (a[1] * (a[2] || 1) - .8) / 9)); sp = a[5] * m.mv.s * (1 - (.3 + .5 * sz)); }   /* owner 11-02: dashes 30% slower, biggest animals up to 80% slower */
+      if (m.mv) { m.hd = m.mv.k === "back" || m.mv.k === "circle" ? m.mv.f : m.mv.a; const burst = m.mv.k === "dash" || m.mv.k === "pounce", sz = Math.min(1, Math.max(0, (a[1] * (a[2] || 1) - .8) / 9)); sp = a[5] * m.mv.s * (burst ? (1 - (.3 + .5 * sz)) : 1); }   /* owner 11-02: only the darts get slower - 30% for small animals, up to 80% for the biggest; normal walking untouched */
       const reach = plan === "fly" ? 2 : a[1] * .5 * GS + 1.4;
       if (dist < reach * .85 && plan !== "fly" && !m.mv) sp = 0;
       let dh = m.hd - R0.rotation.y; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); R0.rotation.y += dh * Math.min(1, dt * 5);
