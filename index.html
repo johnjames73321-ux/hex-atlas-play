@@ -1863,6 +1863,7 @@ ovp.innerHTML = '<div id="ovname" style="font-weight:600;color:#9acd32;margin-bo
  '<div style="display:flex;gap:4px;margin-bottom:4px"><button id="ovw-">&#9664; narrow</button><button id="ovw+">wider &#9654;</button></div>' +
  '<div style="display:flex;gap:4px;margin-bottom:4px"><button id="ovh-">&#9650; shorter</button><button id="ovh+">taller &#9660;</button></div>' +
  '<div style="display:flex;gap:4px;margin-bottom:4px"><button id="ovs-">- smaller</button><button id="ovs+">+ bigger</button></div>' +
+ '<button id="ovbuild" style="width:100%;margin-bottom:4px">build hexes from map</button>' +
  '<div style="display:flex;gap:4px"><button id="ovr">reset size</button><button id="ovx">close</button></div>';
 document.body.appendChild(ovp);
 [...ovp.querySelectorAll("button")].forEach(b => { b.style.cssText = "flex:1;cursor:pointer;background:#22271c;color:#e8f0dc;border:1px solid #4a5238;border-radius:6px;padding:4px 2px;font:11px system-ui,sans-serif"; });
@@ -1874,6 +1875,45 @@ $("ovh-").onclick = () => ovScale(0.9, "h"); $("ovh+").onclick = () => ovScale(1
 $("ovs-").onclick = () => ovScale(0.9); $("ovs+").onclick = () => ovScale(1.111);
 $("ovr").onclick = () => { if (selOv) ovScale((selOv.w0 || selOv.w) / selOv.w); };
 $("ovx").onclick = () => { selOv = null; uiOv(); };
+
+// ---- Build hexes from the placed map: use the overlay's EXACT rect, sample the picture, set land/water ----
+const ovCv = document.createElement("canvas"), ovCtx = ovCv.getContext("2d", { willReadFrequently: true });
+const ovKeyOf = m => { for (const k in ISLES) if (ISLES[k] === m) return k; return ""; };
+function ovPixels(im) {
+  if (ovCv._im !== im) { ovCv.width = im.naturalWidth; ovCv.height = im.naturalHeight; ovCtx.drawImage(im, 0, 0); ovCv._im = im; ovCv._d = ovCtx.getImageData(0, 0, ovCv.width, ovCv.height).data; }
+  return ovCv._d;
+}
+function ovClass(d, w, h, u, v) {                  /* 1 land (transparent on the map art), 2 water (opaque blue), 0 unsure */
+  let land = 0, sea = 0;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const x = Math.round(u) + dx * 2, y = Math.round(v) + dy * 2;
+    if (x < 0 || y < 0 || x >= w || y >= h) continue;
+    const k = (y * w + x) * 4, a = d[k + 3];
+    if (a < 50) land++; else if (a > 200 && d[k + 2] > d[k] + 6) sea++;
+  }
+  return land > sea ? 1 : sea > land ? 2 : 0;
+}
+$("ovbuild").onclick = () => {
+  const m = selOv; if (!m) return;
+  const k = ovKeyOf(m), im = isleImg[k];
+  if (!im || !im.complete || !im.naturalWidth) { $("status").textContent = "map picture still loading"; return; }
+  const d = ovPixels(im), w = ovCv.width, h = ovCv.height;
+  const at = new Date().toISOString(), add = [], rem = [];
+  for (let i = 0; i < N; i++) {                    /* read every hex centre back into the picture: exact spot, exact scale */
+    const mx = cx[i], my = cy[i];
+    if (mx < m.x || my < m.y || mx > m.x + m.w || my > m.y + m.h) continue;
+    const c = ovClass(d, w, h, (mx - m.x) * w / m.w, (my - m.y) * h / m.h);
+    if (!c) continue;
+    const land = D.reg[i] >= 0;
+    if (c === 1 && !land) add.push(i); else if (c === 2 && land) rem.push(i);
+  }
+  if (!add.length && !rem.length) { $("status").textContent = "map already matches this placement"; return; }
+  if (!confirm("Build hexes from " + ovName() + " at its exact placement?\n\n+" + add.length + " land, -" + rem.length + " land.\n\nThese become normal edits (same as painting them by hand), so they can be undone in the editor.")) return;
+  for (const i of add) setLand(i, null, at);
+  for (const i of rem) setWater(i, at);
+  applyEdits(); draw();
+  $("status").textContent = "Built from " + ovName() + ": +" + add.length + " land, -" + rem.length + " land";
+};
 toggle("t-drag", () => dragMaps, v => { dragMaps = v; cv.style.cursor = v ? "move" : tool === "pan" ? "grab" : "crosshair"; });
 if (G && ERA) { $("t-era").hidden = false; $("t-era").onclick = () => gameOn && gameView === "era" ? setGame(false, "political") : setGame(true, "era"); }
 if (G) { $("t-game").hidden = false; $("t-game").onclick = () => gameOn && gameView !== "era" ? setGame(false) : setGame(true, gameView === "era" ? "political" : gameView); $("gviews").querySelectorAll("button").forEach(b => b.onclick = () => setGame(true, b.dataset.v)); }
