@@ -6094,10 +6094,11 @@ function build(me, i) {
     const sp = SP[k], h = sp[1], o = sp[4], rock = sp[0] === "rck" || sp[0] === "mnd", Ms = [];
     let grid = null;
     if (b.rows === k) { const s = Math.max(5, (o.cw || .3) * h * 2.4), a = r() * 3; grid = []; for (let gx = -30; gx <= 30; gx++) for (let gz = -30; gz <= 30; gz++) { const x = gx * s, z = gz * s; grid.push([x * Math.cos(a) - z * Math.sin(a), x * Math.sin(a) + z * Math.cos(a)]); } grid.sort((u, v) => Math.hypot(...u) - Math.hypot(...v)); }
-    const MB = new Float32Array(Math.max(1, n) * 16), si = []; let kc = 0;   /* flat matrix buffer: 300k Matrix4 clones were the whole load hitch */
+    const MB = new Float32Array(Math.max(1, n) * 16), si = []; let kc = 0, spawnRing = 0; me.sx0 = me.sx0 || r() * 6.28;   /* flat matrix buffer: 300k Matrix4 clones were the whole load hitch */
     for (let j = 0, tries = 0; kc < n && tries < n * 9; tries++, j++) {
       let x, z;
       if (grid) { if (j >= grid.length) break; [x, z] = grid[j]; x += (r() - .5) * 1.5; z += (r() - .5) * 1.5; }
+      else if (spawnRing < 10 && h >= 4) { const a2 = (spawnRing / 10) * 6.2832 + me.sx0, rr2 = 9 + (spawnRing % 3) * 8; x = Math.cos(a2) * rr2 + (r() - .5) * 2; z = Math.sin(a2) * rr2 + (r() - .5) * 2; spawnRing++; }   /* a few trees in view wherever you spawn, evenly spaced */
       else { const u = (j + .5) / n, rj = Math.sqrt(u) * bd * .97, aj = j * 2.3999632297 + r() * .05; x = Math.cos(aj) * rj + (r() - .5) * 1.2; z = Math.sin(aj) * rj + (r() - .5) * 1.2; }   /* sunflower spread: even everywhere, no clumps, no bald patches */
       const rr0 = Math.hypot(x, z); if (rr0 < 3.5) continue;
       const y = H(x, z);
