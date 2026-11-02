@@ -5571,11 +5571,11 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
   const thr = swordMesh(); thr.visible = false; scene.add(thr);
   // ---- bow (2): hold LMB to draw, release to shoot; Multishot adds arrows ----
   const wood = new T.MeshLambertMaterial({ color: 0x6b4423, emissive: 0x201008 }), strMat = new T.LineBasicMaterial({ color: 0xeeeeee });
-  const bowG = new T.Group(), bowIn = new T.Group(); bowG.position.set(.22, -.5, 0); bowG.rotation.x = 1.5; bowG.add(bowIn); bowIn.rotation.y = -Math.PI / 2;
+  const qBowT = new T.Quaternion(), qBowA = new T.Quaternion(), AXB = [new T.Vector3(1, 0, 0), new T.Vector3(0, 1, 0), new T.Vector3(0, 0, 1)], bowG = new T.Group(), bowIn = new T.Group(); bowG.position.set(.16, -.66, .08); bowG.quaternion.copy(qBowT); bowG.add(bowIn);
   bowIn.add(tripoMesh("bow"));   // Tripo recurve bow; the string stays our own line so it can be drawn
   const sPts = new Float32Array(9), sGeo = new T.BufferGeometry(); sGeo.setAttribute("position", new T.BufferAttribute(sPts, 3)); const bstring = new T.Line(sGeo, strMat); bowG.add(bstring);
   const arrowMesh = () => { const g = new T.Group(); g.add(new T.Mesh(rod(P(0, 0, -.45), P(0, 0, .4), .015, .015, 4), wood)); g.add(new T.Mesh(new T.ConeGeometry(.04, .12, 4).rotateX(Math.PI / 2).translate(0, 0, .46), new T.MeshLambertMaterial({ color: 0xcfd6de }))); g.add(new T.Mesh(new T.BoxGeometry(.005, .07, .14).translate(0, 0, -.4), new T.MeshLambertMaterial({ color: 0xd04030 }))); return g; };
-  const nock = arrowMesh(); bowG.add(nock); bowG.visible = false; hero.armL.add(bowG);
+  const nock = new T.Group(), nockA = arrowMesh(); nockA.position.z = .45; nock.add(nockA); bowG.add(nock); /* arrow nocked at the string (user, 11-02) */ bowG.visible = false; hero.armL.add(bowG);
   const arrows = [], bowPos = new T.Vector3(), arrowTrailMat = new T.LineBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: .4, depthWrite: false });
   function setWeapon(w) { if (me.weapon === w) return; me.weapon = w; try { localStorage.setItem("hexatlas-w", w); } catch (e) {} me.draw = null; me.atk = null; bowG.visible = w === "bow"; hero.sword.visible = w === "sword" && me.blade; flash(w === "bow" ? "Bow · hold LMB to draw, release to shoot" : MELEE_N[MELEE], 900); tone(600, .03); }
   me.setWeapon = setWeapon;
@@ -5682,7 +5682,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     else if (K) { tx = -.15 + (K === "sweep" ? .1 : 0); twist = me.atk.cur * .35; ty = me.atk.cur - twist; }   // body turns into the cut, arm does the rest
     else if (me.lmb && me.lmb.charging) { tx = -.7; ty = -2.3; twist = .5; tz = Math.sin(me.tnow * 30) * .05; }
     else if (me.block) { const rc = Math.max(0, 1 - (me.tnow - (me.blockHitT ?? -9)) / .18); tx = -.35 + rc * .6; ty = .95; tz = 1.25; twist = -.2 - rc * .25; }   // guard: blade raised across the body, knocked back by each blocked hit
-    else if (me.weapon === "bow") { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0; tx = -.1; ty = .45 + c * .35; twist = .35; tz = me.draw != null && c >= 1 ? Math.sin(me.tnow * 40) * .02 : 0; }   // bow: right hand pulls the string
+    else if (me.weapon === "bow") { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0, pull = 1 - (1 - c) ** 3; tx = -.5 - .25 * pull; ty = 1.55 + .65 * pull; twist = .3; tz = me.draw != null && c >= 1 ? Math.sin(me.tnow * 34) * .02 : 0; }   // Far Cry Primal: draw hand at the cheek, elbow high (user, 11-02)
     else if (me.tabT && me.blade) { const c = clamp((me.tnow - me.tabT) / .5, 0, 1); tx = -2.3 * c; ty = -.6 * c; twist = .7 * c; tz = Math.sin(me.tnow * 40) * .06 * c; }   // E held: blade wound back over the shoulder
     else if (me.tnow - (me.thrownT ?? -9) < .35) { const p = (me.tnow - me.thrownT) / .35, e = 1 - (1 - p) ** 3; tx = -2.3 + 2.5 * e; ty = -.6 + .6 * e; twist = .7 - 1.3 * e; }   // the throw: whip from over the shoulder through to the front               // follow-through after the throw
     else if (me.moving) { tx = 1.25 + Math.sin(me.walkT || 0) * .2; ty = -.15; }
@@ -5703,7 +5703,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     else if (K === "slam") { const p = clamp((me.tnow - me.atk.t0) / me.atk.dur, 0, 1); lean = p < .4 ? -.3 : .55; crouch = p < .4 ? 0 : .3; stance = .7; off = p < .4 ? -2.4 : .4; }
     else if (K) { lean = .25; crouch = .1; stance = .5; off = -.9; }
     else if (me.block) { const rc = Math.max(0, 1 - (me.tnow - (me.blockHitT ?? -9)) / .18); lean = .12 - rc * .35; crouch = .25; stance = .55; off = -1.6; }   // braced, off hand on the blade
-    else if (me.weapon === "bow") { lean = .05; crouch = .05; stance = .5; off = -1.5; }
+    else if (me.weapon === "bow") { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0; lean = .06; crouch = .05; stance = .82; off = -1.42; }   // planted archer stance (user, 11-02)
     else if (me.lmb && me.lmb.charging) { lean = -.12; crouch = .15; stance = .5; off = .6; }
     else if (me.tabT && me.blade) { lean = -.2; crouch = .08; stance = .5; off = -1.3; }
     else if (me.tnow - (me.thrownT ?? -9) < .3) { lean = .35; stance = .6; off = .8; }
@@ -5713,7 +5713,7 @@ function wildlife(me, scene, cam, H, r, lat, lon) {
     { const c = me.draw != null ? clamp((me.tnow - me.draw) / drawTime(), 0, 1) : 0; sPts[1] = -.55; sPts[2] = 0; sPts[4] = 0; const pull = 1 - (1 - c) ** 3, sl = me.tnow - (me.loose ?? -9); sPts[5] = me.draw != null ? -pull * .55 : sl < .3 ? Math.sin(sl * 70) * .09 * (1 - sl / .3) : 0; sPts[7] = .55; sPts[8] = 0; sGeo.attributes.position.needsUpdate = true; nock.visible = me.draw != null; nock.position.set(0, 0, .1 - pull * .55); }   // eased pull, string twangs after the shot
     hero.shell.visible = !!me.block && me.blade && me.weapon === "sword"; if (hero.shell.visible) { const bh = Math.max(0, 1 - (me.tnow - (me.blockHitT ?? -9)) / .25); hero.shell.material.opacity = Math.max(bh * .8, me.tnow - (me.blockT ?? -9) < .3 + .08 * sk("guard") ? .5 : .16 + Math.sin(me.tnow * 6) * .04); hero.shell.material.color.setHex(bh > .5 ? 0xffffff : 0x8fdcff); }
     if (!me.moving) { hero.legs[0].rotation.x = damp(hero.legs[0].rotation.x, me.stance, 14, dt); hero.legs[1].rotation.x = damp(hero.legs[1].rotation.x, -me.stance * .7, 14, dt); }
-    if (!me.moving || K || me.block || me.weapon === "bow") hero.armL.rotation.x = me.off;   // walking keeps its arm swing
+    if (!me.moving || K || me.block || me.weapon === "bow") hero.armL.rotation.x = me.off; qBowT.setFromAxisAngle(AXB[1], -(me.twist || 0)); qBowT.multiply(qBowA.setFromAxisAngle(AXB[2], -.61)); qBowT.multiply(qBowA.setFromAxisAngle(AXB[0], .04)); bowG.quaternion.copy(hero.armL.quaternion).invert().multiply(qBowT); /* Far Cry Primal hold: bow canted 35 deg, plane on the aim (user, 11-02) */   // walking keeps its arm swing
     hero.guard.visible = !!me.block && me.blade; if (hero.guard.visible) hero.guard.material.opacity = me.tnow - (me.blockT ?? -9) < .3 ? .85 : .45;   // brighter during the parry window
     if (K === "dash" && (me.ghostT = (me.ghostT || 0) + dt) > .03) {                            // dash: fading afterimages
       me.ghostT = 0; const g = new T.Mesh(new T.CylinderGeometry(.18, .12, 1.7, 6), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .6, depthWrite: false }));
@@ -6218,7 +6218,7 @@ function build(me, i) {
     if (!me.atk || me.atk.kind === "jab") me.face = Math.atan2(-sy, -cyw);
     hero.root.position.copy(pos); hero.root.rotation.y = me.face + (me.twist || 0);
     hero.root.position.y += mv ? Math.abs(Math.sin(me.walkT)) * .07 : Math.sin(t / 1000 * 2.2) * .012;   // step bounce / breathing
-    const sw = mv ? Math.sin(me.walkT) * .6 : 0; hero.legs[0].rotation.x = sw; hero.legs[1].rotation.x = -sw; hero.armL.rotation.x = -sw * .8;
+    const sw = mv ? Math.sin(me.walkT) * .6 : 0; hero.legs[0].rotation.x = sw; hero.legs[1].rotation.x = -sw; hero.armL.rotation.x = me.weapon === "bow" ? me.off : -sw * .8;
     hero.root.visible = me.hp > 0 || Math.floor(t / 120) % 2 === 0;
     sky.position.copy(cam.position); sun.position.copy(cam.position).addScaledVector(sunDir, 3000);
     for (const p of me.ps) p(dt, t / 1000);
