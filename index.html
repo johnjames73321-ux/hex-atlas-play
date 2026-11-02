@@ -6098,7 +6098,7 @@ function build(me, i) {
     for (let j = 0, tries = 0; kc < n && tries < n * 9; tries++, j++) {
       let x, z;
       if (grid) { if (j >= grid.length) break; [x, z] = grid[j]; x += (r() - .5) * 1.5; z += (r() - .5) * 1.5; }
-      else if (spawnRing < 10 && h >= 4) { const a2 = (spawnRing / 10) * 6.2832 + me.sx0, rr2 = 9 + (spawnRing % 3) * 8; x = Math.cos(a2) * rr2 + (r() - .5) * 2; z = Math.sin(a2) * rr2 + (r() - .5) * 2; spawnRing++; }   /* a few trees in view wherever you spawn, evenly spaced */
+      else if (spawnRing < 10 && h >= 4 && h <= 26) { const a2 = (spawnRing / 10) * 6.2832 + me.sx0, rr2 = 26 + (spawnRing % 3) * 16; x = Math.cos(a2) * rr2 + (r() - .5) * 3; z = Math.sin(a2) * rr2 + (r() - .5) * 3; spawnRing++; }   /* a few trees in view wherever you spawn, evenly spaced and out of your face */
       else { const u = (j + .5) / n, rj = Math.sqrt(u) * bd * .97, aj = j * 2.3999632297 + r() * .05; x = Math.cos(aj) * rj + (r() - .5) * 1.2; z = Math.sin(aj) * rj + (r() - .5) * 1.2; }   /* sunflower spread: even everywhere, no clumps, no bald patches */
       const rr0 = Math.hypot(x, z); if (rr0 < 3.5) continue;
       const y = H(x, z);
