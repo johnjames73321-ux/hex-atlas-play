@@ -1837,12 +1837,15 @@ function kmPerHex() {
   d.sort((a, b) => a - b); return KMH = d.length ? d[d.length >> 1] : 40;
 }
 const hexSteps = (a, b) => { const dq = D.q[a] - D.q[b], dr = D.r[a] - D.r[b]; return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2; };
-const kmTxt = h => { const k = h * kmPerHex(); return (k >= 100 ? Math.round(k / 10) * 10 : Math.round(k)).toLocaleString() + " km"; };
+const kmTxt = k => (k >= 100 ? Math.round(k / 10) * 10 : Math.round(k)).toLocaleString() + " km";
+// km from the straight line between hex centres (neighbouring centres are sqrt(3)*S apart), not from the hex count:
+// an east-west path zigzags, so 7 hex steps there are ~13% shorter on the ground than 7 steps north-south/diagonal
+const legKm = (a, b) => Math.hypot(cx[a] - cx[b], cy[a] - cy[b]) / (Math.sqrt(3) * S) * kmPerHex();
 function measUi() {
   let box = $("measbox"); if (!box) { box = document.createElement("div"); box.id = "measbox"; box.style.cssText = "position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:30;background:rgba(18,22,30,.92);color:#fff;font:600 13px system-ui,sans-serif;padding:7px 12px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.4);pointer-events:none;white-space:nowrap"; cv.parentElement.appendChild(box); }
   box.hidden = !MEAS.on; $("zmeas").style.background = MEAS.on ? "#3b6fd8" : "";
-  let t = 0; for (let k = 1; k < MEAS.pts.length; k++) t += hexSteps(MEAS.pts[k - 1], MEAS.pts[k]);
-  box.textContent = MEAS.pts.length < 2 ? "📏 Click hexes to measure · right-click removes the last point · Esc clears" : `📏 Total ${t} hexes · ${kmTxt(t)} · ${MEAS.pts.length - 1} leg${MEAS.pts.length > 2 ? "s" : ""}`;
+  let t = 0, km = 0; for (let k = 1; k < MEAS.pts.length; k++) { t += hexSteps(MEAS.pts[k - 1], MEAS.pts[k]); km += legKm(MEAS.pts[k - 1], MEAS.pts[k]); }
+  box.textContent = MEAS.pts.length < 2 ? "📏 Click hexes to measure · right-click removes the last point · Esc clears" : `📏 Total ${t} hex steps · ${kmTxt(km)} · ${MEAS.pts.length - 1} leg${MEAS.pts.length > 2 ? "s" : ""}`;
 }
 function measAdd(i) { if (i < 0) return; if (MEAS.pts[MEAS.pts.length - 1] !== i) MEAS.pts.push(i); measUi(); draw(); }
 function measToggle(on) { MEAS.on = on ?? !MEAS.on; if (!MEAS.on) MEAS.pts = []; measUi(); draw(); }
@@ -1854,7 +1857,7 @@ function drawMeas(z) {
   ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.5 / z; ctx.setLineDash([8 / z, 5 / z]); ctx.stroke(); ctx.setLineDash([]);
   for (const i of P) { ctx.beginPath(); ctx.arc(cx[i], cy[i], 4.5 / z, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 2 / z; ctx.strokeStyle = "#3b6fd8"; ctx.stroke(); }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.font = "600 12px system-ui,sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  for (let k = 1; k < P.length; k++) { const a = P[k - 1], b = P[k], h = hexSteps(a, b), t = `${h} hex · ${kmTxt(h)}`;
+  for (let k = 1; k < P.length; k++) { const a = P[k - 1], b = P[k], h = hexSteps(a, b), t = `${h} hex · ${kmTxt(legKm(a, b))}`;
     const x = view.x + (cx[a] + cx[b]) / 2 * z, y = view.y + (cy[a] + cy[b]) / 2 * z - 12, w = ctx.measureText(t).width + 12;
     ctx.fillStyle = "rgba(18,22,30,.88)"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - w / 2, y - 10, w, 20, 6) : ctx.rect(x - w / 2, y - 10, w, 20); ctx.fill(); ctx.fillStyle = "#fff"; ctx.fillText(t, x, y); }
   ctx.restore(); ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * view.x, dpr * view.y);
