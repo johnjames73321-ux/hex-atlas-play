@@ -5769,7 +5769,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   };
   const ss = u => u * u * (3 - 2 * u);
   let startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (kind === "dash" ? 1 : 1.5) * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
-  { const sa = startAtk; startAtk = kind => { sa(kind); const a = me.atk; if (a && window.hxChop) setTimeout(() => { if (me.atk === a || !me.atk) window.hxChop(a.face, kind); }, a.dur * 450); }; }   // owner 11-06: the sword cuts trees too
+  { const sa = startAtk; startAtk = kind => { sa(kind); const a = me.atk; if (a && window.hxChop) setTimeout(() => { if (me.atk === a || !me.atk) { window.hxChop(a.face, kind); if (kind !== "dash") window.hxSwingMine && window.hxSwingMine(kind); } }, a.dur * 450); }; }   // owner 11-06: the sword cuts trees too
   const CHAIN = ["s0", "s1", "s2", "slam", "whirl"];
   const nextSwing = () => { if (me.riposte > 1) { me.combo = 0; return startAtk("thrust"); } if (me.tnow - me.comboT > 1.1) me.combo = 0; const len = 3 + sk("combo"); me.comboT = me.tnow; startAtk(CHAIN[me.combo % len]); me.combo = (me.combo + 1) % len; };
   const inWindow = () => !me.atk || (me.tnow - me.atk.t0) / me.atk.dur >= me.atk.lock;
@@ -5925,6 +5925,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     else if (me.tnow - (me.thrownT ?? -9) < .35) { const p = (me.tnow - me.thrownT) / .35, e = 1 - (1 - p) ** 3; tx = -2.3 + 2.5 * e; ty = -.6 + .6 * e; twist = .7 - 1.3 * e; }   // the throw: whip from over the shoulder through to the front               // follow-through after the throw
     else if (me.moving) { tx = 1.25 + Math.sin(me.walkT || 0) * .2; ty = -.15; }
     else { tx = 1.3 + Math.sin(me.tnow * 2) * .04; ty = -.15; }                    // idle: breathing
+    const aimP = clamp((me.pitchC ?? .3) - .3, -.9, 1.05); me.aimP = aimP; if (K && K !== "slam" && !(me.atk && me.atk.round)) tx += aimP * .95;   // owner 11-06: the cut goes where you aim, down at your feet or up over your head
     const rk = K || me.tnow - (me.thrownT ?? -9) < .35 ? 42 : 14;   // attacks follow their curve closely, everything else glides
     pv.rotation.x = damp(pv.rotation.x, tx, rk, dt); pv.rotation.y = damp(pv.rotation.y, ty, rk, dt);
     sw.rotation.z = damp(sw.rotation.z, tz, rk, dt); sw.rotation.x = damp(sw.rotation.x, K || me.block || (me.lmb && me.lmb.charging) || me.tabT ? 0 : -1.15, rk, dt);   // at rest the arm hangs and the wrist tips the blade up and forward (user, 11-01) sw.position.z = K === "jab" || K === "thrust" ? sz : damp(sw.position.z, sz, 20, dt);
@@ -5946,7 +5947,8 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     else if (me.tabT && me.blade) { lean = -.2; crouch = .08; stance = .5; off = -1.3; }
     else if (me.tnow - (me.thrownT ?? -9) < .3) { lean = .35; stance = .6; off = .8; }
     me.lean = damp(me.lean || 0, lean, K === "jab" || K === "thrust" ? 40 : 18, dt); me.crouch = damp(me.crouch || 0, crouch, 18, dt); me.stance = damp(me.stance || 0, stance, 18, dt); me.off = damp(me.off || 0, off, 14, dt);
-    hero.root.rotation.x = me.lean; hero.root.position.y -= me.crouch;
+    me.aimL = damp(me.aimL || 0, (K || me.block) && me.rollT <= 0 ? clamp(me.aimP || 0, -.4, .7) * .45 : 0, 14, dt);
+    hero.root.rotation.x = me.lean + me.aimL; hero.root.position.y -= me.crouch;   /* the body bends into a low or high aim */
     if (me.rollT > 0) { hero.root.rotation.x = (1 - me.rollT / me.rollD) * Math.PI * 2; hero.root.position.y -= .45; }   // dodge: a forward roll
     if (me.weapon === "bow") bowPose(dt);
     { const hb = bowG.worldToLocal(drawH.getWorldPosition(vdH)), on = me.draw != null, tx2 = on ? clamp(hb.x, -.3, .3) : 0, ty2 = on ? clamp(hb.y, -.2, .2) : 0, tz2 = on ? clamp(hb.z, -1.05, -.19) : -.19, sl = me.tnow - (me.loose ?? -9); sPts[1] = -.55; sPts[2] = -.19; sPts[3] = tx2; sPts[4] = ty2; sPts[5] = on ? tz2 : sl < .3 ? -.19 + Math.sin(sl * 70) * .09 * (1 - sl / .3) : -.19; sPts[7] = .55; sPts[8] = -.19; sGeo.attributes.position.needsUpdate = true; nock.visible = on || sl > .35; nock.position.set(tx2, ty2, tz2); }   /* the string runs tip to tip behind the grip and is pulled to the real hand; a fresh arrow is nocked 0.35 s after each shot */   // eased pull, string twangs after the shot
@@ -6801,11 +6803,10 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   };
   window.hxChop = chop;
   // ---- cells: aim with the crosshair anywhere - down, ahead or up ----
-  const aim = me => {
-    const T = me.T, V = me.vox, d = new T.Vector3(); me.cam.getWorldDirection(d); const o = me.cam.position, hx = me.pos.x, hy = me.pos.y + 1.2, hz = me.pos.z; let prev = null;
-    for (let s = 0; s < (me.dist || 2.2) + 6; s += V.VS / 4) { const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s, cx = V.ci(x), cz = V.ci(z), iy = V.cyi(y);
-      if (Math.hypot(x - hx, y - hy, z - hz) > 5) { if (s > (me.dist || 2.2) + 1) break; continue; }
-      const t = V.cell(cx, iy, cz); if (t) return { cx, iy, cz, t, prev }; if (!prev || prev[0] !== cx || prev[1] !== iy || prev[2] !== cz) prev = [cx, iy, cz]; }
+  const aim = (me, reach = 5.5) => {   // the first cell the crosshair ray meets (from the camera, however far you zoomed out), if it is within reach of the hero
+    const T = me.T, V = me.vox, d = new T.Vector3(); me.cam.getWorldDirection(d); const o = me.cam.position, hx = me.pos.x, hy = me.pos.y + 1.1, hz = me.pos.z; let prev = null;
+    for (let s = .3, L = (me.dist || 2.2) + reach + 2; s < L; s += V.VS / 4) { const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s, cx = V.ci(x), cz = V.ci(z), iy = V.cyi(y);
+      const t = V.cell(cx, iy, cz); if (t) return Math.hypot(x - hx, y - hy, z - hz) <= reach ? { cx, iy, cz, t, prev } : null; if (!prev || prev[0] !== cx || prev[1] !== iy || prev[2] !== cz) prev = [cx, iy, cz]; }
     return null;
   };
   const junkMat = new Map(), boxG = {}, mat = (me, c) => junkMat.get(c) || (junkMat.set(c, new me.T.MeshLambertMaterial({ color: c, flatShading: true })), junkMat.get(c));
@@ -6819,16 +6820,18 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   };
   const drop = (me, e) => { const P = me.pw; P.w.removeBody(e.b); me.scene.remove(e.o); P.bodies.splice(P.bodies.indexOf(e), 1); };
   const give = (me, t, n = 1) => { const V = me.vox; V.inv[t] = (V.inv[t] || 0) + n; if (!V.inv[V.sel]) V.sel = t; V.save(); };
-  const mine = me => {   // B (hold to keep digging): dirt, grass, sand, snow 1 blow, wood 2, stone 3
-    const a = aim(me), V = me.vox; me.mineT = me.tnow; if (!a) return; const key = a.cx + "," + a.iy + "," + a.cz, S = V.VS, cx0 = (a.cx + .5) * S, cy0 = V.yb(a.iy) + S / 2, cz0 = (a.cz + .5) * S, c = V.tcol(a.t, a.cx, a.cz, a.iy);
-    if (me.mineK !== key) { me.mineK = key; me.mineN = 0; } me.mineN++;
+  const mine = (me, reach, blows = 1) => {   // B (hold to keep digging) or any melee swing: dirt, grass, sand, snow 1 blow, wood 2, stone 3
+    const a = aim(me, reach), V = me.vox; me.mineT = me.tnow; if (!a) return false; const key = a.cx + "," + a.iy + "," + a.cz, S = V.VS, cx0 = (a.cx + .5) * S, cy0 = V.yb(a.iy) + S / 2, cz0 = (a.cz + .5) * S, c = V.tcol(a.t, a.cx, a.cz, a.iy);
+    if (me.mineK !== key) { me.mineK = key; me.mineN = 0; } me.mineN += blows;
     const hard = V.HARD[a.t] || 1; chips(me, new me.T.Vector3(cx0, cy0 + S / 2, cz0), c, a.t === 5 ? 4 : 3); me.tone && me.tone(a.t === 5 ? 260 : 150, .05);
-    if (me.mineN < hard) { me.shake = Math.max(me.shake || 0, .04); me.say && me.say(`${V.NAME[a.t]} ${me.mineN}/${hard}`, 500); return; }
+    if (me.mineN < hard) { me.shake = Math.max(me.shake || 0, .04); me.say && me.say(`${V.NAME[a.t]} ${me.mineN}/${hard}`, 500); return true; }
     me.mineK = null; const top = V.topOf(a.cx, a.cz); V.set(a.cx, a.iy, a.cz, 0); me.shake = Math.max(me.shake || 0, .07);
     if (a.iy === top - 1) for (const t of me.cut || []) if (!t.down && Math.abs(t.x - cx0) < .5 && Math.abs(t.z - cz0) < .5) { t.hits = 3; lib().then(() => cur() === me && !t.down && fell(me, t)); }   // dig out a tree's foot: down it comes
     lib().then(() => { if (cur() !== me) return; world(me); repatch(me, a.cx, a.cz); const e = junk(me, cx0, cy0, cz0, S * .92, c, "debris", a.t); e.b.velocity.set((Math.random() - .5) * 2, 3, (Math.random() - .5) * 2); e.b.angularVelocity.set(Math.random() * 4, Math.random() * 4, Math.random() * 4); })
       .catch(() => give(me, a.t));
+    return true;
   };
+  window.hxSwingMine = kind => { const me = cur(); if (!me || !me.vox || me.hp <= 0) return; mine(me, 3.6, /slam|whirl|sweep|spin2/.test(kind || "") ? 2 : 1); };
   const pick = me => { const V = me.vox; if ((V.inv[V.sel] || 0) > 0) return V.sel; const k = Object.keys(V.inv).find(k => V.inv[k] > 0); if (k) V.sel = +k; return k ? +k : 0; };
   const place = me => {
     const a = aim(me), V = me.vox, t = pick(me); if (!a || !a.prev) return; if (!t) { me.say && me.say("No blocks: mine some (B) and pick them up", 1200); return; }
