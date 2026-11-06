@@ -5767,7 +5767,8 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     o.rotation.order = "YXZ"; o.rotation.set(-Math.PI / 2, A.face, 0); o.position.set(me.pos.x, me.pos.y + .08, me.pos.z); scene.add(o); me.fx.push({ o, t: 0, d: A.dur + .2, s: 0, a: .5 });
   };
   const ss = u => u * u * (3 - 2 * u);
-  const startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (kind === "dash" ? 1 : 1.5) * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
+  let startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (kind === "dash" ? 1 : 1.5) * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
+  { const sa = startAtk; startAtk = kind => { sa(kind); const a = me.atk; if (a && window.hxChop) setTimeout(() => { if (me.atk === a || !me.atk) window.hxChop(a.face, kind); }, a.dur * 450); }; }   // owner 11-06: the sword cuts trees too
   const CHAIN = ["s0", "s1", "s2", "slam", "whirl"];
   const nextSwing = () => { if (me.riposte > 1) { me.combo = 0; return startAtk("thrust"); } if (me.tnow - me.comboT > 1.1) me.combo = 0; const len = 3 + sk("combo"); me.comboT = me.tnow; startAtk(CHAIN[me.combo % len]); me.combo = (me.combo + 1) % len; };
   const inWindow = () => !me.atk || (me.tnow - me.atk.t0) / me.atk.dur >= me.atk.lock;
@@ -6669,16 +6670,17 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     body.addShape(new C.Box(new C.Vec3(r, t.h / 2, r)));                                  // trunk
     body.addShape(new C.Sphere(t.h * .16), new C.Vec3(0, t.h * .32, 0));                    // crown
     body.position.set(t.x, t.y + t.h / 2 + .05, t.z); P.w.addBody(body); P.bodies.push([body, g]);
-    const fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw), top = new C.Vec3(t.x, t.y + t.h * .9, t.z);
+    const ax = t.x - me.pos.x, az = t.z - me.pos.z, al = Math.hypot(ax, az) || 1, fx = ax / al, fz = az / al, top = new C.Vec3(t.x, t.y + t.h * .9, t.z);
     body.applyImpulse(new C.Vec3(fx * body.mass * 1.6, 0, fz * body.mass * 1.6), top);   // it tips away from the axe
     t.down = true;
   };
-  const chop = () => {
+  const chop = (face, kind) => {   // face: the sword swing's direction (me.face); none = where you look (G)
     const me = window.SV && SV.S3; if (!me || !me.cut || !me.pos) return;
-    const fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw); let best = null, bd = 3.2;
+    const fx = face != null ? Math.sin(face) : -Math.sin(me.yaw), fz = face != null ? Math.cos(face) : -Math.cos(me.yaw); let best = null, bd = face != null ? 3.6 : 3.2;
     for (const t of me.cut) { if (t.down) continue; const dx = t.x - me.pos.x, dz = t.z - me.pos.z, d = Math.hypot(dx, dz); if (d < bd && (dx * fx + dz * fz) / (d || 1) > .3) { bd = d; best = t; } }
     if (!best) return;
-    best.hits++; lib().then(() => { if (best.hits >= 3 && !best.down && SV.S3 === me) fell(me, best); });
+    best.hits += /slam|whirl|heavy|charge/.test(kind || "") ? 2 : 1; me.shake = Math.max(me.shake || 0, .14); me.stopT = Math.max(me.stopT || 0, .03);   // the blade bites: a small jolt
+    lib().then(() => { if (best.hits >= 3 && !best.down && SV.S3 === me) fell(me, best); });
     return best;
   };
   window.hxChop = chop;
