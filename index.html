@@ -1498,7 +1498,7 @@ addEventListener("keydown", e => {
   if (marking && e.key === "Escape") { e.preventDefault(); setMarking(false); }
 });
 // outside the artifact (a downloaded copy, the browser pane): marks and sends go to the PC's local game server (tools/serve.py), which hands them to Claude
-const LOCALSRV = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "" : "http://127.0.0.1:8766";
+const LOCALSRV = location.port === "8766" ? "" : "http://127.0.0.1:8766";
 async function tellClaude(text) {
   // local game server first: it bakes the edits and broadcasts the note to every Code tab (all four accounts)
   try { const r = await fetch(LOCALSRV + "/edit", { method: "POST", body: JSON.stringify({ at: new Date().toISOString(), text, edits: [...saved, ...draft] }) }); if (r.ok) return; } catch (e) {}
