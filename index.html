@@ -115,6 +115,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
     <details class="mapfolder" id="mapFolder"><summary title="Island maps, map copy, and THE MAP">Maps</summary><div class="mapmenu"><button id="t-azores" aria-pressed="false" title="Azores map (your picture), sized to the map; Drag maps to move it">Azores</button>
     <button id="t-madeira" aria-pressed="false" title="Madeira map, real size from the nearby coast; Drag maps to move it">Madeira</button><button id="t-canary" aria-pressed="false" title="Canary Islands map, real size, just off Africa; Drag maps to move it">Canary</button><button id="t-hawaii" aria-pressed="false" title="Hawaii map, real size, in the Pacific west of Mexico; Drag maps to move it">Hawaii</button><button id="t-capeverde" aria-pressed="false" title="Cape Verde map (your picture), sized to the map; Drag maps to move it">Cape Verde</button><button id="t-caribbean" aria-pressed="false" title="Caribbean map (your picture), fitted to the map; Drag maps to move it">Caribbean</button><button id="t-mapcopy" aria-pressed="false" title="A copy of THE MAP you can move: turn on Drag maps, drag it, mouse wheel resizes, arrows up/down change see-through">Map copy</button><button id="t-maptools" title="Open the stretch / lock panel for a map">Map tools</button><button id="t-mapcopy2" aria-pressed="false" title="Second copy of THE MAP: click it with Drag maps on, then stretch and squeeze it in the Stretch panel (or mouse wheel)">Map copy 2</button>
     <button id="t-mapT" aria-pressed="false" title="THE MAP: your reference world map, unchanged (ref/the-map.webp)">THE MAP</button></div></details>
+    <button id="t-dl" title="Save this whole game file to your PC as index.html">Download game</button>
     <button id="t-drag" aria-pressed="false" title="Island maps: drag to move, mouse wheel = bigger/smaller, arrow up/down = more/less see-through. Click one and the Stretch panel appears (stretch wide/tall, squeeze, reset)">Drag maps</button>
   </div>
   <button id="t-ck" aria-pressed="false" hidden title="Crowns of the Hex World: rule a dynasty from 1444 (CK3-style)">👑 Crowns</button>
@@ -1864,6 +1865,17 @@ const syncDrag = () => mapBtn.classList.toggle("maps-on", anyMapOn());
 new MutationObserver(syncDrag).observe($("mapFolder"), { subtree: true, attributes: true, attributeFilter: ["aria-pressed"] });
 syncDrag();
 mapBtn.addEventListener("contextmenu", e => { e.preventDefault(); showMapT = false; for (const k in isleOn) isleOn[k] = false; selOv = null; uiOv(); syncMapBtns(); syncDrag(); saveMaps(); draw(); document.getElementById("status").textContent = "All maps turned off"; });
+// Download game: save the whole running file (current map included) as index.html (owner, 11-06)
+$("t-dl").onclick = () => {
+  const html = "<!doctype html>" + document.documentElement.outerHTML;
+  const b = new Blob([html], { type: "text/html" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b);
+  a.download = "index.html";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+  document.getElementById("status").textContent = "Downloading index.html";
+};
 const openMapTools = () => { const k = ovKeyOf(selOv) || Object.keys(ISLES).find(x => isleOn[x]) || "mapCopy"; selOv = ISLES[k]; isleOn[k] = true; syncMapBtns(); uiOv(); draw(); };
 const mtools = $("t-maptools"); if (mtools) mtools.onclick = () => openMapTools();
 
