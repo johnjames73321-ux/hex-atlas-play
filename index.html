@@ -6366,13 +6366,16 @@ function build(me, i) {
     }
     if (!kc) continue;
     // Horizon-style culling: plants split into sectors, each with its own bounds, so the GPU skips every sector behind or beside the camera
+    const CT = isTree(k) && h >= 3 && !rock ? Array.from({ length: kc }, (_, q) => ({ x: MB[q * 16 + 12], y: MB[q * 16 + 13], z: MB[q * 16 + 14], h: h * Math.hypot(MB[q * 16 + 4], MB[q * 16 + 5], MB[q * 16 + 6]), ms: [], q, mb: MB, hits: 0 })) : null;   // owner 11-06: every tree can be cut down (G)
+    if (CT) { me.cut = me.cut || []; for (const c of CT) me.cut.push(c); }
     const secs = new Map(); for (let q = 0; q < kc; q++) { const sk = si[q]; if (!secs.has(sk)) secs.set(sk, []); secs.get(sk).push(q); }
     for (const [geo, c, leaf] of shape(k)) for (const L of secs.values()) {
       const m = new T.InstancedMesh(geo, mat(c, leaf), L.length);
-      L.forEach((q, j) => { m.setMatrixAt(j, M.fromArray(MB, q * 16)); if (leaf && Math.hypot(MB[q * 16 + 12], MB[q * 16 + 14]) < 900) m.setColorAt(j, tmp.copy(cmem[c] || (cmem[c] = col(c))).multiplyScalar(.82 + r() * .32)); });
+      L.forEach((q, j) => { if (CT) CT[q].ms.push([m, j]); m.setMatrixAt(j, M.fromArray(MB, q * 16)); if (leaf && Math.hypot(MB[q * 16 + 12], MB[q * 16 + 14]) < 900) m.setColorAt(j, tmp.copy(cmem[c] || (cmem[c] = col(c))).multiplyScalar(.82 + r() * .32)); });
       m.computeBoundingSphere(); scene.add(m);
     }
   }
+  me.scene = scene; me.T = T; me.H = H;
   if (climb.length) { const vg = new T.CylinderGeometry(.42, .5, 1, 7, 1, true), vm = new T.InstancedMesh(vg, new T.MeshLambertMaterial({ color: 0x3f7a2a, flatShading: true }), climb.length);
     climb.forEach(([x, y, z, ht], j) => vm.setMatrixAt(j, M.compose(pv.set(x, y + ht * .42, z), q.identity(), sv3.set(1, ht * .84, 1)))); vm.computeBoundingSphere(); scene.add(vm); }
   // particles
@@ -6424,7 +6427,7 @@ function build(me, i) {
   const loop = t => {
     if (S3 !== me) return; me.raf = requestAnimationFrame(loop);
     if (!document.hasFocus() && me.last && t - me.last < 33) return;   // like Horizon: 30 fps only while another window has focus; unlimited when you play
-    const dt0 = Math.max(0, Math.min(.05, me.last ? (t - me.last) / 1000 : 0)); me.last = t; me.stopT = (me.stopT || 0) - dt0; me.slowT = (me.slowT || 0) - dt0; const dt = dt0 * (me.stopT > 0 ? .04 : me.slowT > 0 ? .35 : 1);   /* hit-stop / parry slow motion */ const k = me.keys, j = me.joy, pos = me.pos, hero = me.hero;
+    const dt0 = Math.max(0, Math.min(.05, me.last ? (t - me.last) / 1000 : 0)); me.last = t; me.stopT = (me.stopT || 0) - dt0; me.slowT = (me.slowT || 0) - dt0; const dt = dt0 * (me.stopT > 0 ? .04 : me.slowT > 0 ? .35 : 1); if (me.phys) me.phys(dt);   /* hit-stop / parry slow motion */ const k = me.keys, j = me.joy, pos = me.pos, hero = me.hero;
     const f = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) + j.y, s = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + j.x, sy = Math.sin(me.yaw), cyw = Math.cos(me.yaw);
     const mv = Math.hypot(f, s) > .05, l = Math.max(1, Math.hypot(f, s)), mx = (-sy * f + cyw * s) / l, mz = (-cyw * f - sy * s) / l;
     const run = k.ShiftLeft || k.ShiftRight || j.run, crouch = (k.ControlLeft || k.ControlRight) && !me.slide;
@@ -6636,6 +6639,53 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
 })();
 </script>
 <!--SV-END-->
+<script>
+// ---- tree felling: G chops the tree in front of you (3 blows); it falls as a real rigid body (cannon-es physics, jsdelivr, loaded on first chop) ----
+(() => {
+  let C = null, loading = null;
+  const lib = () => C ? Promise.resolve(C) : loading || (loading = import("https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js").then(m => (C = m)));
+  const world = me => {
+    if (me.pw) return me.pw;
+    const w = new C.World({ gravity: new C.Vec3(0, -9.82, 0) }); w.broadphase = new C.SAPBroadphase(w); w.allowSleep = true;
+    w.defaultContactMaterial.friction = .6; w.defaultContactMaterial.restitution = .15;
+    const bodies = []; me.pw = { w, bodies, grounds: new Map() };
+    me.phys = dt => { if (!dt) return; w.step(1 / 60, dt, 4); for (const [b, g] of bodies) { g.position.copy(b.position); g.quaternion.copy(b.quaternion); } };
+    return me.pw;
+  };
+  const ground = (me, x, z) => {   // a small heightfield of the real ground around the tree, so trunks land and roll on the slope
+    const P = me.pw, key = Math.round(x / 30) + "," + Math.round(z / 30); if (P.grounds.has(key)) return;
+    const n = 25, st = 2.5, x0 = Math.round(x / 30) * 30 - n * st / 2, z0 = Math.round(z / 30) * 30 - n * st / 2, data = [];
+    for (let i = 0; i <= n; i++) { const row = []; for (let j = 0; j <= n; j++) row.push(me.H(x0 + i * st, z0 + (n - j) * st)); data.push(row); }
+    const hb = new C.Body({ mass: 0 }); hb.addShape(new C.Heightfield(data, { elementSize: st }));
+    hb.quaternion.setFromEuler(-Math.PI / 2, 0, 0); hb.position.set(x0, 0, z0 + n * st); P.w.addBody(hb); P.grounds.set(key, hb);
+  };
+  const unsolid = (me, t) => { const ck = Math.floor(t.x / 8) * 4096 + Math.floor(t.z / 8), a = me.tgrid && me.tgrid.get(ck); if (!a) return; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - t.x) < .01 && Math.abs(a[i + 1] - t.z) < .01) { a.splice(i, 4); return; } };
+  const fell = (me, t) => {
+    const T = me.T, P = world(me); ground(me, t.x, t.z); unsolid(me, t);
+    const g = new T.Group(), b0 = new T.Matrix4().makeTranslation(t.x, t.y + t.h / 2, t.z), inv = b0.clone().invert(), im = new T.Matrix4(), zero = new T.Matrix4().makeScale(0, 0, 0);
+    for (const [m, j] of t.ms) { m.getMatrixAt(j, im); const c = new T.Mesh(m.geometry, m.material); c.matrixAutoUpdate = false; c.matrix.multiplyMatrices(inv, im); g.add(c); m.setMatrixAt(j, zero); m.instanceMatrix.needsUpdate = true; }
+    g.position.set(t.x, t.y + t.h / 2, t.z); me.scene.add(g);
+    const r = Math.max(.25, t.h * .025), body = new C.Body({ mass: 60 * t.h, linearDamping: .05, angularDamping: .2 });
+    body.addShape(new C.Box(new C.Vec3(r, t.h / 2, r)));                                  // trunk
+    body.addShape(new C.Sphere(t.h * .16), new C.Vec3(0, t.h * .32, 0));                    // crown
+    body.position.set(t.x, t.y + t.h / 2 + .05, t.z); P.w.addBody(body); P.bodies.push([body, g]);
+    const fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw), top = new C.Vec3(t.x, t.y + t.h * .9, t.z);
+    body.applyImpulse(new C.Vec3(fx * body.mass * 1.6, 0, fz * body.mass * 1.6), top);   // it tips away from the axe
+    t.down = true;
+  };
+  const chop = () => {
+    const me = window.SV && SV.S3; if (!me || !me.cut || !me.pos) return;
+    const fx = -Math.sin(me.yaw), fz = -Math.cos(me.yaw); let best = null, bd = 3.2;
+    for (const t of me.cut) { if (t.down) continue; const dx = t.x - me.pos.x, dz = t.z - me.pos.z, d = Math.hypot(dx, dz); if (d < bd && (dx * fx + dz * fz) / (d || 1) > .3) { bd = d; best = t; } }
+    if (!best) return;
+    best.hits++; lib().then(() => { if (best.hits >= 3 && !best.down && SV.S3 === me) fell(me, best); });
+    return best;
+  };
+  window.hxChop = chop;
+  addEventListener("keydown", e => { if (e.code === "KeyG" && !e.repeat) chop(); }, true);
+})();
+</script>
+
 
 
 </body></html>
