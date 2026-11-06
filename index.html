@@ -5574,7 +5574,8 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   const TRAITS = {
     swift: a => { a[5] *= 1.4; }, brute: a => { a[7] *= 1.5; }, tank: a => { a[6] *= 1.8; }, giant: (a, o) => { o.scale.multiplyScalar(1.25); a[6] *= 1.4; a[5] *= .9; }, runt: (a, o) => { o.scale.multiplyScalar(.8); a[5] *= 1.2; a[6] *= .7; },
     venomous: () => {}, regenerating: () => {}, frenzied: () => {}, "thick-hided": () => {}, fragile: a => { a[5] *= 1.2; }, leaper: () => {}, skittish: () => {}, relentless: () => {}, vampiric: () => {},
-    thorny: () => {}, "pack-leader": a => { a[6] *= 1.2; }, "quick-biter": () => {}, armored: () => {}, ghostly: () => {}, explosive: () => {}
+    thorny: () => {}, "pack-leader": a => { a[6] *= 1.2; }, "quick-biter": () => {}, armored: () => {}, ghostly: () => {}, explosive: () => {},
+    spitter: () => {}, charger: a => { a[6] *= 1.15; }   /* owner 11-06: new fighters - spits from range, charges in a straight line (both wind up first) */
   };
   const rr = (w, h, q) => { const sh = new T.Shape(); sh.moveTo(q, 0); sh.lineTo(w - q, 0); sh.quadraticCurveTo(w, 0, w, q); sh.lineTo(w, h - q); sh.quadraticCurveTo(w, h, w - q, h); sh.lineTo(q, h); sh.quadraticCurveTo(0, h, 0, h - q); sh.lineTo(0, q); sh.quadraticCurveTo(0, 0, q, 0); return new T.ShapeGeometry(sh, 5).translate(0, -h / 2, 0); };   // rounded bar
   const barG = rr(1.6, .21, .105).translate(-.8, 0, 0), barF = rr(1.6, .21, .105), barBg = new T.MeshBasicMaterial({ color: 0xf2f2f2, transparent: true, opacity: .64, depthTest: false, fog: false });
@@ -5728,11 +5729,11 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     if (m.tr.has("thick-hided")) dmg *= .75; if (m.tr.has("fragile")) dmg *= 1.3; if (m.tr.has("thorny")) { me.hp -= dmg * .1; hpDraw(); }
     if (!m.named) { m.named = 1; say(m.a[9], 1400); }
     if (m.tr.has("pack-leader")) for (const o of mobs) if (o.k === m.k && !o.dead && o.root.position.distanceTo(m.root.position) < 35) o.angry = 25;
-    m.hp -= dmg; if (m.bar) m.bar.fill.scale.x = Math.max(0, m.hp / m.mx); m.angry = m.tr.has("relentless") ? 60 : 25;   // bar drops on every hit, stunned or not m.flash = .15; if (heavy || crit) m.stun = Math.max(m.stun || 0, .4);
+    m.hp -= dmg; me.onHit && me.onHit(m, dmg, crit, heavy); if (m.bar) m.bar.fill.scale.x = Math.max(0, m.hp / m.mx); m.angry = m.tr.has("relentless") ? 60 : 25;   // bar drops on every hit, stunned or not m.flash = .15; if (heavy || crit) m.stun = Math.max(m.stun || 0, .4);
     const k = tmpW.subVectors(m.root.position, from).setY(0).normalize().multiplyScalar(Math.min(.8, 30 / m.a[6] + .15) * (heavy ? 1.5 : 1)); m.root.position.add(k);
     popNum(m, dmg, crit); me.stopT = crit || heavy ? .07 : .035; me.shake = Math.max(me.shake || 0, crit || heavy ? .25 : .12);
     if (m.hp <= 0 && m.tr.has("explosive")) { const c = m.root.position; if (Math.hypot(me.pos.x - c.x, me.pos.z - c.z) < 4) { me.hp -= 15 / me.up("hp"); hpDraw(); } const ring = new T.Mesh(new T.RingGeometry(.3, .7, 32), new T.MeshBasicMaterial({ color: 0xff7a20, transparent: true, side: T.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.copy(c).y += .2; scene.add(ring); me.fx.push({ o: ring, t: 0, d: .45, s: 7 }); me.shake = .3; tone(80, .2); }
-    if (m.hp <= 0) { m.dead = 3.5; me.kills++; me.hp = Math.min(100, me.hp + 4); hpDraw();
+    if (m.hp <= 0) { m.dead = 3.5; me.kills++; me.hp = Math.min(100, me.hp + 4); hpDraw(); try { me.onKill && me.onKill(m, from, heavy); } catch (e) {}
       const lk = Math.random(), luck = lk < .002 ? 25 : lk < .025 ? 4 : 1, coin = Math.round((1 + Math.sqrt(m.a[1] * m.a[2]) * .6 + Math.random()) * luck * (m.boss ? 10 : 1) * 1.5);   // bigger = more, rarely a lucky haul
       dropCoins(m.root.position, coin); if (luck > 1) tone(1760, .12);
       say(`${m.a[9]} slain · +${Math.round(m.a[6] * .6 + 5)} XP · +${coin} 🪙${luck >= 25 ? " JACKPOT!" : luck > 1 ? " lucky!" : ""}`); gainXP(Math.round(m.a[6] * .6 + 5)); }
@@ -6014,7 +6015,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     const TG = {}, cp = me.pos, HUNT = /^(cat|dog|bear|croc|lizard|snake|fly)$/, PREY = /^(hoof|roo|ape|bird|tort)$/;
     for (const m of mobs.slice()) {
       const a = m.a, R0 = m.root, plan = a[0];
-      if (m.dead) { m.dead -= dt; R0.rotation.z = Math.min(Math.PI / 2, R0.rotation.z + dt * 3); R0.position.y -= dt * (m.dead < 1.5 ? .6 : 0); if (m.dead <= 0) { scene.remove(R0); mobs.splice(mobs.indexOf(m), 1); setTimeout(() => { if (S3 === me) spawn(m.k, true, m.boss); }, m.boss ? 60000 : 4000); } continue; }
+      if (m.dead) { m.dead -= dt; if (!m.rag) { R0.rotation.z = Math.min(Math.PI / 2, R0.rotation.z + dt * 3); R0.position.y -= dt * (m.dead < 1.5 ? .6 : 0); } else if (m.dead < 1) R0.scale.multiplyScalar(1 - dt * 2); if (m.bar) m.bar.visible = false; if (m.dead <= 0) { m.rag && me.unrag && me.unrag(m); scene.remove(R0); mobs.splice(mobs.indexOf(m), 1); if (!m.noRe) setTimeout(() => { if (S3 === me) spawn(m.k, true, m.boss); }, m.boss ? 60000 : 4000); } continue; }
       if (m.stun > 0) { m.stun -= dt; if (plan !== "fly") R0.position.y = H(R0.position.x, R0.position.z);   /* knocked back while stunned: stay on the ground, never sunk in */ for (const mt of m.mats) mt.emissive.setHex(0x203060); continue; }   // stunned by a parry
       m.cd -= dt; m.angry -= dt; m.flash -= dt;
       if (m.tr.has("regenerating")) m.hp = Math.min(m.mx, m.hp + m.mx * .02 * dt);
@@ -6069,7 +6070,8 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
       m.legs.forEach((l, i) => l.rotation.x = Math.sin(t * gait * 2 + m.ph + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI / 2 : 0)) * (sp ? .5 : 0));
       m.segs.forEach((s, i) => s.position.x = Math.sin(t * 3 + i * .7 + m.ph) * a[1] * .04 * (sp ? 1.5 : .4));
       const d3 = Math.hypot(dist, cp.y + .7 - R0.position.y);
-      if (chase && d3 < reach && m.cd <= 0 && me.hp > 0) {
+      if (m.wind != null && !(chase && d3 < reach * 1.35)) m.wind = null;
+      if (chase && d3 < reach && m.cd <= 0 && me.hp > 0 && (m.wind == null ? (m.wind = m.tr.has("quick-biter") ? .22 : .36, me.tele && me.tele(m, m.wind, "!"), false) : (m.wind -= dt) > 0 ? false : (m.wind = null, true))) {   /* owner 11-06: every bite winds up first (a red !), so you can read it and parry, roll or step out */
         if (me.rollT > 0) { m.cd = .6; continue; }   // rolled through the bite
         if (me.block && me.tnow - (me.blockT ?? -9) < .3 + .08 * sk("guard")) { m.cd = 1.6; me.parried(m); continue; }   // Q pressed just before the bite: parried, no damage
         m.cd = m.tr.has("quick-biter") ? .8 : 1.3; if (m.tr.has("venomous")) me.poison = 3; if (m.tr.has("vampiric")) m.hp = Math.min(m.mx, m.hp + a[7] * .5); { const to = Math.atan2(dx, dz), u = r(), sd = r() < .5 ? 1 : -1; m.mv = u < .15 ? { k: "dash", a: to + (r() - .5) * .7, d: .6, s: 2, t: 0, f: to } : u < .6 ? { k: "circle", a: to + sd * (1.3 + r() * .5), d: .45, s: 1.8, t: 0, f: to } : u < .85 ? { k: "back", a: to + Math.PI + (r() - .5) * .8, d: .4, s: 1.6, hop: .3, t: 0, f: to } : null; }   // after a bite: mostly sidestep or hop back, only sometimes run past   // bite and run past: no endless chewing on a standing player
@@ -6083,6 +6085,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     if (me.poison > 0 && me.hp > 0) { me.poison -= dt; me.hp -= 3 * dt / me.up("hp"); hpDraw(); }
     if (me.hp > 0 && me.hp < 100) { me.hurtT -= dt; if (me.hurtT < -4) { me.hp = Math.min(100, me.hp + dt * 4); hpDraw(); } }
   });
+  Object.assign(me, { hurtMob, say, tone, gainXP, spark, dropCoins, spawn, popNum, hpDraw, mobs, wl: { r } });
   return sizes.map(k => AN[k]);
 }
 
@@ -6152,7 +6155,7 @@ document.querySelector("main").appendChild(peg);
 const ghost = document.createElement("div"); ghost.id = "pegGhost"; ghost.hidden = true; ghost.innerHTML = PEG;
 const tip = document.createElement("div"); tip.id = "pegTip"; tip.hidden = true;
 const ov = document.createElement("div"); ov.id = "sv"; ov.hidden = true;
-ov.innerHTML = `<div class="hud" id="svHud"></div><div class="btns"><button id="svSnd" aria-label="Sound on/off" title="Sound">🔊</button><button id="svX" aria-label="Back to the map" title="Back to the map (Esc)">✕</button></div><div class="help">WASD move · LMB swing · MMB jab · RMB block · J fly · Esc map</div><div class="xh"></div><div class="joy" id="svJoy"><i></i></div><div class="load" id="svLoad">Loading…</div>`;
+ov.innerHTML = `<div class="hud" id="svHud"></div><div class="btns"><button id="svSnd" aria-label="Sound on/off" title="Sound">🔊</button><button id="svX" aria-label="Back to the map" title="Back to the map (Esc)">✕</button></div><div class="help">WASD move · LMB swing · MMB jab · RMB block · B break · N place · Y throw · Z rage · G chop · J fly · Esc map</div><div class="xh"></div><div class="joy" id="svJoy"><i></i></div><div class="load" id="svLoad">Loading…</div>`;
 document.body.append(ghost, tip, ov);
 ov.insertAdjacentHTML("beforeend", `<div class="nav"><canvas class="cmp" id="svCmp" width="88" height="88"></canvas><canvas class="mini" id="svMini" width="284" height="124"></canvas></div>`);
 // compass (turns with the camera, north up = -z) and the world map around the spot, corners rounded by 6 hexes
@@ -6278,6 +6281,12 @@ function toonify(scene) {
   };
   scene.traverse(o => { if (o.material) o.material = Array.isArray(o.material) ? o.material.map(conv) : conv(o.material); });
 }
+function voxState(i) {   // owner 11-06: what you changed in a hex (broken / placed blocks, felled trees and where their logs came to rest) is kept per hex
+  const key = "hexatlas-vox-" + i, V = { i, nat: 1, e: new Map(), t: new Map(), inv: 24 };
+  try { const s = JSON.parse(localStorage.getItem(key) || "null"); if (s) { for (const [k, d] of s.e || []) V.e.set(k, d); for (const t of s.t || []) V.t.set(t[0], t.slice(1)); } const iv = +localStorage.getItem("hexatlas-vox-inv"); if (iv >= 0 && localStorage.getItem("hexatlas-vox-inv") !== null) V.inv = iv; } catch (e) {}
+  V.save = () => { clearTimeout(V.st); V.st = setTimeout(() => { try { localStorage.setItem(key, JSON.stringify({ e: [...V.e], t: [...V.t].map(([k, p]) => [k, ...p]) })); localStorage.setItem("hexatlas-vox-inv", String(V.inv)); } catch (e) {} }, 600); };
+  return V;
+}
 function build(me, i) {
   const [name, country, admin] = D.regions[D.reg[i]], [lat, lon] = hexLL(i), b = hexBiome(i), r = rng(i * 2654435761 ^ hs(b.n));
   const td = TOD[b.t] || TOD.day, col = c => new T.Color(+("0x" + c)), K = Math.PI;
@@ -6300,17 +6309,15 @@ function build(me, i) {
   scene.add(new T.HemisphereLight(top.clone().lerp(hor, .5), col(b.g[0]).lerp(hor, .55), td[4] * K * .55));
   const dl = new T.DirectionalLight(col(td[2]), td[3] * K * .75); dl.position.copy(sunDir); scene.add(dl);
   // ground
-  const H0 = terrain(b, r), GS0 = 4000 / 220;
-  const H = (x, z) => {   // height of the drawn ground triangles, not the smooth formula: nothing floats above slopes (user, 11-01)
-    const fx = (x + 2000) / GS0, fz = (z + 2000) / GS0, ix = Math.floor(fx), iz = Math.floor(fz), u = fx - ix, v = fz - iz, x0 = -2000 + ix * GS0, z0 = -2000 + iz * GS0;
-    const ha = H0(x0, z0), hb = H0(x0, z0 + GS0), hd = H0(x0 + GS0, z0);
-    if (u + v <= 1) return ha + (hd - ha) * u + (hb - ha) * v;
-    const hc = H0(x0 + GS0, z0 + GS0); return hc + (hb - hc) * (1 - u) + (hd - hc) * (1 - v);
-  };
+  // owner 11-06: a voxel world. The land is 1 m blocks stacked to the hex's real terrain height, coloured by its biome; blocks can be
+  // broken (B) and placed (N) and stay that way per hex. Block tops sit on .5 steps, never level with the water at 0. Past the block radius one smooth sheet carries on.
+  const H0 = terrain(b, r), GS0 = 4000 / 220, VX = me.vox = voxState(i), VK = (cx, cz) => (cx + 4096) * 8192 + cz + 4096;
+  const top0 = (cx, cz) => Math.round(H0(cx + .5, cz + .5) - .5) + .5;
+  const H = (x, z) => { const cx = Math.floor(x), cz = Math.floor(z); return top0(cx, cz) + (VX.nat ? 0 : VX.e.get(VK(cx, cz)) || 0); };   // the top of the block column you stand on
   const gg = new T.PlaneGeometry(4000, 4000, 220, 220); gg.rotateX(-Math.PI / 2);
   const gp = gg.attributes.position, vc = [], g0 = col(b.g[0]), g1 = col(b.g[1] || b.g[0]), sand = col(b.w === "swamp" ? "4a4430" : "d8c8a0"), snow = col("f2f6fa");
   for (let k = 0; k < gp.count; k++) {
-    const x = gp.getX(k), z = gp.getZ(k), y = H(x, z); gp.setY(k, y);
+    const x = gp.getX(k), z = gp.getZ(k), y = H(x, z); gp.setY(k, H0(x, z) - 1.1);   // far sheet sits just under the blocks
     tmp.copy(g0).lerp(g1, clamp(.5 + .5 * Math.sin(x * .021 + z * .007) * Math.sin(z * .017 - x * .011) + (r() - .5) * .3, 0, 1));
     if (b.w && y < 1.4) tmp.lerp(sand, smooth(1.4, .6, y) * .8);
     if (b.sn && y > b.sn + 15 * Math.sin(x * .03) * Math.sin(z * .025)) tmp.copy(snow);
@@ -6318,7 +6325,60 @@ function build(me, i) {
   }
   gg.setAttribute("color", new T.Float32BufferAttribute(vc, 3)); gg.computeVertexNormals();
   const tex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const x = c.getContext("2d"); x.fillStyle = "#d8d8d8"; x.fillRect(0, 0, 256, 256); for (let k = 0; k < 5000; k++) { const v = 150 + r() * 105 | 0; x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(r() * 256, r() * 256, 1 + r() * 3, 1 + r() * 3); } const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(400, 400); t.anisotropy = 4; t.colorSpace = T.SRGBColorSpace; return t; })();
-  scene.add(new T.Mesh(gg, new T.MeshLambertMaterial({ vertexColors: true, map: tex })));
+  if (!toonG) { toonG = new T.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, T.RedFormat); toonG.minFilter = toonG.magFilter = T.NearestFilter; toonG.needsUpdate = true; }
+  const VC = 250, vmask = new Uint8Array(VC * VC), vmt = new T.DataTexture(vmask, VC, VC, T.RedFormat); vmt.minFilter = vmt.magFilter = T.NearestFilter; vmt.needsUpdate = true;
+  const farM = new T.MeshToonMaterial({ vertexColors: true, map: tex, gradientMap: toonG });   // toon already: toonify leaves it (and its mask) alone
+  farM.onBeforeCompile = s => { s.uniforms.vxM = { value: vmt }; s.vertexShader = s.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vWxz;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvWxz = (modelMatrix * vec4(transformed, 1.0)).xz;"); s.fragmentShader = s.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D vxM; varying vec2 vWxz;").replace("void main() {", "void main() {\nif (texture2D(vxM, (vWxz + 2000.0) / 4000.0).r > .5) discard;"); };   // hidden wherever block chunks are built
+  scene.add(new T.Mesh(gg, farM));
+  { // block chunks, 16 x 16 columns, built around you out to 8 chunks (128 m); a block's grid lines come from one tiny texture
+    const CH = 16, VR = 8, chunks = new Map(), stone = col("8b8781"), dirt = col("7a5a3c"), cT = new T.Color(), cS = new T.Color(), cD = new T.Color();
+    const btx = (() => { const c = document.createElement("canvas"); c.width = c.height = 16; const x = c.getContext("2d"); for (let a = 0; a < 16; a++) for (let d = 0; d < 16; d++) { const v = (a === 0 || d === 0) ? 192 : 214 + ((a * 7 + d * 13) % 5) * 8 + (((a * 31 + d * 17) >> 2) % 3) * 6; x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(a, d, 1, 1); } const t = new T.CanvasTexture(c); t.magFilter = T.NearestFilter; t.minFilter = T.LinearMipmapLinearFilter; t.anisotropy = 4; t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace; return t; })();
+    const cm = new T.MeshLambertMaterial({ vertexColors: true, map: btx });
+    const hn = (x, z) => { let h = (x * 374761393 + z * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    const colAt = (x, z, y) => {   // top, soil and deep colours of one column, the same rules as the old ground
+      cT.copy(g0).lerp(g1, clamp(.5 + .5 * Math.sin(x * .021 + z * .007) * Math.sin(z * .017 - x * .011) + (hn(x, z) - .5) * .3, 0, 1));
+      let kind = 0; if (b.w && y < 1.4) { cT.lerp(sand, smooth(1.4, .6, y) * .8); if (y < .9) kind = 1; }
+      if (b.sn && y > b.sn + 15 * Math.sin(x * .03) * Math.sin(z * .025)) { cT.copy(snow); kind = 2; }
+      if (y < -.9 && b.w) kind = 1;
+      cS.copy(kind === 1 ? cT : kind === 2 ? stone : cD.copy(dirt).lerp(cT, .25)); cD.copy(kind === 1 ? cT : stone).lerp(cT, .08);
+      const sh = .9 + hn(z, x) * .18; cT.multiplyScalar(sh);
+    };
+    const mk = (kx, kz) => {
+      const x0 = kx * CH, z0 = kz * CH, N = CH + 2, hs = new Float32Array(N * N), P = [], NR = [], U = [], C = [], I = [];
+      for (let a = 0; a < N; a++) for (let c = 0; c < N; c++) hs[a * N + c] = H(x0 + a - .5, z0 + c - .5);
+      const quad = (ox, oy, oz, e1x, e1y, e1z, e2x, e2y, e2z, nx, ny, nz, ua, va, cl) => { const o = P.length / 3; P.push(ox, oy, oz, ox + e1x, oy + e1y, oz + e1z, ox + e1x + e2x, oy + e1y + e2y, oz + e1z + e2z, ox + e2x, oy + e2y, oz + e2z); for (let q = 0; q < 4; q++) { NR.push(nx, ny, nz); C.push(cl.r, cl.g, cl.b); } U.push(0, 0, ua, 0, ua, va, 0, va); I.push(o, o + 1, o + 2, o, o + 2, o + 3); };
+      const side = (x, z, y, y2, edge, d) => {   // d: 0 +x, 1 -x, 2 +z, 3 -z
+        const lo = edge ? Math.min(y2, y - 3) : y2; if (lo >= y) return;
+        const seg = (ya, yb, cl) => { const h = yb - ya; if (h <= 0) return;
+          if (d === 0) quad(x + 1, ya, z, 0, h, 0, 0, 0, 1, 1, 0, 0, h, 1, cl); else if (d === 1) quad(x, ya, z, 0, 0, 1, 0, h, 0, -1, 0, 0, 1, h, cl);
+          else if (d === 2) quad(x, ya, z + 1, 1, 0, 0, 0, h, 0, 0, 0, 1, 1, h, cl); else quad(x, ya, z, 0, h, 0, 1, 0, 0, 0, 0, -1, h, 1, cl); };
+        const mid = Math.max(lo, y - 1); seg(mid, y, cS); seg(lo, mid, cD);
+      };
+      for (let a = 1; a <= CH; a++) for (let c = 1; c <= CH; c++) {
+        const x = x0 + a - 1, z = z0 + c - 1, y = hs[a * N + c]; colAt(x, z, y);
+        quad(x, y, z, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 1, cT);
+        side(x, z, y, hs[(a + 1) * N + c], a === CH, 0); side(x, z, y, hs[(a - 1) * N + c], a === 1, 1); side(x, z, y, hs[a * N + c + 1], c === CH, 2); side(x, z, y, hs[a * N + c - 1], c === 1, 3);
+      }
+      const g = new T.BufferGeometry(); g.setAttribute("position", new T.Float32BufferAttribute(P, 3)); g.setAttribute("normal", new T.Float32BufferAttribute(NR, 3)); g.setAttribute("uv", new T.Float32BufferAttribute(U, 2)); g.setAttribute("color", new T.Float32BufferAttribute(C, 3)); g.setIndex(I); g.computeBoundingSphere();
+      const m = new T.Mesh(g, cm); m.matrixAutoUpdate = false; return m;
+    };
+    const mkey = (kx, kz) => (kx + 512) * 1024 + kz + 512, ring = [];
+    for (let a = -VR; a <= VR; a++) for (let c = -VR; c <= VR; c++) if (a * a + c * c <= VR * VR) ring.push([a, c, a * a + c * c]);
+    ring.sort((u, v) => u[2] - v[2]);
+    const setMask = (kx, kz, v) => { const u = kx + 125, w = kz + 125; if (u >= 0 && w >= 0 && u < VC && w < VC) { vmask[w * VC + u] = v; vmt.needsUpdate = true; } };
+    const put = (kx, kz) => { const key = mkey(kx, kz), old = chunks.get(key); if (old) { scene.remove(old); old.geometry.dispose(); } const m = mk(kx, kz); scene.add(m); chunks.set(key, m); setMask(kx, kz, 255); };
+    const tick = (budget = 4) => {
+      const p = me.pos; if (!p) return; const kx = Math.floor(p.x / CH), kz = Math.floor(p.z / CH);
+      for (const [a, c] of ring) { if (budget <= 0) break; if (!chunks.has(mkey(kx + a, kz + c))) { put(kx + a, kz + c); budget--; } }
+      if ((VX.gc = (VX.gc || 0) + 1) % 30 === 0) for (const [key, m] of chunks) { const ax = Math.floor(key / 1024) - 512 - kx, az = key % 1024 - 512 - kz; if (ax * ax + az * az > (VR + 2) ** 2) { scene.remove(m); m.geometry.dispose(); chunks.delete(key); setMask(ax + kx, az + kz, 0); } }
+    };
+    const pend = new Set();
+    Object.assign(VX, { H, top0, VK, CH, tick, col: (x, z, y) => (colAt(x, z, y), y < -.9 || b.w && y < .9 ? cT.getHex() : cS.getHex()),
+      dirty: (cx, cz) => { for (const [a, c] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) pend.add(mkey(Math.floor((cx + a) / CH), Math.floor((cz + c) / CH))); },
+      flush: () => { for (const key of pend) if (chunks.has(key)) put(Math.floor(key / 1024) - 512, key % 1024 - 512); pend.clear(); },
+      edit: (cx, cz, d, defer) => { const k = VK(cx, cz), v = (VX.e.get(k) || 0) + d; if (v < -12 || v > 40) return false; v ? VX.e.set(k, v) : VX.e.delete(k); VX.dirty(cx, cz); if (!defer) VX.flush(); VX.save(); return true; } });
+    me.ps.push(() => tick());
+  }
   if (b.w) { const w = new T.Mesh(new T.PlaneGeometry(4000, 4000), new T.MeshPhongMaterial({ color: col(b.wc || "3d6a7a"), transparent: true, opacity: .86, shininess: 90, specular: 0x666666 })); w.rotation.x = -Math.PI / 2; scene.add(w); }
   // vegetation
   const climb = me.trees = [], tgrid = me.tgrid = new Map(), RS = 720, COV = Math.min(2000, Math.max(620, (b.f || 700) * 1.05 + 600)), SEC = Math.max(400, COV / 3), M = new T.Matrix4(), q = new T.Quaternion(), eu = new T.Euler(), sv3 = new T.Vector3(), pv = new T.Vector3(), mats = {}, cmem = {};
@@ -6376,7 +6436,7 @@ function build(me, i) {
       m.computeBoundingSphere(); scene.add(m);
     }
   }
-  me.scene = scene; me.T = T; me.H = H;
+  me.scene = scene; me.T = T; me.H = H; VX.nat = 0;   // plants were laid out on the untouched land, so every tree keeps its number; your edits count from here
   if (climb.length) { const vg = new T.CylinderGeometry(.42, .5, 1, 7, 1, true), vm = new T.InstancedMesh(vg, new T.MeshLambertMaterial({ color: 0x3f7a2a, flatShading: true }), climb.length);
     climb.forEach(([x, y, z, ht], j) => vm.setMatrixAt(j, M.compose(pv.set(x, y + ht * .42, z), q.identity(), sv3.set(1, ht * .84, 1)))); vm.computeBoundingSphere(); scene.add(vm); }
   // particles
@@ -6434,6 +6494,7 @@ function build(me, i) {
     const run = k.ShiftLeft || k.ShiftRight || j.run, crouch = (k.ControlLeft || k.ControlRight) && !me.slide;
     me.runNow = mv && run && !me.jy; if (mv) me.mdir = [mx, mz]; me.crouching = crouch;
     const spd = (me.climbing ? 0 : 1) * (run && !crouch ? 13 : 5.5) * (me.up ? me.up("spd") : 1) * (crouch ? .5 : 1) * (me.block ? .45 : 1) * (me.draw != null ? .55 : 1) * (me.lmb && me.lmb.charging ? .5 : 1) * (me.atk && me.atk.kind !== "jab" ? .9 : 1) * (me.hp > 0 ? 1 : 0) * (me.flying ? 9 : 1);
+    const px0 = pos.x, pz0 = pos.z;
     if (me.flying) {                                     // J: fly straight over land, water, trees and the gates; nothing blocks you
       const kvf = 1 - Math.exp(-dt * 7), tvx = mv ? mx * spd : 0, tvz = mv ? mz * spd : 0;
       me.vx = (me.vx || 0) + (tvx - (me.vx || 0)) * kvf; me.vz = (me.vz || 0) + (tvz - (me.vz || 0)) * kvf;
@@ -6455,6 +6516,7 @@ function build(me, i) {
       else if (H(nx, pos.z) > -.6) pos.x = nx; else if (H(pos.x, nz) > -.6) pos.z = nz;   // slide along the shore instead of stopping dead
       me.walkT += dt * Math.hypot(me.vx, me.vz) * 1.6;
     }
+    if (!me.flying && !me.mantle && !me.perch) { const h0 = H(px0, pz0) + (me.jy || 0) + 1.05; if (H(pos.x, pos.z) > h0) { if (H(pos.x, pz0) <= h0) pos.z = pz0; else if (H(px0, pos.z) <= h0) pos.x = px0; else { pos.x = px0; pos.z = pz0; } me.vx *= .3; me.vz *= .3; } }   /* voxel walls: a step of one block walks up, two need a jump, more need Tab */
     if (me.flying) { const uy = (k.Space ? 1 : 0) - (k.ControlLeft || k.ControlRight ? 1 : 0); me.flyY = clamp((me.flyY ?? pos.y) + uy * (run ? 130 : 48) * dt, H(pos.x, pos.z) + 1.4, 1500); me.by = me.flyY; me.jy = 0; me.vy = 0; }   /* god mode altitude: SPACE up, CTRL down, SHIFT fast (owner, 11-01) */
     else me.by = lerp(me.by ?? pos.y, b.w ? Math.max(H(pos.x, pos.z), -.3) : H(pos.x, pos.z), 1 - Math.exp(-dt * 12));   /* only lands with water hold you at its surface; dry valleys used to leave you floating */
     { // Tab: quick climb onto what is in front, then stand on it until you step off (user, 11-01)
@@ -6486,7 +6548,8 @@ function build(me, i) {
     pix.render(scene);
   };
   me.raf = requestAnimationFrame(loop); me.loop = loop;   // me.loop: tests can step frames while the tab is hidden
-  if (FLYON) me.fly();   /* the owner already pressed J: every new area opens in god mode */
+  if (FLYON) me.fly();
+  VX.tick(70); try { window.hxRestore && window.hxRestore(me); } catch (e) { console.warn(e); }   // the nearest blocks at once; felled trees stay felled   /* the owner already pressed J: every new area opens in god mode */
   window.SV.last = { biome: b.n, hex: i, lat, lon };
 }
 function close() {
@@ -6496,7 +6559,7 @@ function close() {
 }
 $("svX").onclick = close;
 $("svSnd").onclick = () => { const me = S3; if (!me || !me.ac) return; me.soundOn = !me.soundOn; me.soundOn ? (me.amb && !me.stop && me.amb(), me.ac.resume()) : me.ac.suspend(); $("svSnd").textContent = me.soundOn ? "🔊" : "🔇"; };
-addEventListener("keydown", e => { if (!S3) return; if (e.code === "Space" && !e.repeat && !S3.flying) { const nw = e.timeStamp; if (nw - (S3.spT || -1e4) < 320) { S3.spT = -1e4; if (S3.jy < 1.2) { S3.jy = S3.vy = 0; } S3.roll && S3.roll(); } else { S3.spT = nw; S3.jump && S3.jump(); } } if ((e.code === "ShiftLeft" || e.code === "ShiftRight") && !e.repeat && e.timeStamp - (S3.shU ?? -1e4) < 300) { S3.shU = -1e4; S3.act && S3.act("q"); }   /* dash: let go of Shift and press it again quickly, even while running */ if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat && !S3.flying) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyJ" && !e.repeat) { S3.fly && S3.fly(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE" || e.key === "e" || e.key === "E") S3.talk && S3.talk(); else if (e.code === "KeyF" || e.key === "f" || e.key === "F") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyT") S3.spinAttack && S3.spinAttack(); else if (e.code === "KeyX" && !e.repeat) S3.turn && S3.turn(Math.PI / 2); else if (e.code === "KeyV" && !e.repeat) S3.turn && S3.turn(-Math.PI / 2); else if (e.code === "KeyK" || e.code === "Backquote" || e.key === "\"") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.climbTab && S3.climbTab(); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
+addEventListener("keydown", e => { if (!S3) return; if (!e.repeat && window.hxKey && window.hxKey(e.code, S3)) { e.preventDefault(); e.stopImmediatePropagation(); return; } if (e.code === "Space" && !e.repeat && !S3.flying) { const nw = e.timeStamp; if (nw - (S3.spT || -1e4) < 320) { S3.spT = -1e4; if (S3.jy < 1.2) { S3.jy = S3.vy = 0; } S3.roll && S3.roll(); } else { S3.spT = nw; S3.jump && S3.jump(); } } if ((e.code === "ShiftLeft" || e.code === "ShiftRight") && !e.repeat && e.timeStamp - (S3.shU ?? -1e4) < 300) { S3.shU = -1e4; S3.act && S3.act("q"); }   /* dash: let go of Shift and press it again quickly, even while running */ if ((e.code === "ControlLeft" || e.code === "ControlRight") && !e.repeat && !S3.flying) { S3.crouchDown && S3.crouchDown(); } if (e.code === "KeyC" && !e.repeat) { S3.turn && S3.turn(); e.preventDefault(); } if (e.code === "KeyJ" && !e.repeat) { S3.fly && S3.fly(); e.preventDefault(); } if (e.code === "KeyH" && !e.repeat) ov.querySelector(".help").classList.toggle("off"); if (!e.repeat && S3.act) { if (e.code === "KeyE" || e.key === "e" || e.key === "E") S3.talk && S3.talk(); else if (e.code === "KeyF" || e.key === "f" || e.key === "F") S3.tabDown && S3.tabDown(); else if (e.code === "KeyR") S3.act("spin"); else if (e.code === "KeyQ") { S3.block = true; S3.blockT = S3.tnow; } else if (e.code === "Digit1") S3.setMelee && S3.setMelee("sword"); else if (e.code === "Digit3") S3.setMelee && S3.setMelee("axe"); else if (e.code === "Digit4") S3.setMelee && S3.setMelee("hammer"); else if (e.code === "Digit5") S3.setMelee && S3.setMelee("spear"); else if (e.code === "Digit2") S3.setWeapon && S3.setWeapon("bow"); else if (e.code === "KeyT") S3.spinAttack && S3.spinAttack(); else if (e.code === "KeyX" && !e.repeat) S3.turn && S3.turn(Math.PI / 2); else if (e.code === "KeyV" && !e.repeat) S3.turn && S3.turn(-Math.PI / 2); else if (e.code === "KeyK" || e.code === "Backquote" || e.key === "\"") S3.toggleTree && S3.toggleTree(); } if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) S3.climbTab && S3.climbTab(); } if (e.key === "Escape") close(); else S3.keys[e.code] = 1; if (/^Arrow|Space/.test(e.code)) e.preventDefault(); e.stopImmediatePropagation(); }, true);
 addEventListener("keyup", e => { if (!S3) return; if (e.code === "ShiftLeft" || e.code === "ShiftRight") S3.shU = e.timeStamp; S3.keys[e.code] = 0; if (e.code === "Tab") e.preventDefault(); if (e.code === "KeyF" || e.key === "f" || e.key === "F") S3.tabUp && S3.tabUp();   /* letters work on any keyboard layout */ if (e.code === "KeyQ") S3.block = false; e.stopImmediatePropagation(); }, true);
 addEventListener("blur", () => { if (S3) S3.keys = {}; });
 addEventListener("resize", () => { const me = S3; if (!me || !me.R) return; me.R.setSize(innerWidth, innerHeight); me.pix.size(); me.cam.aspect = innerWidth / innerHeight; me.cam.updateProjectionMatrix(); });
@@ -6641,50 +6704,241 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
 </script>
 <!--SV-END-->
 <script>
-// ---- tree felling: G chops the tree in front of you (3 blows); it falls as a real rigid body (cannon-es physics, jsdelivr, loaded on first chop) ----
+// ---- voxel physics + combat (owner 11-06). cannon-es 0.20.0 rigid bodies on the block ground: felled trees, broken blocks, thrown blocks,
+//      the bodies of the slain. Felled trees and changed blocks stay that way per hex (saved logs rest where they fell).
+//      G chop (every sword swing chops too) · B break a block · N place one · Y throw one · Z rage burst (Earthshatter) when the rage bar is full.
+//      Fights: every bite winds up (red !), spitters lob venom from range (green !, parry it back), chargers paw then rush in a line (orange !!,
+//      a wall or tree stuns them), combo ranks D..SS raise kill XP, every 12 kills an ambush with a gold champion. ----
 (() => {
   let C = null, loading = null;
-  const lib = () => C ? Promise.resolve(C) : loading || (loading = import("https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js").then(m => (C = m)));
+  const lib = () => C ? Promise.resolve(C) : loading || (loading = import("https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js").then(m => (C = m)).catch(e => { loading = null; throw e; }));
+  const cur = () => window.SV && SV.S3;
+  const PS = 8;
   const world = me => {
     if (me.pw) return me.pw;
-    const w = new C.World({ gravity: new C.Vec3(0, -9.82, 0) }); w.broadphase = new C.SAPBroadphase(w); w.allowSleep = true;
-    w.defaultContactMaterial.friction = .6; w.defaultContactMaterial.restitution = .15;
-    const bodies = []; me.pw = { w, bodies, grounds: new Map() };
-    me.phys = dt => { if (!dt) return; w.step(1 / 60, dt, 4); for (const [b, g] of bodies) { g.position.copy(b.position); g.quaternion.copy(b.quaternion); } };
-    return me.pw;
+    const w = new C.World({ gravity: new C.Vec3(0, -15, 0) }); w.broadphase = new C.SAPBroadphase(w); w.allowSleep = true; w.solver.iterations = 12;
+    w.defaultContactMaterial.friction = .55; w.defaultContactMaterial.restitution = .12;
+    const P = me.pw = { w, bodies: [], patches: new Map(), fr: 0 }, T = me.T, q = new T.Quaternion(), v = new T.Vector3();
+    me.phys = dt => {
+      if (!dt) return; w.step(1 / 60, dt, 5); P.fr++;
+      for (const e of P.bodies) { const b = e.b; q.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w); e.o.quaternion.copy(q); v.copy(e.off).applyQuaternion(q); e.o.position.set(b.position.x + v.x, b.position.y + v.y, b.position.z + v.z);
+        const g = me.H(b.position.x, b.position.z); if (b.position.y < g - 3) { b.position.y = g + 1.5; b.velocity.set(0, 0, 0); } }   // never lost under the blocks
+      if (P.fr % 12 === 0) for (const e of P.bodies) if (e.b.sleepState !== C.Body.SLEEPING) around(me, e.b.position.x, e.b.position.z);
+      if (P.fr % 60 === 0) poses(me);
+    };
+    return P;
   };
-  const ground = (me, x, z) => {   // a small heightfield of the real ground around the tree, so trunks land and roll on the slope
-    const P = me.pw, key = Math.round(x / 30) + "," + Math.round(z / 30); if (P.grounds.has(key)) return;
-    const n = 25, st = 2.5, x0 = Math.round(x / 30) * 30 - n * st / 2, z0 = Math.round(z / 30) * 30 - n * st / 2, data = [];
-    for (let i = 0; i <= n; i++) { const row = []; for (let j = 0; j <= n; j++) row.push(me.H(x0 + i * st, z0 + (n - j) * st)); data.push(row); }
-    const hb = new C.Body({ mass: 0 }); hb.addShape(new C.Heightfield(data, { elementSize: st }));
-    hb.quaternion.setFromEuler(-Math.PI / 2, 0, 0); hb.position.set(x0, 0, z0 + n * st); P.w.addBody(hb); P.grounds.set(key, hb);
+  const patch = (me, px, pz) => {   // 8 x 8 block columns as static boxes, made when a body comes near
+    const P = me.pw, key = px * 4096 + pz; if (P.patches.has(key)) return; const hb = new C.Body({ mass: 0 });
+    for (let a = 0; a < PS; a++) for (let c = 0; c < PS; c++) { const cx = px * PS + a, cz = pz * PS + c; hb.addShape(new C.Box(new C.Vec3(.5, 1.5, .5)), new C.Vec3(cx + .5, me.H(cx + .5, cz + .5) - 1.5, cz + .5)); }
+    P.w.addBody(hb); P.patches.set(key, hb);
   };
-  const unsolid = (me, t) => { const ck = Math.floor(t.x / 8) * 4096 + Math.floor(t.z / 8), a = me.tgrid && me.tgrid.get(ck); if (!a) return; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - t.x) < .01 && Math.abs(a[i + 1] - t.z) < .01) { a.splice(i, 4); return; } };
-  const fell = (me, t) => {
-    const T = me.T, P = world(me); ground(me, t.x, t.z); unsolid(me, t);
-    const g = new T.Group(), b0 = new T.Matrix4().makeTranslation(t.x, t.y + t.h / 2, t.z), inv = b0.clone().invert(), im = new T.Matrix4(), zero = new T.Matrix4().makeScale(0, 0, 0);
-    for (const [m, j] of t.ms) { m.getMatrixAt(j, im); const c = new T.Mesh(m.geometry, m.material); c.matrixAutoUpdate = false; c.matrix.multiplyMatrices(inv, im); g.add(c); m.setMatrixAt(j, zero); m.instanceMatrix.needsUpdate = true; }
+  const around = (me, x, z) => { const px = Math.floor(x / PS), pz = Math.floor(z / PS); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) patch(me, px + a, pz + c); };
+  const repatch = (me, cx, cz) => { const P = me.pw; if (!P) return; const px = Math.floor(cx / PS), pz = Math.floor(cz / PS), key = px * 4096 + pz, hb = P.patches.get(key); if (hb) { P.w.removeBody(hb); P.patches.delete(key); patch(me, px, pz); }
+    for (const e of P.bodies) if (Math.hypot(e.b.position.x - cx - .5, e.b.position.z - cz - .5) < 3) e.b.wakeUp(); };
+  const poses = me => { const V = me.vox; let ch = 0; for (const e of me.pw.bodies) if (e.idx >= 0) { const b = e.b, p = [b.position.x, b.position.y, b.position.z, b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w].map(u => Math.round(u * 1000) / 1000), o = V.t.get(e.idx); if (!o || o.some((u, k) => Math.abs(u - p[k]) > .01)) { V.t.set(e.idx, p); ch = 1; } } if (ch) V.save(); };
+  // ---- trees ----
+  const unsolid = (me, t) => { const ck = Math.floor(t.x / 8) * 4096 + Math.floor(t.z / 8), a = me.tgrid && me.tgrid.get(ck); if (a) for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - t.x) < .01 && Math.abs(a[i + 1] - t.z) < .01) { a.splice(i, 4); break; }
+    if (me.trees) for (let i = me.trees.length - 1; i >= 0; i--) if (Math.abs(me.trees[i][0] - t.x) < .01 && Math.abs(me.trees[i][2] - t.z) < .01) me.trees.splice(i, 1); };
+  const hide = (me, t) => {   // takes the tree's instances out of the forest (keeps their matrices for the log)
+    if (t.saved) return; const T = me.T, zero = new T.Matrix4().makeScale(0, 0, 0); t.saved = [];
+    for (const [m, j] of t.ms) { const im = new T.Matrix4(); m.getMatrixAt(j, im); t.saved.push([m, im]); m.setMatrixAt(j, zero); m.instanceMatrix.needsUpdate = true; }
+    unsolid(me, t); t.down = true;
+  };
+  const fell = (me, t, pose) => {
+    const T = me.T, P = world(me); hide(me, t);
+    const g = new T.Group(), inv = new T.Matrix4().makeTranslation(t.x, t.y + t.h / 2, t.z).invert();
+    for (const [m, im] of t.saved) { const c = new T.Mesh(m.geometry, m.material); c.matrixAutoUpdate = false; c.matrix.multiplyMatrices(inv, im); g.add(c); }
     g.position.set(t.x, t.y + t.h / 2, t.z); me.scene.add(g);
-    const r = Math.max(.25, t.h * .025), body = new C.Body({ mass: 60 * t.h, linearDamping: .05, angularDamping: .2 });
-    body.addShape(new C.Box(new C.Vec3(r, t.h / 2, r)));                                  // trunk
-    body.addShape(new C.Sphere(t.h * .16), new C.Vec3(0, t.h * .32, 0));                    // crown
-    body.position.set(t.x, t.y + t.h / 2 + .05, t.z); P.w.addBody(body); P.bodies.push([body, g]);
-    const ax = t.x - me.pos.x, az = t.z - me.pos.z, al = Math.hypot(ax, az) || 1, fx = ax / al, fz = az / al, top = new C.Vec3(t.x, t.y + t.h * .9, t.z);
-    body.applyImpulse(new C.Vec3(fx * body.mass * 1.6, 0, fz * body.mass * 1.6), top);   // it tips away from the axe
-    t.down = true;
+    const r = Math.max(.25, t.h * .025), body = new C.Body({ mass: 60 * t.h, linearDamping: .05, angularDamping: .25 });
+    body.addShape(new C.Box(new C.Vec3(r, t.h / 2, r))); body.addShape(new C.Sphere(t.h * .16), new C.Vec3(0, t.h * .32, 0));
+    const idx = me.cut.indexOf(t);
+    if (pose) { body.position.set(pose[0], pose[1], pose[2]); body.quaternion.set(pose[3], pose[4], pose[5], pose[6]); P.w.addBody(body); body.sleep(); }
+    else {
+      body.position.set(t.x, t.y + t.h / 2 + .05, t.z); P.w.addBody(body);
+      const ax = t.x - me.pos.x, az = t.z - me.pos.z, al = Math.hypot(ax, az) || 1;
+      body.applyImpulse(new C.Vec3(ax / al * body.mass * 1.6, 0, az / al * body.mass * 1.6), new C.Vec3(t.x, t.y + t.h * .9, t.z));   // tips away from the blade
+      me.vox.t.set(idx, [t.x, t.y + t.h / 2, t.z, 0, 0, 0, 1]); me.vox.save();
+    }
+    around(me, body.position.x, body.position.z); P.bodies.push({ b: body, o: g, off: new T.Vector3(), idx });
   };
-  const chop = (face, kind) => {   // face: the sword swing's direction (me.face); none = where you look (G)
-    const me = window.SV && SV.S3; if (!me || !me.cut || !me.pos) return;
+  const chop = (face, kind) => {
+    const me = cur(); if (!me || !me.cut || !me.pos) return;
     const fx = face != null ? Math.sin(face) : -Math.sin(me.yaw), fz = face != null ? Math.cos(face) : -Math.cos(me.yaw); let best = null, bd = face != null ? 3.6 : 3.2;
     for (const t of me.cut) { if (t.down) continue; const dx = t.x - me.pos.x, dz = t.z - me.pos.z, d = Math.hypot(dx, dz); if (d < bd && (dx * fx + dz * fz) / (d || 1) > .3) { bd = d; best = t; } }
     if (!best) return;
-    best.hits += /slam|whirl|heavy|charge/.test(kind || "") ? 2 : 1; me.shake = Math.max(me.shake || 0, .14); me.stopT = Math.max(me.stopT || 0, .03);   // the blade bites: a small jolt
-    lib().then(() => { if (best.hits >= 3 && !best.down && SV.S3 === me) fell(me, best); });
+    best.hits += /slam|whirl|heavy|charge/.test(kind || "") ? 2 : 1; me.shake = Math.max(me.shake || 0, .14); me.stopT = Math.max(me.stopT || 0, .03); chips(me, new me.T.Vector3(best.x, best.y + 1.2, best.z), 0x8a6a40, 5);
+    lib().then(() => { if (best.hits >= 3 && !best.down && cur() === me) fell(me, best); });
     return best;
   };
   window.hxChop = chop;
-  addEventListener("keydown", e => { if (e.code === "KeyG" && !e.repeat) chop(); }, true);
+  // ---- blocks: aim with the crosshair ----
+  const aim = me => {
+    const T = me.T, d = new T.Vector3(); me.cam.getWorldDirection(d); const o = me.cam.position; let prev = null;
+    for (let s = 0; s < (me.dist || 2.2) + 7; s += .08) { const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s, cx = Math.floor(x), cz = Math.floor(z);
+      if (Math.hypot(x - me.pos.x, z - me.pos.z) > 6.5) { if (s > (me.dist || 2.2) + 1) break; continue; }
+      if (y < me.H(x, z)) return { cx, cz, prev: prev && (prev[0] !== cx || prev[1] !== cz) ? prev : null }; prev = [cx, cz]; }
+    return null;
+  };
+  const junkMat = new Map(), boxG = {}, mat = (me, c) => junkMat.get(c) || (junkMat.set(c, new me.T.MeshLambertMaterial({ color: c, flatShading: true })), junkMat.get(c));
+  const geo = (me, s) => boxG[s] || (boxG[s] = new me.T.BoxGeometry(s, s, s));
+  const junk = (me, x, y, z, s, c, kind) => {   // a block as a rigid body
+    const P = world(me), o = new me.T.Mesh(geo(me, s), mat(me, c)); me.scene.add(o);
+    const b = new C.Body({ mass: s * s * s * 40, linearDamping: .02, angularDamping: .1 }); b.addShape(new C.Box(new C.Vec3(s / 2, s / 2, s / 2))); b.position.set(x, y, z); P.w.addBody(b);
+    const e = { b, o, off: new me.T.Vector3(), idx: -1, kind, t0: me.tnow, hit: new Set() }; P.bodies.push(e); around(me, x, z);
+    const js = P.bodies.filter(u => u.kind); if (js.length > 70) drop(me, js[0]);
+    return e;
+  };
+  const drop = (me, e) => { const P = me.pw; P.w.removeBody(e.b); me.scene.remove(e.o); P.bodies.splice(P.bodies.indexOf(e), 1); };
+  const breakBlock = me => {
+    const a = aim(me), V = me.vox; if (!a) return; const top = me.H(a.cx + .5, a.cz + .5);
+    if (!V.edit(a.cx, a.cz, -1)) { me.say && me.say("Too deep to dig here", 900); return; }
+    me.tone && me.tone(180, .06); me.shake = Math.max(me.shake || 0, .08); const c = V.col(a.cx, a.cz, top);
+    chips(me, new me.T.Vector3(a.cx + .5, top, a.cz + .5), c, 6);
+    for (const t of me.cut || []) if (!t.down && Math.abs(t.x - a.cx - .5) < 1 && Math.abs(t.z - a.cz - .5) < 1) { t.hits = 3; lib().then(() => cur() === me && !t.down && fell(me, t)); }   // dig under a tree: down it comes
+    lib().then(() => { if (cur() !== me) return; world(me); repatch(me, a.cx, a.cz); const e = junk(me, a.cx + .5, top - .5 + .05, a.cz + .5, .9, c, "debris"); e.b.velocity.set((Math.random() - .5) * 3, 5, (Math.random() - .5) * 3); e.b.angularVelocity.set(Math.random() * 4, Math.random() * 4, Math.random() * 4); })
+      .catch(() => { V.inv++; V.save(); });
+  };
+  const place = me => {
+    const a = aim(me), V = me.vox; if (!a) return; if (V.inv <= 0) { me.say && me.say("No blocks: break some (B) and pick them up", 1200); return; }
+    const [cx, cz] = a.prev || [a.cx, a.cz]; if (!V.edit(cx, cz, 1)) return; V.inv--; V.save(); me.tone && me.tone(440, .05); repatch(me, cx, cz);
+  };
+  const throwBlock = me => {
+    const V = me.vox; if (V.inv <= 0) { me.say && me.say("No blocks to throw: break some (B)", 1100); return; }
+    lib().then(() => { if (cur() !== me) return; V.inv--; V.save(); const T = me.T, d = new T.Vector3(); me.cam.getWorldDirection(d);
+      const p = me.pos, e = junk(me, p.x + d.x * .9, p.y + 1.6, p.z + d.z * .9, .5, me.vox.col(Math.floor(p.x), Math.floor(p.z), p.y), "thrown");
+      e.b.velocity.set(d.x * 26, d.y * 26 + 3.5, d.z * 26); e.b.angularVelocity.set(8, 3, 5); me.tone && me.tone(520, .05); me.atkT = me.tnow; });
+  };
+  // ---- the slain fall as bodies; voxel chips on every hit ----
+  const rag = (me, m, from) => {
+    if (!C) return; const T = me.T, R0 = m.root; if (m.bar) { R0.remove(m.bar); m.bar = null; }
+    const bb = new T.Box3().setFromObject(R0), sz = bb.getSize(new T.Vector3()), c = bb.getCenter(new T.Vector3()); if (!isFinite(sz.x) || sz.x > 40 || sz.y > 40) return;
+    const P = world(me), body = new C.Body({ mass: Math.max(8, sz.x * sz.y * sz.z * 90), linearDamping: .05, angularDamping: .3 });
+    body.addShape(new C.Box(new C.Vec3(Math.max(.12, sz.x * .38), Math.max(.12, sz.y * .38), Math.max(.12, sz.z * .38)))); body.position.set(c.x, c.y, c.z);
+    body.quaternion.set(R0.quaternion.x, R0.quaternion.y, R0.quaternion.z, R0.quaternion.w);
+    const off = R0.position.clone().sub(c).applyQuaternion(R0.quaternion.clone().invert()), dx = R0.position.x - (from ? from.x : me.pos.x), dz = R0.position.z - (from ? from.z : me.pos.z), dl = Math.hypot(dx, dz) || 1, k = m.boss ? 4 : 7;
+    body.velocity.set(dx / dl * k, 4.5, dz / dl * k); body.angularVelocity.set((Math.random() - .5) * 8, (Math.random() - .5) * 4, (Math.random() - .5) * 8);
+    P.w.addBody(body); P.bodies.push({ b: body, o: R0, off, idx: -1, rag: m }); m.rag = body; around(me, c.x, c.z);
+  };
+  const chipL = [];
+  const chips = (me, p, c, n) => { if (!me.scene) return; for (let i = 0; i < n; i++) { const o = new me.T.Mesh(geo(me, .14), mat(me, c)); o.position.copy(p); me.scene.add(o); chipL.push({ me, o, v: new me.T.Vector3((Math.random() - .5) * 6, 3 + Math.random() * 4, (Math.random() - .5) * 6), t: 0 }); } };
+  const colOf = m => { let c = 0x8a5030; m.root.traverse(o => { if (c === 0x8a5030 && o.material && o.material.color) c = o.material.color.getHex(); }); return c; };
+  // ---- tells: a "!" over a fighter about to strike ----
+  const tells = [];
+  const tele = (me, m, d, txt = "!", color = "#ff3b2e") => { const el = document.createElement("div"); el.textContent = txt; el.style.cssText = `position:absolute;z-index:40;pointer-events:none;font:900 30px system-ui,sans-serif;color:${color};text-shadow:0 0 6px #000,0 2px 0 #000;transform:translate(-50%,-100%)`; (document.getElementById("sv") || document.body).appendChild(el); tells.push({ me, m, el, t: d, d }); me.tone && me.tone(color === "#ff3b2e" ? 980 : 640, .03); };
+  const hurtMe = (me, v, who) => {
+    if (me.hp <= 0) return; me.hp -= v / (me.up ? me.up("hp") : 1); me.hurtT = 1; me.hpDraw && me.hpDraw(); const hu = document.getElementById("svHurt"); if (hu) { hu.style.opacity = .55; setTimeout(() => hu.style.opacity = 0, 180); }
+    me.shake = Math.max(me.shake || 0, .35);
+    if (me.hp <= 0) { me.say && me.say(`Killed by a ${who}`, 1500); setTimeout(() => { if (cur() !== me) return; me.hp = 100; me.pos.set(me.sx || 0, me.H(me.sx || 0, me.sz || 0), me.sz || 0); (me.mobs || []).forEach(x => { x.angry = 0; }); me.hpDraw && me.hpDraw(); }, 0); }
+  };
+  const solid = (me, x, z) => { const L = me.tgrid && me.tgrid.get(Math.floor(x / 8) * 4096 + Math.floor(z / 8)); if (L) for (let q = 0; q < L.length; q += 4) if (Math.hypot(x - L[q], z - L[q + 1]) < L[q + 2] + .5) return true; return false; };
+  const RANK = [[30, "SS", 1], [22, "S", .8], [15, "A", .6], [10, "B", .45], [6, "C", .3], [3, "D", .15]];
+  const rankOf = me => me.tnow - (me.chainT ?? -9) > 2 ? null : RANK.find(r => (me.chain || 0) >= r[0]) || null;
+  const shatter = me => {   // Z: rage burst - the ground breaks in a ring, everything near is hurled away
+    const T = me.T, p = me.pos, V = me.vox; me.rage = 0; me.shake = .7; me.stopT = .12; me.tone && (me.tone(60, .35), me.tone(130, .2)); me.say && me.say("EARTHSHATTER!", 900);
+    const ring = new T.Mesh(new T.RingGeometry(.5, 1.2, 40), new T.MeshBasicMaterial({ color: 0xff8a30, transparent: true, side: T.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(p.x, me.H(p.x, p.z) + .2, p.z); me.scene.add(ring); me.fx.push({ o: ring, t: 0, d: .55, s: 8 });
+    for (const m of me.mobs || []) { if (m.dead) continue; const R0 = m.root, dx = R0.position.x - p.x, dz = R0.position.z - p.z, d = Math.hypot(dx, dz); if (d > 10) continue;
+      me.hurtMob(m, 45 * (1 + (me.lvlB || 0)), p, true); if (!m.dead) { m.stun = Math.max(m.stun || 0, 1.8); const k = (10 - d) * .5 / (d || 1); R0.position.x += dx * k; R0.position.z += dz * k; } }
+    const cells = []; for (let n = 0; n < 34; n++) { const a = Math.random() * 6.28, d = 2.4 + Math.random() * 5, cx = Math.floor(p.x + Math.cos(a) * d), cz = Math.floor(p.z + Math.sin(a) * d); if ((V.e.get(V.VK(cx, cz)) || 0) <= -3) continue; const top = me.H(cx + .5, cz + .5); if (V.edit(cx, cz, -1, true)) cells.push([cx, cz, top]); }
+    V.flush();
+    lib().then(() => { if (cur() !== me) return; world(me); for (const [cx, cz, top] of cells) { repatch(me, cx, cz); const e = junk(me, cx + .5, top + .1, cz + .5, .9, V.col(cx, cz, top), "debris"); const dx = cx + .5 - p.x, dz = cz + .5 - p.z, dl = Math.hypot(dx, dz) || 1; e.b.velocity.set(dx / dl * 4, 7 + Math.random() * 5, dz / dl * 4); e.b.angularVelocity.set(Math.random() * 9, Math.random() * 9, Math.random() * 9); } });
+  };
+  window.hxKey = (code, me) => {
+    if (!me || !me.pos || me.hp <= 0 && code !== "KeyG") return false;
+    if (code === "KeyG") { chop(); return true; }
+    if (code === "KeyB") { breakBlock(me); return true; }
+    if (code === "KeyN") { place(me); return true; }
+    if (code === "KeyY") { throwBlock(me); return true; }
+    if (code === "KeyZ") { if ((me.rage || 0) >= 100) shatter(me); else me.say && me.say(`Rage ${Math.floor(me.rage || 0)}% - land hits to fill it`, 900); return true; }
+    return false;
+  };
+  // ---- per land: restore what you changed, then run the fight extras every frame ----
+  window.hxRestore = me => {
+    const V = me.vox; if (!V) return;
+    const keep = [...V.t]; for (const [idx] of keep) { const t = me.cut && me.cut[idx]; if (t) hide(me, t); }   // felled trees never stand up again
+    lib().then(() => { if (cur() !== me) return; world(me); for (const [idx, pose] of keep) { const t = me.cut && me.cut[idx]; if (t) fell(me, t, pose); } }).catch(() => {});
+    me.rage = 0; me.tele = (m, d, txt, c) => tele(me, m, d, txt, c); me.unrag = m => { const P = me.pw; if (!P) return; const e = P.bodies.find(u => u.rag === m); if (e) { P.w.removeBody(e.b); P.bodies.splice(P.bodies.indexOf(e), 1); } };
+    me.onHit = (m, dmg, crit) => { me.rage = Math.min(100, (me.rage || 0) + (crit ? 8 : 4)); me.rageT = me.tnow; chips(me, m.root.position.clone().setY(m.root.position.y + .8), colOf(m), crit ? 7 : 3); };
+    me.onKill = (m, from, heavy) => {
+      me.rage = Math.min(100, (me.rage || 0) + 12); chips(me, m.root.position.clone().setY(m.root.position.y + .8), colOf(m), 14);
+      const rk = rankOf(me); if (rk && me.gainXP) { const x = Math.round((m.a[6] * .6 + 5) * rk[2]); me.gainXP(x); setTimeout(() => me.say && me.say(`${rk[1]} rank kill · +${x} style XP`, 1100), 1300); }
+      if (m.champ && me.dropCoins) me.dropCoins(m.root.position, 30);
+      if (m.boss || (me.ambS && me.ambS.ms.every(u => u.dead))) me.slowT = .9;   // the last blow of a big fight plays in slow motion
+      try { rag(me, m, from); } catch (e) {}
+      if (!m.noRe && (me.ambK = (me.ambK || 0) + 1) >= 12 && !me.ambS && me.spawn) { me.ambK = 0; setTimeout(() => ambush(me), 1800); }
+    };
+    if (me.ambush) return; me.ambush = 1; let hud = null, hudT = 0;
+    me.ps.push((dt, ts) => {
+      if (cur() !== me) return;
+      // rage drains slowly once you stop landing hits
+      if (me.tnow - (me.rageT ?? -9) > 4) me.rage = Math.max(0, (me.rage || 0) - dt * 2);
+      // HUD
+      if ((hudT += dt) > .1) { hudT = 0; if (!hud) { hud = document.createElement("div"); hud.id = "svVox"; hud.style.cssText = "position:absolute;right:12px;bottom:56px;z-index:30;pointer-events:none;font:600 12px system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px #000;text-align:right;line-height:1.5"; (document.getElementById("sv") || document.body).appendChild(hud); }
+        const rk = rankOf(me), rg = Math.floor(me.rage || 0);
+        hud.innerHTML = `${rk ? `<div style="font:900 22px system-ui;color:${rk[1][0] === "S" ? "#ffd23a" : "#9fe0ff"}">${rk[1]} <span style="font-size:13px">x${me.chain} combo</span></div>` : ""}<div>RAGE <span style="display:inline-block;width:110px;height:8px;background:rgba(0,0,0,.45);border-radius:4px;vertical-align:middle;overflow:hidden"><i style="display:block;height:100%;width:${rg}%;background:${rg >= 100 ? "#ff5a1f" : "#d8892a"}"></i></span>${rg >= 100 ? " <b style='color:#ff8a3a'>Z!</b>" : ""}</div><div>▣ ${me.vox.inv} blocks · B break · N place · Y throw</div>${me.ambS ? `<div style="color:#ffd23a">AMBUSH · ${me.ambS.ms.filter(u => !u.dead).length} left</div>` : ""}`; }
+      // tells follow their fighter
+      const T = me.T, v = new T.Vector3();
+      for (let i = tells.length - 1; i >= 0; i--) { const tl = tells[i]; tl.t -= dt; if (tl.me !== me || tl.t <= 0 || tl.m.dead) { tl.el.remove(); tells.splice(i, 1); continue; }
+        v.copy(tl.m.root.position); v.y += (tl.m.a[2] || 1) * 1.45 * tl.m.root.scale.y + .9; v.project(me.cam); tl.el.style.display = v.z > 1 ? "none" : ""; tl.el.style.left = (v.x + 1) / 2 * innerWidth + "px"; tl.el.style.top = (1 - v.y) / 2 * innerHeight + "px"; tl.el.style.transform = `translate(-50%,-100%) scale(${1 + .5 * (1 - tl.t / tl.d)})`; }
+      // chips
+      for (let i = chipL.length - 1; i >= 0; i--) { const c = chipL[i]; c.t += dt; c.v.y -= 20 * dt; c.o.position.addScaledVector(c.v, dt); const g = c.me.H(c.o.position.x, c.o.position.z); if (c.o.position.y < g + .07) { c.o.position.y = g + .07; c.v.multiplyScalar(.4); c.v.y = Math.abs(c.v.y); } c.o.rotation.x += dt * 6; if (c.t > 1.4 || c.me !== me) { c.o.parent && c.o.parent.remove(c.o); chipL.splice(i, 1); } else if (c.t > 1) c.o.scale.setScalar((1.4 - c.t) / .4); }
+      // blocks: thrown ones hurt what they hit; resting ones are picked up when you walk over them
+      if (me.pw) for (const e of me.pw.bodies.slice()) { if (!e.kind) continue; const b = e.b, sp = b.velocity.length();
+        if (e.kind === "thrown" && sp > 5) for (const m of me.mobs || []) { if (m.dead || e.hit.has(m)) continue; const R0 = m.root, cy = R0.position.y + (m.a[2] || 1) * .6 * R0.scale.y, rr = (m.a[1] || 1) * .55 * R0.scale.x + .45;
+          if (Math.hypot(b.position.x - R0.position.x, b.position.z - R0.position.z) < rr && Math.abs(b.position.y - cy) < rr + .8) { e.hit.add(m); me.hurtMob(m, 12 + sp * 1.1, me.pos, sp > 18); m.stun = Math.max(m.stun || 0, .5); b.velocity.scale(-.25, b.velocity); me.tone && me.tone(240, .07); } }
+        if (me.tnow - e.t0 > .9 && sp < 2.5 && Math.hypot(b.position.x - me.pos.x, b.position.z - me.pos.z) < 1.7 && Math.abs(b.position.y - me.pos.y - .5) < 2) { drop(me, e); me.vox.inv++; me.vox.save(); me.tone && me.tone(1180, .03); } }
+      // new fighters
+      const p = me.pos;
+      for (const m of me.mobs || []) {
+        if (m.dead) continue; const R0 = m.root, dx = p.x - R0.position.x, dz = p.z - R0.position.z, d = Math.hypot(dx, dz);
+        if (m.stun > 0) { m.ch = null; m.sp = null; continue; }
+        if (m.tr.has("charger")) {   // paws the ground, then rushes in a straight line; a block wall or a tree stops it cold
+          m.chCd = (m.chCd ?? 2 + Math.random() * 3) - dt;
+          if (!m.ch) { if (m.chCd <= 0 && d > 5 && d < 24 && (m.angry > 0 || m.boss) && me.hp > 0) { m.ch = { ph: 0, t: 0, x: R0.position.x, z: R0.position.z }; me.tele(m, .8, "!!", "#ffae1a"); me.tone && me.tone(120, .08); } }
+          else { const c = m.ch; c.t += dt; m.cd = Math.max(m.cd, .3); m.mv = null;
+            if (c.ph === 0) { R0.position.x = c.x + Math.sin(c.t * 40) * .05; R0.position.z = c.z; R0.rotation.y = c.a = Math.atan2(dx, dz); if (c.t > .8) { c.ph = 1; c.t = 0; } }
+            else { const s = 26 * dt, nx = R0.position.x + Math.sin(c.a) * s, nz = R0.position.z + Math.cos(c.a) * s, gy = me.H(nx, nz);
+              if (gy > me.H(R0.position.x, R0.position.z) + 1.6 || solid(me, nx, nz)) { m.stun = 2.4; m.ch = null; m.chCd = 5; me.say && me.say("It crashed into the wall - stunned! Hit it!", 1200); chips(me, R0.position.clone().setY(gy + 1), 0xcccccc, 10); me.tone && me.tone(90, .15); continue; }
+              R0.position.x = nx; R0.position.z = nz; R0.rotation.y = c.a; R0.position.y = gy;
+              if (!c.hit && Math.hypot(p.x - nx, p.z - nz) < 1.4 + (m.a[1] || 1) * .3) { c.hit = 1;
+                if (me.rollT > 0) {}
+                else if (me.block && me.tnow - (me.blockT ?? -9) < .3) { me.parried(m); m.stun = 2.6; m.ch = null; m.chCd = 6; continue; }
+                else { hurtMe(me, Math.min(34, (m.a[7] || 10) * (me.block ? .45 : 1.25)), m.a[9]); p.x += Math.sin(c.a) * 2.4; p.z += Math.cos(c.a) * 2.4; me.vy = 6.5; } }
+              if (c.t > .85) { m.ch = null; m.chCd = 4 + Math.random() * 3; } } }
+        }
+        if (m.tr.has("spitter")) {   // lobs venom from range; roll through it or parry (Q / RMB just before) to send it back
+          m.spCd = (m.spCd ?? 2 + Math.random() * 2) - dt;
+          if (m.sp == null && m.spCd <= 0 && d > 6 && d < 28 && (m.angry > 0 || d < 16) && me.hp > 0 && !me.flying) { m.sp = .6; me.tele(m, .6, "!", "#7dff5a"); }
+          if (m.sp == null && d < 7 && !m.mv && Math.random() < dt * 2) { const to = Math.atan2(dx, dz); m.mv = { k: "back", a: to + Math.PI + (Math.random() - .5), d: .7, s: 1.4, t: 0, f: to }; }   // keeps its distance
+          if (m.sp != null) { R0.rotation.y = Math.atan2(dx, dz); if ((m.sp -= dt) <= 0) { m.sp = null; m.spCd = 3 + Math.random() * 2.5; spit(me, m); } }
+        }
+      }
+      // venom globs
+      for (let i = me.globs ? me.globs.length - 1 : -1; i >= 0; i--) { const g = me.globs[i]; g.t += dt; g.v.y -= 20 * dt; g.o.position.addScaledVector(g.v, dt); const o = g.o.position;
+        let gone = g.t > 4 || o.y < me.H(o.x, o.z);
+        if (!gone && !g.back && Math.hypot(o.x - p.x, o.z - p.z) < .9 && Math.abs(o.y - p.y - 1) < 1.1) { gone = true;
+          if (me.rollT > 0) gone = false;
+          else if (me.block && me.tnow - (me.blockT ?? -9) < .35) { gone = false; g.back = 1; g.v.multiplyScalar(-1.4); g.v.y = Math.abs(g.v.y) * .4 + 3; me.say && me.say("Deflected!", 700); me.tone && me.tone(1700, .07); me.slowT = .25; }
+          else { hurtMe(me, (g.m.a[7] || 10) * (me.block ? .3 : .8), g.m.a[9]); if (!me.block) me.poison = Math.max(me.poison || 0, 2); } }
+        if (!gone && g.back) for (const m of me.mobs || []) { if (m.dead) continue; const R0 = m.root; if (Math.hypot(o.x - R0.position.x, o.z - R0.position.z) < (m.a[1] || 1) * .6 * R0.scale.x + .6 && Math.abs(o.y - R0.position.y - .8) < 2) { me.hurtMob(m, 40, p, true); m.stun = 1.5; gone = true; break; } }
+        if (gone) { me.scene.remove(g.o); chips(me, o.clone(), 0x6add3a, 5); me.globs.splice(i, 1); } }
+      // ambush done?
+      if (me.ambS && me.ambS.ms.every(u => u.dead)) { const A = me.ambS; me.ambS = null; me.gainXP && me.gainXP(60); me.hp = Math.min(100, me.hp + 30); me.hpDraw && me.hpDraw(); me.dropCoins && me.dropCoins(me.pos, 25); setTimeout(() => me.say && me.say("Ambush cleared! +60 XP · +30 HP", 2200), 400); }
+    });
+  };
+  const spit = (me, m) => {
+    const T = me.T, R0 = m.root, f = R0.position.clone(); f.y += (m.a[2] || 1) * 1.45 * R0.scale.y * .7;
+    const tx = me.pos.x + (me.vx || 0) * .5, tz = me.pos.z + (me.vz || 0) * .5, ty = me.pos.y + 1, d = Math.hypot(tx - f.x, tz - f.z), Tt = Math.max(.5, Math.min(1.6, d / 15));
+    const o = new T.Mesh(geo(me, .32), new T.MeshBasicMaterial({ color: 0x7dff5a })); o.position.copy(f); me.scene.add(o);
+    (me.globs = me.globs || []).push({ o, m, t: 0, v: new T.Vector3((tx - f.x) / Tt, (ty - f.y + 10 * Tt * Tt) / Tt, (tz - f.z) / Tt) }); me.tone && me.tone(330, .05);
+  };
+  const ambush = me => {   // a pack closes in, one of them a gold champion; clear them all for a reward
+    if (cur() !== me || me.ambS || me.hp <= 0) return; const ks = [...new Set((me.mobs || []).filter(m => !m.boss).map(m => m.k))]; if (!ks.length) return;
+    const ms = []; for (let j = 0; j < 3; j++) { const m = me.spawn(ks[Math.floor(Math.random() * ks.length)], false); if (!m) continue; m.noRe = 1; m.angry = 90; ms.push(m); }
+    const ch = ms[0]; if (ch) { ch.champ = 1; ch.hp *= 2.2; ch.mx *= 2.2; ch.a[7] *= 1.3; ch.root.scale.multiplyScalar(1.2); ch.a[9] = "Champion " + ch.a[9]; ch.tr.add(Math.random() < .5 ? "charger" : "spitter"); ch.root.traverse(o => { if (o.material && o.material.emissive) o.material.emissive.setHex(0x3a2a00); }); }
+    me.ambS = { ms }; me.say && me.say("AMBUSH! A pack closes in - a champion leads it", 2200); me.tone && (me.tone(200, .12), me.tone(150, .12));
+  };
+  // every sword swing also chops (owner 11-06) - wired in the combat code through window.hxChop
 })();
 </script>
 
