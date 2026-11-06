@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <title>HexQuests</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&family=Poppins:wght@700&display=swap">
 <style>
 /* Layout: one-screen atlas. Toolbar on top, map canvas fills the rest; info card floats over the map. */
 :root {
@@ -797,6 +797,7 @@ void main(){
 })();
 const widthCache = new Map();
 // names: largest places first, skip any label that would overlap one already drawn
+if (document.fonts) document.fonts.load("700 14px Poppins").then(() => { widthCache.clear(); LB.ok = false; draw(); }).catch(() => {});
 function labels(r, x0, y0, x1, y1) {
   const z = view.s; lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const grid = new Map(), hexPx = S * z * 2, GC = 96;
@@ -817,11 +818,11 @@ function labels(r, x0, y0, x1, y1) {
   }
   if (gameOn) gameLabels(r, z, fits);                 // country names first, then province names where room is left
   if (hexPx < 14) return;   // owner 11-06: all province names or none, never a few
-  const big = hexPx > 28 ? 12 : 11;
+  const big = Math.max(11, Math.min(26, hexPx * 0.3));   // owner 11-06: names grow with the hex, Poppins Bold
   lctx.font = `700 ${big}px ${css("--body")}`; lctx.lineJoin = "round";
   // owner 11-06: every province name shows, kept inside its own land: first the font shrinks (to 67%), then the name goes on two
   // lines, then each line loses letters from its end (at most half of them) until it fits
-  const font = (px) => `700 ${px}px ${css("--body")}`, tw = (t, px) => { const k = px + "|" + t; let w = widthCache.get(k); if (w === undefined) { lctx.font = font(px); w = lctx.measureText(t).width; widthCache.set(k, w); } return w; };
+  const font = (px) => `700 ${px}px Poppins, ${css("--body")}`, tw = (t, px) => { const k = px + "|" + t; let w = widthCache.get(k); if (w === undefined) { lctx.font = font(px); w = lctx.measureText(t).width; widthCache.set(k, w); } return w; };
   const fitName = (name, aw, ah) => {
     let one = 0; for (let px = big; px >= big * 0.65 - 0.01; px -= 0.5) if (tw(name, px) <= aw && px <= ah) { one = px; break; }
     if (one >= big * 0.9) return { px: one, lines: [name] };   // one line nearly full size
@@ -839,8 +840,8 @@ function labels(r, x0, y0, x1, y1) {
   for (const g of regOrder) {
     const a = regAnchor[g]; if (a < 0) continue;
     const sx = regCX[g] * z + view.x, sy = regCY[g] * z + view.y; if (sx < -50 || sy < -20 || sx > r.width + 50 || sy > r.height + 20) continue;
-    const n = regHexes[g].length, aw = S * z * 1.7 * Math.sqrt(n), ah = S * z * 1.45 * Math.sqrt(n);   // room inside the province: one hex is 2S wide, S*sqrt(3) tall
-    const name = placeName(regAnchor[g]), ck = "fit|" + name + "|" + Math.round(aw);
+    const n = regHexes[g].length, aw = S * z * 1.85 * Math.sqrt(n), ah = S * z * 1.6 * Math.sqrt(n);   // room inside the province: one hex is 2S wide, S*sqrt(3) tall
+    const name = placeName(regAnchor[g]), ck = "fit|" + name + "|" + Math.round(aw) + "|" + big;
     let f = widthCache.get(ck); if (!f) { f = fitName(name, aw, ah); widthCache.set(ck, f); }
     const lh = f.px * 1.05, top = sy - (f.lines.length - 1) * lh / 2, wmax = Math.max(...f.lines.map(t => tw(t, f.px)));
     if (!fits(sx - wmax / 2, top - f.px / 2, wmax, lh * f.lines.length) && gameOn) continue;   // country names keep their room in game mode
