@@ -819,16 +819,30 @@ function labels(r, x0, y0, x1, y1) {
   if (hexPx < 9) return;
   const big = hexPx > 28 ? 12 : 11;
   lctx.font = `700 ${big}px ${css("--body")}`; lctx.lineJoin = "round";
+  // owner 11-06: every province name shows, kept inside its own land: first the font shrinks (to 67%), then the name goes on two
+  // lines, then each line loses letters from its end (at most half of them) until it fits
+  const font = (px) => `700 ${px}px ${css("--body")}`, tw = (t, px) => { const k = px + "|" + t; let w = widthCache.get(k); if (w === undefined) { lctx.font = font(px); w = lctx.measureText(t).width; widthCache.set(k, w); } return w; };
+  const fitName = (name, aw, ah) => {
+    for (let px = big; px >= big * 0.67 - 0.01; px -= 0.5) if (tw(name, px) <= aw && px <= ah) return { px, lines: [name] };
+    const px = Math.max(7, Math.min(big * 0.67, ah / 2.1));
+    let sp = name.indexOf(" ", Math.floor(name.length / 2) - 1); if (sp < 0) sp = name.lastIndexOf(" ");
+    let L2 = sp > 0 ? [name.slice(0, sp), name.slice(sp + 1)] : [name.slice(0, Math.ceil(name.length / 2)), name.slice(Math.ceil(name.length / 2))];
+    L2 = L2.map(t => { let s = t; const min = Math.ceil(t.length / 2); while (s.length > min && tw(s, px) > aw) s = s.slice(0, -1); return s; });
+    return { px, lines: L2 };
+  };
+  lctx.lineJoin = "round"; lctx.strokeStyle = "rgba(255,255,255,.55)"; lctx.lineWidth = 1.6; lctx.fillStyle = "#1f2133";
   let count = 0;
   for (const g of regOrder) {
     const a = regAnchor[g]; if (a < 0) continue;
     const sx = regCX[g] * z + view.x, sy = regCY[g] * z + view.y; if (sx < -50 || sy < -20 || sx > r.width + 50 || sy > r.height + 20) continue;
-    const name = placeName(regAnchor[g]), key = big + name; let w = widthCache.get(key); if (w === undefined) { w = lctx.measureText(name).width + 6; widthCache.set(key, w); }
-    if (hexPx * Math.sqrt(regHexes[g].length) < w * 0.45) continue;   // region too small on screen for its name
-    if (!fits(sx - w / 2, sy - 8, w, 16)) continue;
-    lctx.strokeStyle = "rgba(255,255,255,.55)"; lctx.lineWidth = 1.6; lctx.strokeText(name, sx, sy);   // slight halo
-    lctx.fillStyle = "#1f2133"; lctx.fillText(name, sx, sy);
-    if (++count > 400) break;
+    const n = regHexes[g].length, aw = S * z * 1.7 * Math.sqrt(n), ah = S * z * 1.45 * Math.sqrt(n);   // room inside the province: one hex is 2S wide, S*sqrt(3) tall
+    const name = placeName(regAnchor[g]), ck = "fit|" + name + "|" + Math.round(aw);
+    let f = widthCache.get(ck); if (!f) { f = fitName(name, aw, ah); widthCache.set(ck, f); }
+    const lh = f.px * 1.05, top = sy - (f.lines.length - 1) * lh / 2, wmax = Math.max(...f.lines.map(t => tw(t, f.px)));
+    if (!fits(sx - wmax / 2, top - f.px / 2, wmax, lh * f.lines.length) && gameOn) continue;   // country names keep their room in game mode
+    lctx.font = font(f.px);
+    f.lines.forEach((t, k) => { lctx.strokeText(t, sx, top + k * lh); lctx.fillText(t, sx, top + k * lh); });
+    if (++count > 6000) break;
   }
 }
 
