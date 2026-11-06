@@ -823,10 +823,12 @@ function labels(r, x0, y0, x1, y1) {
   // lines, then each line loses letters from its end (at most half of them) until it fits
   const font = (px) => `700 ${px}px ${css("--body")}`, tw = (t, px) => { const k = px + "|" + t; let w = widthCache.get(k); if (w === undefined) { lctx.font = font(px); w = lctx.measureText(t).width; widthCache.set(k, w); } return w; };
   const fitName = (name, aw, ah) => {
-    for (let px = big; px >= big * 0.67 - 0.01; px -= 0.5) if (tw(name, px) <= aw && px <= ah) return { px, lines: [name] };
-    const px = Math.max(7, Math.min(big * 0.67, ah / 2.1));
+    for (let px = big; px >= big * 0.65 - 0.01; px -= 0.5) if (tw(name, px) <= aw && px <= ah) return { px, lines: [name] };
     let sp = name.indexOf(" ", Math.floor(name.length / 2) - 1); if (sp < 0) sp = name.lastIndexOf(" ");
     let L2 = sp > 0 ? [name.slice(0, sp), name.slice(sp + 1)] : [name.slice(0, Math.ceil(name.length / 2)), name.slice(Math.ceil(name.length / 2))];
+    // two lines at the biggest size that fits (owner 11-06: never more than 35% smaller than the others)
+    for (let px = big; px >= big * 0.65 - 0.01; px -= 0.5) if (L2.every(t => tw(t, px) <= aw) && 2.1 * px <= ah) return { px, lines: L2 };
+    const px = big * 0.65;
     L2 = L2.map(t => { let s = t; const min = Math.ceil(t.length / 2); while (s.length > min && tw(s, px) > aw) s = s.slice(0, -1); return s; });
     return { px, lines: L2 };
   };
