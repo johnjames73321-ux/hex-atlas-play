@@ -142,7 +142,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: 
   </div>
 </div>
   <div class="markbox" id="markbox" hidden><p class="where" id="mark-where"></p><textarea id="mark-text" placeholder="What should Claude do with this place? Enter sends, Shift+Enter new line, Esc cancels"></textarea></div>
-  <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zfit" aria-label="Fit map">⤢</button></div>
+  <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zfit" aria-label="Fit map">⤢</button><button id="zmeas" aria-label="Measure distance" title="Measure distance: click hexes to lay a path, right-click removes the last point, Esc clears">📏</button></div>
   <div class="card" id="card" hidden></div>
   <div class="legend" id="legend" hidden></div>
   <section class="dev" id="dev" hidden aria-label="Map editor">
@@ -645,7 +645,7 @@ function render() {
   if (showMapT && lz(mapImgT)) { ctx.globalAlpha = mapT.a; ctx.drawImage(mapImgT, mapT.x, mapT.y, mapT.w, mapT.h); ctx.globalAlpha = 1; }
   for (const k in ISLES) if (isleOn[k] && lz(isleImg[k])) { const m = ISLES[k]; ctx.globalAlpha = m.a; ctx.drawImage(isleImg[k], m.x, m.y, m.w, m.h); ctx.globalAlpha = 1; }
   ctx.restore();
-  drawDev(); drawMark();
+  drawDev(); drawMark(); drawMeas(z);
   labelLayer(r, x0, y0, x1, y1);
   if (!hoverText) $("status").innerHTML = gameOn && gameView === "era" ? `320 BC · ${fmt(ERA.tags.length)} states, cities and peoples` : gameOn ? `1444 · ${fmt(G.tags.length)} countries · ${fmt(Math.round(G.total / 1e6))} million people` : `${fmt(N)} hexes · ${fmt(NR)} places · ${fmt(Object.keys(colors).length)} painted`;
 }
@@ -1780,6 +1780,7 @@ cv.addEventListener("pointerdown", e => {
     const [wx, wy] = world(e), m = pickMap(wx, wy);
     if (m) { odrag = { m, wx, wy, x: m.x, y: m.y }; selOv = m; uiOv(); return; }
   }
+  if (MEAS.on && ptrs.size === 1 && (e.button === 0 || e.button === 2)) { panStart = { x: e.clientX - view.x, y: e.clientY - view.y, moved: false, sx: e.clientX, sy: e.clientY, meas: e.button === 0 ? 1 : 2 }; return; }   // distance tool: click adds a point, right-click removes the last, drag pans
   if (marking && e.button === 0 && ptrs.size === 1) { mkCur = [world(e)]; $("markbox").hidden = true; draw(); return; }
   if ((tool === "pan" && !dev) || e.button === 1 || e.shiftKey) { panStart = { x: e.clientX - view.x, y: e.clientY - view.y }; return; }
   if (e.pointerType === "touch") { const ev = { clientX: e.clientX, clientY: e.clientY }; press = { t: setTimeout(() => { press = null; stroke = null; if (dev) { pend = null; devDelete(...world(ev)); } else info(hexAt(...world(ev)), ev.clientX, ev.clientY); }, 550), x: e.clientX, y: e.clientY }; }
@@ -1813,6 +1814,7 @@ const up = e => {
   if (odrag) { odrag = null; saveMaps(); }
   if (pend) devCommit();
   if (mt) moveUp();
+  if (panStart && panStart.meas && !panStart.moved) { if (panStart.meas === 1) measAdd(hexAt(...world(e))); else { MEAS.pts.pop(); measUi(); draw(); } }
   if (panStart && panStart.info && !panStart.moved) { if (dev) devDelete(...world(e)); else info(hexAt(...world(e)), e.clientX, e.clientY); }
   if (press) { clearTimeout(press.t); press = null; }
   ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) { panStart = null; endStroke(); }
@@ -1820,6 +1822,46 @@ const up = e => {
 cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
 cv.addEventListener("pointerleave", () => { if (!ptrs.size) { hover(-1e9, -1e9); devHover = null; draw(); } });
 cv.addEventListener("contextmenu", e => e.preventDefault());
+// ---- distance tool (like Google Maps "measure distance"): click hexes, every leg and the total in hexes and km ----
+// Game distance = hex steps (the island spacing is laid out in hexes); km = hexes x the map's own km per hex, measured once
+// from neighbouring hex centres (hexLL) in Europe/North Atlantic latitudes.
+const MEAS = { on: false, pts: [] };
+let KMH = 0;
+function kmPerHex() {
+  if (KMH) return KMH;
+  const R = 6371, rad = Math.PI / 180, d = [];
+  for (let i = 0; i < N && d.length < 4000; i += 7) { const [la, lo] = hexLL(i); if (la < 35 || la > 65 || lo < -40 || lo > 30) continue;
+    const j = nb(i, 0); if (j < 0) continue; const [lb, mb] = hexLL(j);
+    const h = Math.sin((lb - la) * rad / 2) ** 2 + Math.cos(la * rad) * Math.cos(lb * rad) * Math.sin((mb - lo) * rad / 2) ** 2;
+    const k = 2 * R * Math.asin(Math.sqrt(h)); if (k > 1 && k < 400) d.push(k); }
+  d.sort((a, b) => a - b); return KMH = d.length ? d[d.length >> 1] : 40;
+}
+const hexSteps = (a, b) => { const dq = D.q[a] - D.q[b], dr = D.r[a] - D.r[b]; return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2; };
+const kmTxt = h => { const k = h * kmPerHex(); return (k >= 100 ? Math.round(k / 10) * 10 : Math.round(k)).toLocaleString() + " km"; };
+function measUi() {
+  let box = $("measbox"); if (!box) { box = document.createElement("div"); box.id = "measbox"; box.style.cssText = "position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:30;background:rgba(18,22,30,.92);color:#fff;font:600 13px system-ui,sans-serif;padding:7px 12px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.4);pointer-events:none;white-space:nowrap"; cv.parentElement.appendChild(box); }
+  box.hidden = !MEAS.on; $("zmeas").style.background = MEAS.on ? "#3b6fd8" : "";
+  let t = 0; for (let k = 1; k < MEAS.pts.length; k++) t += hexSteps(MEAS.pts[k - 1], MEAS.pts[k]);
+  box.textContent = MEAS.pts.length < 2 ? "📏 Click hexes to measure · right-click removes the last point · Esc clears" : `📏 Total ${t} hexes · ${kmTxt(t)} · ${MEAS.pts.length - 1} leg${MEAS.pts.length > 2 ? "s" : ""}`;
+}
+function measAdd(i) { if (i < 0) return; if (MEAS.pts[MEAS.pts.length - 1] !== i) MEAS.pts.push(i); measUi(); draw(); }
+function measToggle(on) { MEAS.on = on ?? !MEAS.on; if (!MEAS.on) MEAS.pts = []; measUi(); draw(); }
+function drawMeas(z) {
+  if (!MEAS.on || !MEAS.pts.length) return;
+  const P = MEAS.pts; ctx.save(); ctx.lineCap = ctx.lineJoin = "round";
+  ctx.beginPath(); P.forEach((i, k) => k ? ctx.lineTo(cx[i], cy[i]) : ctx.moveTo(cx[i], cy[i]));
+  ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = 5 / z; ctx.stroke();
+  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.5 / z; ctx.setLineDash([8 / z, 5 / z]); ctx.stroke(); ctx.setLineDash([]);
+  for (const i of P) { ctx.beginPath(); ctx.arc(cx[i], cy[i], 4.5 / z, 0, 7); ctx.fillStyle = "#fff"; ctx.fill(); ctx.lineWidth = 2 / z; ctx.strokeStyle = "#3b6fd8"; ctx.stroke(); }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.font = "600 12px system-ui,sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (let k = 1; k < P.length; k++) { const a = P[k - 1], b = P[k], h = hexSteps(a, b), t = `${h} hex · ${kmTxt(h)}`;
+    const x = view.x + (cx[a] + cx[b]) / 2 * z, y = view.y + (cy[a] + cy[b]) / 2 * z - 12, w = ctx.measureText(t).width + 12;
+    ctx.fillStyle = "rgba(18,22,30,.88)"; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - w / 2, y - 10, w, 20, 6) : ctx.rect(x - w / 2, y - 10, w, 20); ctx.fill(); ctx.fillStyle = "#fff"; ctx.fillText(t, x, y); }
+  ctx.restore(); ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * view.x, dpr * view.y);
+}
+$("zmeas").onclick = () => measToggle();
+addEventListener("keydown", e => { if (MEAS.on && e.key === "Escape") { measToggle(false); e.stopPropagation(); } }, true);
+
 function zoomAt(k, mx, my) { const s = Math.min(60, Math.max(0.2, view.s * k)); k = s / view.s; view.x = mx - (mx - view.x) * k; view.y = my - (my - view.y) * k; view.s = s; draw(); }
 cv.addEventListener("wheel", e => { e.preventDefault();
   if (dragMaps) {   // Drag maps: wheel makes the overlay under the mouse bigger/smaller around the mouse
