@@ -816,7 +816,7 @@ if (G) {
 const EOWN = ERA ? new Int16Array(Uint8Array.from(atob(ERA.own), c => c.charCodeAt(0)).buffer) : null;
 if (EOWN) for (let pass = 0; pass < 6; pass++) for (let i = 0; i < N; i++) if (D.reg[i] >= 0 && EOWN[i] === -1) for (let d = 0; d < 6; d++) { const j = nb(i, d); if (j >= 0 && EOWN[j] >= 0) { EOWN[i] = EOWN[j]; break; } }
 const eraOf = i => EOWN && D.reg[i] >= 0 ? EOWN[i] : -1;
-const eraView = () => gameOn && gameView === "era", placeName = i => (eraView() && ERA && ERA.hn && ERA.hn[i]) || D.regions[D.reg[i]][0];   // 320 BC view: native / first-settlement name per hex
+const eraView = () => gameOn && gameView === "era", placeName = i => (eraView() && ERA && ((ERA.hn && ERA.hn[i]) || (ERA.rn && ERA.rn[D.reg[i]]))) || D.regions[D.reg[i]][0];   // 320 BC view: per-hex native name, else the province's researched 320 BC name (ERA.rn), else today's
 // 320 BC: peoples without a state are hatched with white diagonal stripes (user, 10-31): thick = very primitive (hunter-gatherer bands),
 // thin = settled or herding peoples not yet a full state (tribes, chiefdoms, nomads, confederations); kingdoms, empires, satrapies, city-states, leagues, republics stay plain
 const ERA_LON = (() => { if (!ERA) return null; const o = new Float32Array(ERA.tags.length).fill(NaN); for (let i = 0; i < N; i++) { const k = eraOf(i); if (k >= 0 && isNaN(o[k])) o[k] = D.regions[D.reg[i]][8]; } return o; })();
