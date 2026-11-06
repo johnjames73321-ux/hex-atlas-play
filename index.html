@@ -816,7 +816,7 @@ function labels(r, x0, y0, x1, y1) {
     const sk = "sea" + D.seas[s]; let w = widthCache.get(sk); if (w === undefined) { w = lctx.measureText(D.seas[s]).width + 8; widthCache.set(sk, w); } if (fits(sx - w / 2, sy - 9, w, 18)) lctx.fillText(D.seas[s], sx, sy);
   }
   if (gameOn) gameLabels(r, z, fits);                 // country names first, then province names where room is left
-  if (hexPx < 9) return;
+  if (hexPx < 14) return;   // owner 11-06: all province names or none, never a few
   const big = hexPx > 28 ? 12 : 11;
   lctx.font = `700 ${big}px ${css("--body")}`; lctx.lineJoin = "round";
   // owner 11-06: every province name shows, kept inside its own land: first the font shrinks (to 67%), then the name goes on two
