@@ -620,15 +620,19 @@ function lineLayer(zp) {
   if (!lineCv[b]) { const c = document.createElement("canvas"); c.width = W * b; c.height = H * b; const x = c.getContext("2d"); x.setTransform(b, 0, 0, b, 0, 0); strokeEdges(x, ALL, false, b, gameOn ? ["rgba(255,255,255,.34)", "rgba(255,255,255,.62)", `rgba(42,44,72,${b < 1 ? 0.4 : 0.7})`] : null); lineCv[b] = c; }
   return lineCv[b];
 }
+let shadeCv = null;
 let baseDirty = false;   // the whole-world bitmap is out of date (edits): rebuilt by the first zoomed-out frame
 function buildBase() {
   baseDirty = false; bloomKey = ""; lineCv = {};
   bctx.setTransform(OS, 0, 0, OS, 0, 0);
   bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, base.width, base.height); bctx.setTransform(OS, 0, 0, OS, 0, 0);
-  fillHexes(bctx, ALL); engrave(bctx, ALL); relief(bctx, ALL); strokeEdges(bctx, ALL, false, OS); drawStraits(bctx, OS); draw();
+  fillHexes(bctx, ALL);
+  if (!shadeCv) { shadeCv = document.createElement("canvas"); shadeCv.width = base.width; shadeCv.height = base.height; const x = shadeCv.getContext("2d"); x.setTransform(OS, 0, 0, OS, 0, 0); engrave(x, ALL); relief(x, ALL); }   // carving and relief do not depend on the colours: made once, so changing layers is no 7 s freeze
+  bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.drawImage(shadeCv, 0, 0); bctx.setTransform(OS, 0, 0, OS, 0, 0);
+  strokeEdges(bctx, ALL, false, OS); drawStraits(bctx, OS); draw();
 }
 function paintUnits(units) {                         // refresh just the changed places in the bitmap
-  bloomKey = ""; lineCv = {};
+  bloomKey = ""; lineCv = {}; shadeCv = null;
   const list = [];
   for (const u of units) { if (+u < NR) list.push(...(regHexes[+u] || [])); }
   bctx.setTransform(OS, 0, 0, OS, 0, 0); fillHexes(bctx, list); engrave(bctx, list); relief(bctx, list); strokeEdges(bctx, list, true, OS); drawStraits(bctx, OS);
@@ -1238,7 +1242,7 @@ function applyEdits() {
   stSet = new Set([...st].filter(k => ends(k).every(i => i >= 0 && D.reg[i] >= 0)));
   dmSet = new Set([...dm].filter(k => ends(k).every(i => i >= 0 && D.reg[i] < 0)));
   rvMap = rv;
-  derive(); baseDirty = true; draw(); devUI();
+  derive(); shadeCv = null; baseDirty = true; draw(); devUI();
 }
 let applyT = 0; const queueApply = () => { clearTimeout(applyT); applyT = setTimeout(() => { if (writing) queueApply(); else applyEdits(); }, 400); };   // not while saving: every saved doc fires a snapshot
 // saving: 8 writes at a time, latest change per hex/edge wins; the queue is kept in this browser until each write is confirmed,
