@@ -5634,7 +5634,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   //      Tab dash strike · Q block (tap right before a bite = parry) · animation cancels: an action pressed in the last part of an
   //      animation cuts its recovery for +25%, pressed earlier it waits. Angles: yaw like the animals (0 = +z), + = to the hero's left ----
   const hero = me.hero, BASE = 12, REACH = 2.4, TIP = { sword: 1.16, axe: 1.07, hammer: 1.16, spear: 1.68 };
-  const reachOf = A => ((.9 + TIP[MELEE]) * (1 + (A.reach - 1) * .5) + .25) * 1.5;   // where the blade tip really is: shoulder + arm + weapon, so hits match what you see (user, 11-01)   // starting damage halved (user, 11-01); training raises it   // owner, 11-06: sword range 1.5x
+  const reachOf = A => ((.9 + TIP[MELEE]) * (1 + (A.reach - 1) * .5) + .25) * 1.5 * 1.5;   // where the blade tip really is: shoulder + arm + weapon, so hits match what you see (user, 11-01)   // starting damage halved (user, 11-01); training raises it   // owner, 11-06: sword range 1.5x, then 1.5x again
   const ATK = {
     s0: { from: -1.25, to: 1.25, dur: .4, m: 1, reach: 1, lock: .42, lunge: .35 },          // right -> left
     s1: { from: 1.25, to: -1.25, dur: .4, m: 1, reach: 1, lock: .42, lunge: .35 },          // left -> right
