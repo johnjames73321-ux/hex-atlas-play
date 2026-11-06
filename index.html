@@ -6155,7 +6155,7 @@ document.querySelector("main").appendChild(peg);
 const ghost = document.createElement("div"); ghost.id = "pegGhost"; ghost.hidden = true; ghost.innerHTML = PEG;
 const tip = document.createElement("div"); tip.id = "pegTip"; tip.hidden = true;
 const ov = document.createElement("div"); ov.id = "sv"; ov.hidden = true;
-ov.innerHTML = `<div class="hud" id="svHud"></div><div class="btns"><button id="svSnd" aria-label="Sound on/off" title="Sound">🔊</button><button id="svX" aria-label="Back to the map" title="Back to the map (Esc)">✕</button></div><div class="help">WASD move · LMB swing · MMB jab · RMB block · B break · N place · Y throw · Z rage · G chop · J fly · Esc map</div><div class="xh"></div><div class="joy" id="svJoy"><i></i></div><div class="load" id="svLoad">Loading…</div>`;
+ov.innerHTML = `<div class="hud" id="svHud"></div><div class="btns"><button id="svSnd" aria-label="Sound on/off" title="Sound">🔊</button><button id="svX" aria-label="Back to the map" title="Back to the map (Esc)">✕</button></div><div class="help">WASD move · LMB swing · MMB jab · RMB block · B mine · N place · M block type · Y throw · Z rage · G chop · J fly · Esc map</div><div class="xh"></div><div class="joy" id="svJoy"><i></i></div><div class="load" id="svLoad">Loading…</div>`;
 document.body.append(ghost, tip, ov);
 ov.insertAdjacentHTML("beforeend", `<div class="nav"><canvas class="cmp" id="svCmp" width="88" height="88"></canvas><canvas class="mini" id="svMini" width="284" height="124"></canvas></div>`);
 // compass (turns with the camera, north up = -z) and the world map around the spot, corners rounded by 6 hexes
@@ -6281,10 +6281,12 @@ function toonify(scene) {
   };
   scene.traverse(o => { if (o.material) o.material = Array.isArray(o.material) ? o.material.map(conv) : conv(o.material); });
 }
-function voxState(i) {   // owner 11-06: what you changed in a hex (broken / placed blocks, felled trees and where their logs came to rest) is kept per hex
-  const key = "hexatlas-vox-" + i, V = { i, nat: 1, e: new Map(), t: new Map(), inv: 24 };
-  try { const s = JSON.parse(localStorage.getItem(key) || "null"); if (s) { for (const [k, d] of s.e || []) V.e.set(k, d); for (const t of s.t || []) V.t.set(t[0], t.slice(1)); } const iv = +localStorage.getItem("hexatlas-vox-inv"); if (iv >= 0 && localStorage.getItem("hexatlas-vox-inv") !== null) V.inv = iv; } catch (e) {}
-  V.save = () => { clearTimeout(V.st); V.st = setTimeout(() => { try { localStorage.setItem(key, JSON.stringify({ e: [...V.e], t: [...V.t].map(([k, p]) => [k, ...p]) })); localStorage.setItem("hexatlas-vox-inv", String(V.inv)); } catch (e) {} }, 600); };
+function voxState(i) {   // owner 11-06: what you changed in a hex (mined / placed cells, felled trees and where their logs came to rest) is kept per hex
+  const key = "hexatlas-vox2-" + i, V = { i, nat: 1, cols: new Map(), t: new Map(), inv: { 2: 24, 5: 8 }, sel: 2 };
+  try { const s = JSON.parse(localStorage.getItem(key) || "null"); if (s) { for (const [ck, iy, t] of s.e || []) { let c = V.cols.get(ck); if (!c) V.cols.set(ck, c = { m: new Map(), top: 0 }); c.m.set(iy, t); } for (const t of s.t || []) V.t.set(t[0], t.slice(1)); }
+    else { const o = JSON.parse(localStorage.getItem("hexatlas-vox-" + i) || "null"); if (o) for (const t of o.t || []) V.t.set(t[0], t.slice(1)); }   // felled trees from the 1 m block version carry over
+    const iv = JSON.parse(localStorage.getItem("hexatlas-vox2-inv") || "null"); if (iv && typeof iv === "object") { V.inv = iv.inv || V.inv; V.sel = iv.sel || 2; } } catch (e) {}
+  V.save = () => { clearTimeout(V.st); V.st = setTimeout(() => { try { const e = []; for (const [ck, c] of V.cols) for (const [iy, t] of c.m) e.push([ck, iy, t]); localStorage.setItem(key, JSON.stringify({ e, t: [...V.t].map(([k, p]) => [k, ...p]) })); localStorage.setItem("hexatlas-vox2-inv", JSON.stringify({ inv: V.inv, sel: V.sel })); } catch (e) {} }, 600); };
   return V;
 }
 function build(me, i) {
@@ -6309,15 +6311,21 @@ function build(me, i) {
   scene.add(new T.HemisphereLight(top.clone().lerp(hor, .5), col(b.g[0]).lerp(hor, .55), td[4] * K * .55));
   const dl = new T.DirectionalLight(col(td[2]), td[3] * K * .75); dl.position.copy(sunDir); scene.add(dl);
   // ground
-  // owner 11-06: a voxel world. The land is 1 m blocks stacked to the hex's real terrain height, coloured by its biome; blocks can be
-  // broken (B) and placed (N) and stay that way per hex. Block tops sit on .5 steps, never level with the water at 0. Past the block radius one smooth sheet carries on.
-  const H0 = terrain(b, r), GS0 = 4000 / 220, VX = me.vox = voxState(i), VK = (cx, cz) => (cx + 4096) * 8192 + cz + 4096;
-  const top0 = (cx, cz) => Math.round(H0(cx + .5, cz + .5) - .5) + .5;
-  const H = (x, z) => { const cx = Math.floor(x), cz = Math.floor(z); return top0(cx, cz) + (VX.nat ? 0 : VX.e.get(VK(cx, cz)) || 0); };   // the top of the block column you stand on
+  // owner 11-06: a voxel world. Every old 1 m block is now 27 small ones (3 x 3 x 3), each a sixth of your height (two old blocks = you).
+  // The land is cells stacked to the hex's real terrain height: grass / sand / snow on top, dirt under it, stone deeper. Any cell can be mined (B, aim
+  // anywhere: down, ahead or up; stone takes 3 blows, wood 2, the rest 1) or placed (N) and stays that way per hex. Past the cell radius one smooth sheet carries on.
+  const H0 = terrain(b, r), GS0 = 4000 / 220, VX = me.vox = voxState(i);
+  const HH = (() => { try { const bb = new T.Box3().setFromObject(heroMesh().root); return clamp(bb.max.y - bb.min.y, 1.5, 2.2); } catch (e) { return 1.8; } })();
+  const VS = HH / 6, OY = VS / 2, yb = iy => iy * VS - OY, ci = v => Math.floor(v / VS), cyi = y => Math.floor((y + OY) / VS);   // cell tops never sit level with the water at 0
+  const nt = (cx, cz) => Math.round((H0((cx + .5) * VS, (cz + .5) * VS) + OY) / VS);   // natural column: cells below this index are solid
+  const CK = (cx, cz) => (cx + 8192) * 16384 + cz + 8192, cols = VX.cols;
+  const topOf = (cx, cz) => { const c = cols.get(CK(cx, cz)); return c ? c.top : nt(cx, cz); };
+  const H = (x, z) => VX.nat ? Math.round(H0(Math.floor(x) + .5, Math.floor(z) + .5) - .5) + .5 : yb(topOf(ci(x), ci(z)));   // plants keep the old layout (every tree keeps its number); the rest stand on the cells
+  const Hn = (x, z) => yb(nt(ci(x), ci(z)));
   const gg = new T.PlaneGeometry(4000, 4000, 220, 220); gg.rotateX(-Math.PI / 2);
   const gp = gg.attributes.position, vc = [], g0 = col(b.g[0]), g1 = col(b.g[1] || b.g[0]), sand = col(b.w === "swamp" ? "4a4430" : "d8c8a0"), snow = col("f2f6fa");
   for (let k = 0; k < gp.count; k++) {
-    const x = gp.getX(k), z = gp.getZ(k), y = H(x, z); gp.setY(k, H0(x, z) - 1.1);   // far sheet sits just under the blocks
+    const x = gp.getX(k), z = gp.getZ(k), y = H(x, z); gp.setY(k, H0(x, z) - 1.1);   // far sheet sits just under the cells
     tmp.copy(g0).lerp(g1, clamp(.5 + .5 * Math.sin(x * .021 + z * .007) * Math.sin(z * .017 - x * .011) + (r() - .5) * .3, 0, 1));
     if (b.w && y < 1.4) tmp.lerp(sand, smooth(1.4, .6, y) * .8);
     if (b.sn && y > b.sn + 15 * Math.sin(x * .03) * Math.sin(z * .025)) tmp.copy(snow);
@@ -6326,38 +6334,47 @@ function build(me, i) {
   gg.setAttribute("color", new T.Float32BufferAttribute(vc, 3)); gg.computeVertexNormals();
   const tex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const x = c.getContext("2d"); x.fillStyle = "#d8d8d8"; x.fillRect(0, 0, 256, 256); for (let k = 0; k < 5000; k++) { const v = 150 + r() * 105 | 0; x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(r() * 256, r() * 256, 1 + r() * 3, 1 + r() * 3); } const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(400, 400); t.anisotropy = 4; t.colorSpace = T.SRGBColorSpace; return t; })();
   if (!toonG) { toonG = new T.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, T.RedFormat); toonG.minFilter = toonG.magFilter = T.NearestFilter; toonG.needsUpdate = true; }
-  const VC = 250, vmask = new Uint8Array(VC * VC), vmt = new T.DataTexture(vmask, VC, VC, T.RedFormat); vmt.minFilter = vmt.magFilter = T.NearestFilter; vmt.needsUpdate = true;
+  const CH = 32, CW = CH * VS, VC = Math.ceil(4000 / CW / 2) * 2 + 2, vmask = new Uint8Array(VC * VC), vmt = new T.DataTexture(vmask, VC, VC, T.RedFormat); vmt.minFilter = vmt.magFilter = T.NearestFilter; vmt.needsUpdate = true;
   const farM = new T.MeshToonMaterial({ vertexColors: true, map: tex, gradientMap: toonG });   // toon already: toonify leaves it (and its mask) alone
-  farM.onBeforeCompile = s => { s.uniforms.vxM = { value: vmt }; s.vertexShader = s.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vWxz;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvWxz = (modelMatrix * vec4(transformed, 1.0)).xz;"); s.fragmentShader = s.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D vxM; varying vec2 vWxz;").replace("void main() {", "void main() {\nif (texture2D(vxM, (vWxz + 2000.0) / 4000.0).r > .5) discard;"); };   // hidden wherever block chunks are built
+  farM.onBeforeCompile = s => { s.uniforms.vxM = { value: vmt }; s.vertexShader = s.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vWxz;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvWxz = (modelMatrix * vec4(transformed, 1.0)).xz;"); s.fragmentShader = s.fragmentShader.replace("#include <common>", `#include <common>\nuniform sampler2D vxM; varying vec2 vWxz;`).replace("void main() {", `void main() {\nif (texture2D(vxM, (floor(vWxz / ${CW.toFixed(5)}) + ${VC / 2}.0 + .5) / ${VC}.0).r > .5) discard;`); };   // hidden wherever cell chunks are built
   scene.add(new T.Mesh(gg, farM));
-  { // block chunks, 16 x 16 columns, built around you out to 8 chunks (128 m); a block's grid lines come from one tiny texture
-    const CH = 16, VR = 8, chunks = new Map(), stone = col("8b8781"), dirt = col("7a5a3c"), cT = new T.Color(), cS = new T.Color(), cD = new T.Color();
-    const btx = (() => { const c = document.createElement("canvas"); c.width = c.height = 16; const x = c.getContext("2d"); for (let a = 0; a < 16; a++) for (let d = 0; d < 16; d++) { const v = (a === 0 || d === 0) ? 192 : 214 + ((a * 7 + d * 13) % 5) * 8 + (((a * 31 + d * 17) >> 2) % 3) * 6; x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(a, d, 1, 1); } const t = new T.CanvasTexture(c); t.magFilter = T.NearestFilter; t.minFilter = T.LinearMipmapLinearFilter; t.anisotropy = 4; t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace; return t; })();
+  { // cell chunks, 32 x 32 columns, built around you out to 6 chunks
+    const VR = 6, chunks = new Map(), stone = col("8b8781"), dirt = col("7a5a3c"), wood = col("9a7448"), cT = new T.Color(), cS = new T.Color(), cA = new T.Color(), cB = new T.Color();
+    const btx = (() => { const c = document.createElement("canvas"); c.width = c.height = 16; const x = c.getContext("2d"); for (let a = 0; a < 16; a++) for (let d = 0; d < 16; d++) { const v = (a === 0 || d === 0) ? 196 : 214 + ((a * 7 + d * 13) % 5) * 8 + (((a * 31 + d * 17) >> 2) % 3) * 6; x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(a, d, 1, 1); } const t = new T.CanvasTexture(c); t.magFilter = T.NearestFilter; t.minFilter = T.LinearMipmapLinearFilter; t.anisotropy = 4; t.wrapS = t.wrapT = T.RepeatWrapping; t.colorSpace = T.SRGBColorSpace; return t; })();
     const cm = new T.MeshLambertMaterial({ vertexColors: true, map: btx });
     const hn = (x, z) => { let h = (x * 374761393 + z * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
-    const colAt = (x, z, y) => {   // top, soil and deep colours of one column, the same rules as the old ground
-      cT.copy(g0).lerp(g1, clamp(.5 + .5 * Math.sin(x * .021 + z * .007) * Math.sin(z * .017 - x * .011) + (hn(x, z) - .5) * .3, 0, 1));
-      let kind = 0; if (b.w && y < 1.4) { cT.lerp(sand, smooth(1.4, .6, y) * .8); if (y < .9) kind = 1; }
-      if (b.sn && y > b.sn + 15 * Math.sin(x * .03) * Math.sin(z * .025)) { cT.copy(snow); kind = 2; }
-      if (y < -.9 && b.w) kind = 1;
-      cS.copy(kind === 1 ? cT : kind === 2 ? stone : cD.copy(dirt).lerp(cT, .25)); cD.copy(kind === 1 ? cT : stone).lerp(cT, .08);
-      const sh = .9 + hn(z, x) * .18; cT.multiplyScalar(sh);
+    const kindAt = (cx, cz, y) => { const x = (cx + .5) * VS, z = (cz + .5) * VS; if (b.sn && y > b.sn + 15 * Math.sin(x * .03) * Math.sin(z * .025)) return 2; if (b.w && y < .9) return 1; return 0; };   // 0 grass, 1 sand, 2 snow
+    // cell types: 1 grass 2 dirt 3 sand 4 snow 5 stone 6 wood; hardness = blows to mine
+    const HARD = [0, 1, 1, 1, 1, 3, 2], NAME = ["", "grass", "dirt", "sand", "snow", "stone", "wood"];
+    const natType = (cx, iy, cz, n) => { const d = n - 1 - iy, k = kindAt(cx, cz, yb(n)); if (d === 0) return [1, 3, 4][k]; if (k === 1) return d < 6 ? 3 : 5; if (k === 2) return d < 2 ? 4 : 5; return d < 4 ? 2 : 5; };
+    const cell = (cx, iy, cz, n) => { const c = cols.get(CK(cx, cz)); if (c) { const v = c.m.get(iy); if (v !== undefined) return v; } if (n === undefined) n = nt(cx, cz); return iy < n ? natType(cx, iy, cz, n) : 0; };
+    const grassC = (cx, cz) => { const x = (cx + .5) * VS, z = (cz + .5) * VS; cA.copy(g0).lerp(g1, clamp(.5 + .5 * Math.sin(x * .021 + z * .007) * Math.sin(z * .017 - x * .011) + (hn(cx, cz) - .5) * .3, 0, 1)); if (b.w) cA.lerp(sand, smooth(1.4, .6, yb(nt(cx, cz))) * .8); return cA; };
+    const tcol = (t, cx, cz, iy, top, out) => {   // the colour of one face of one cell
+      if (t === 1) { if (top) out.copy(grassC(cx, cz)); else out.copy(dirt).lerp(grassC(cx, cz), .3); }
+      else out.copy(t === 2 ? dirt : t === 3 ? sand : t === 4 ? snow : t === 5 ? stone : wood);
+      return out.multiplyScalar(.9 + hn(cx * 3 + iy, cz * 7 - iy) * .18);
     };
     const mk = (kx, kz) => {
-      const x0 = kx * CH, z0 = kz * CH, N = CH + 2, hs = new Float32Array(N * N), P = [], NR = [], U = [], C = [], I = [];
-      for (let a = 0; a < N; a++) for (let c = 0; c < N; c++) hs[a * N + c] = H(x0 + a - .5, z0 + c - .5);
-      const quad = (ox, oy, oz, e1x, e1y, e1z, e2x, e2y, e2z, nx, ny, nz, ua, va, cl) => { const o = P.length / 3; P.push(ox, oy, oz, ox + e1x, oy + e1y, oz + e1z, ox + e1x + e2x, oy + e1y + e2y, oz + e1z + e2z, ox + e2x, oy + e2y, oz + e2z); for (let q = 0; q < 4; q++) { NR.push(nx, ny, nz); C.push(cl.r, cl.g, cl.b); } U.push(0, 0, ua, 0, ua, va, 0, va); I.push(o, o + 1, o + 2, o, o + 2, o + 3); };
-      const side = (x, z, y, y2, edge, d) => {   // d: 0 +x, 1 -x, 2 +z, 3 -z
-        const lo = edge ? Math.min(y2, y - 3) : y2; if (lo >= y) return;
-        const seg = (ya, yb, cl) => { const h = yb - ya; if (h <= 0) return;
-          if (d === 0) quad(x + 1, ya, z, 0, h, 0, 0, 0, 1, 1, 0, 0, h, 1, cl); else if (d === 1) quad(x, ya, z, 0, 0, 1, 0, h, 0, -1, 0, 0, 1, h, cl);
-          else if (d === 2) quad(x, ya, z + 1, 1, 0, 0, 0, h, 0, 0, 0, 1, 1, h, cl); else quad(x, ya, z, 0, h, 0, 1, 0, 0, 0, 0, -1, h, 1, cl); };
-        const mid = Math.max(lo, y - 1); seg(mid, y, cS); seg(lo, mid, cD);
-      };
+      const x0 = kx * CH, z0 = kz * CH, N = CH + 2, ns = new Int32Array(N * N), ed = new Uint8Array(N * N), P = [], NR = [], U = [], C = [], I = [];
+      for (let a = 0; a < N; a++) for (let c = 0; c < N; c++) { const cx = x0 + a - 1, cz = z0 + c - 1; ns[a * N + c] = nt(cx, cz); ed[a * N + c] = cols.has(CK(cx, cz)) ? 1 : 0; }
+      const quad = (ox, oy, oz, e1x, e1y, e1z, e2x, e2y, e2z, nx, ny, nz, cl) => { const o = P.length / 3; P.push(ox, oy, oz, ox + e1x, oy + e1y, oz + e1z, ox + e1x + e2x, oy + e1y + e2y, oz + e1z + e2z, ox + e2x, oy + e2y, oz + e2z); for (let q = 0; q < 4; q++) { NR.push(nx, ny, nz); C.push(cl.r, cl.g, cl.b); } U.push(0, 0, 1, 0, 1, 1, 0, 1); I.push(o, o + 1, o + 2, o, o + 2, o + 3); };
+      const at = (a, c, iy) => { const k = a * N + c; return ed[k] ? cell(x0 + a - 1, iy, z0 + c - 1, ns[k]) : iy < ns[k] ? 1 : 0; };   // neighbours only need solid or not
+      const NB = [[1, 0], [-1, 0], [0, 1], [0, -1]];
       for (let a = 1; a <= CH; a++) for (let c = 1; c <= CH; c++) {
-        const x = x0 + a - 1, z = z0 + c - 1, y = hs[a * N + c]; colAt(x, z, y);
-        quad(x, y, z, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 1, cT);
-        side(x, z, y, hs[(a + 1) * N + c], a === CH, 0); side(x, z, y, hs[(a - 1) * N + c], a === 1, 1); side(x, z, y, hs[a * N + c + 1], c === CH, 2); side(x, z, y, hs[a * N + c - 1], c === 1, 3);
+        const k = a * N + c, cx = x0 + a - 1, cz = z0 + c - 1, n = ns[k], any = ed[k] || ed[k + N] || ed[k - N] || ed[k + 1] || ed[k - 1];
+        let lo = Math.min(n, ns[k + N], ns[k - N], ns[k + 1], ns[k - 1]), hi = n;
+        if (a === 1 || c === 1 || a === CH || c === CH) lo = Math.min(lo, n - 5);   // the outer ring reaches down to the far sheet
+        if (any) for (const q of [k, k + N, k - N, k + 1, k - 1]) if (ed[q]) { const m = cols.get(CK(x0 + Math.floor(q / N) - 1, z0 + q % N - 1)); for (const iy of m.m.keys()) { if (iy < lo) lo = iy; if (q === k && iy + 1 > hi) hi = iy + 1; } }
+        for (let iy = lo; iy < hi; iy++) {
+          const t = ed[k] ? cell(cx, iy, cz, n) : iy < n ? natType(cx, iy, cz, n) : 0; if (!t) continue;
+          const x = cx * VS, y = yb(iy), z = cz * VS;
+          if (!at(a, c, iy + 1)) quad(x, y + VS, z, 0, 0, VS, VS, 0, 0, 0, 1, 0, tcol(t, cx, cz, iy, 1, cT));
+          if (ed[k] && !at(a, c, iy - 1)) quad(x, y, z, VS, 0, 0, 0, 0, VS, 0, -1, 0, tcol(t, cx, cz, iy, 0, cT).multiplyScalar(.7));
+          tcol(t, cx, cz, iy, 0, cS);
+          for (let d = 0; d < 4; d++) { const na = a + NB[d][0], nc = c + NB[d][1], edge = (na < 1 || na > CH || nc < 1 || nc > CH) && iy >= n - 5; if (at(na, nc, iy) && !edge) continue;
+            if (d === 0) quad(x + VS, y, z, 0, VS, 0, 0, 0, VS, 1, 0, 0, cS); else if (d === 1) quad(x, y, z, 0, 0, VS, 0, VS, 0, -1, 0, 0, cS);
+            else if (d === 2) quad(x, y, z + VS, VS, 0, 0, 0, VS, 0, 0, 0, 1, cS); else quad(x, y, z, 0, VS, 0, VS, 0, 0, 0, 0, -1, cS); }
+        }
       }
       const g = new T.BufferGeometry(); g.setAttribute("position", new T.Float32BufferAttribute(P, 3)); g.setAttribute("normal", new T.Float32BufferAttribute(NR, 3)); g.setAttribute("uv", new T.Float32BufferAttribute(U, 2)); g.setAttribute("color", new T.Float32BufferAttribute(C, 3)); g.setIndex(I); g.computeBoundingSphere();
       const m = new T.Mesh(g, cm); m.matrixAutoUpdate = false; return m;
@@ -6365,18 +6382,29 @@ function build(me, i) {
     const mkey = (kx, kz) => (kx + 512) * 1024 + kz + 512, ring = [];
     for (let a = -VR; a <= VR; a++) for (let c = -VR; c <= VR; c++) if (a * a + c * c <= VR * VR) ring.push([a, c, a * a + c * c]);
     ring.sort((u, v) => u[2] - v[2]);
-    const setMask = (kx, kz, v) => { const u = kx + 125, w = kz + 125; if (u >= 0 && w >= 0 && u < VC && w < VC) { vmask[w * VC + u] = v; vmt.needsUpdate = true; } };
+    const setMask = (kx, kz, v) => { const u = kx + VC / 2, w = kz + VC / 2; if (u >= 0 && w >= 0 && u < VC && w < VC) { vmask[w * VC + u] = v; vmt.needsUpdate = true; } };
     const put = (kx, kz) => { const key = mkey(kx, kz), old = chunks.get(key); if (old) { scene.remove(old); old.geometry.dispose(); } const m = mk(kx, kz); scene.add(m); chunks.set(key, m); setMask(kx, kz, 255); };
-    const tick = (budget = 4) => {
-      const p = me.pos; if (!p) return; const kx = Math.floor(p.x / CH), kz = Math.floor(p.z / CH);
+    const tick = (budget = 2) => {
+      const p = me.pos; if (!p) return; const kx = Math.floor(p.x / CW), kz = Math.floor(p.z / CW);
       for (const [a, c] of ring) { if (budget <= 0) break; if (!chunks.has(mkey(kx + a, kz + c))) { put(kx + a, kz + c); budget--; } }
       if ((VX.gc = (VX.gc || 0) + 1) % 30 === 0) for (const [key, m] of chunks) { const ax = Math.floor(key / 1024) - 512 - kx, az = key % 1024 - 512 - kz; if (ax * ax + az * az > (VR + 2) ** 2) { scene.remove(m); m.geometry.dispose(); chunks.delete(key); setMask(ax + kx, az + kz, 0); } }
     };
     const pend = new Set();
-    Object.assign(VX, { H, top0, VK, CH, tick, col: (x, z, y) => (colAt(x, z, y), y < -.9 || b.w && y < .9 ? cT.getHex() : cS.getHex()),
+    const recalc = (cx, cz) => { const c = cols.get(CK(cx, cz)); if (!c) return; const n = nt(cx, cz); let iy = n; for (const k of c.m.keys()) if (k + 1 > iy) iy = k + 1; while (iy > n - 400 && !cell(cx, iy - 1, cz, n)) iy--; c.top = iy; };
+    Object.assign(VX, { H, Hn, VS, OY, HH, yb, ci, cyi, nt, CK, cell, HARD, NAME, tick, topOf,
+      tcol: (t, cx, cz, iy) => tcol(t, cx, cz, iy, 1, new T.Color()).getHex(),
+      G: (x, z, f) => {   // the floor under feet f: the highest solid cell at most two cells above them, so you walk into tunnels and under bridges
+        const cx = ci(x), cz = ci(z), c = cols.get(CK(cx, cz)), n = nt(cx, cz); let iy = cyi(f + VS * 2.2) - 1;
+        if (!c) return yb(Math.min(n, iy + 1)); for (let s = 0; s < 400; s++, iy--) { const v = c.m.get(iy); if (v !== undefined ? v : iy < n) return yb(iy + 1); } return yb(n); },
+      blocked: (x, z, f) => { const cx = ci(x), cz = ci(z), c = cols.get(CK(cx, cz)), n = nt(cx, cz); for (let iy = cyi(f + VS * 2.2), e = cyi(f + HH - .05); iy <= e; iy++) { const v = c ? c.m.get(iy) : undefined; if (v !== undefined ? v : iy < n) return true; } return false; },
       dirty: (cx, cz) => { for (const [a, c] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) pend.add(mkey(Math.floor((cx + a) / CH), Math.floor((cz + c) / CH))); },
       flush: () => { for (const key of pend) if (chunks.has(key)) put(Math.floor(key / 1024) - 512, key % 1024 - 512); pend.clear(); },
-      edit: (cx, cz, d, defer) => { const k = VK(cx, cz), v = (VX.e.get(k) || 0) + d; if (v < -12 || v > 40) return false; v ? VX.e.set(k, v) : VX.e.delete(k); VX.dirty(cx, cz); if (!defer) VX.flush(); VX.save(); return true; } });
+      set: (cx, iy, cz, t, defer) => {   // t: 0 air, else a cell type
+        const k = CK(cx, cz); let c = cols.get(k); if (!c) cols.set(k, c = { m: new Map(), top: 0 });
+        if (t === 0 && iy >= nt(cx, cz)) c.m.delete(iy); else c.m.set(iy, t);
+        if (!c.m.size) cols.delete(k); else recalc(cx, cz);
+        VX.dirty(cx, cz); if (!defer) VX.flush(); VX.save(); return true; } });
+    for (const [k, c] of cols) recalc(Math.floor(k / 16384) - 8192, k % 16384 - 8192);
     me.ps.push(() => tick());
   }
   if (b.w) { const w = new T.Mesh(new T.PlaneGeometry(4000, 4000), new T.MeshPhongMaterial({ color: col(b.wc || "3d6a7a"), transparent: true, opacity: .86, shininess: 90, specular: 0x666666 })); w.rotation.x = -Math.PI / 2; scene.add(w); }
@@ -6417,13 +6445,13 @@ function build(me, i) {
       else { if (j >= n) break; x = pts[j * 2]; z = pts[j * 2 + 1]; }   /* jittered-grid spot from the layout above */
       const rr0 = Math.hypot(x, z); if (rr0 < 3.5) continue;
       if (h >= 6 && !rock && !grid) { const cx0 = Math.floor(x / 5), cz0 = Math.floor(z / 5); let hit = false; if (!isTree(k)) for (let ax = -1; ax <= 1 && !hit; ax++) for (let az = -1; az <= 1 && !hit; az++) if (tallOcc.has((cx0 + ax) * 8192 + cz0 + az)) hit = true; if (hit) continue; tallOcc.add(cx0 * 8192 + cz0); }   /* trunks never interlock: 5 m cells with neighbours = at least 5 m apart, drops almost nothing so the spread stays even */
-      const y = H(x, z);
+      const y = H(x, z), yN = Hn(x, z);   // layout by the old ground, standing on the new cells
       if (!pts && b.w && (o.wet === 2 ? y > -1 : o.wet ? y < -2.5 || y > .5 : y < .25)) continue;   /* layout spots were already checked */
       const s = (rock ? .5 + r() * 1.1 : .85 + r() * .25) * (1 + Math.min(1, Math.max(0, (rr0 - 100) / 900)) * .35), tl = rock ? (r() - .5) * .3 : h >= 4 && r() < .3 ? (r() - .5) * .5 : (r() - .5) * .06;   // about a third of trees lean a little
-      M.compose(pv.set(x, y - (rock ? h * .12 * s : .2), z), q.setFromEuler(eu.set(tl, r() * 6.28, tl)), sv3.set(s * (.9 + r() * .2), s, s * (.9 + r() * .2)));
+      M.compose(pv.set(x, yN - (rock ? h * .12 * s : .2), z), q.setFromEuler(eu.set(tl, r() * 6.28, tl)), sv3.set(s * (.9 + r() * .2), s, s * (.9 + r() * .2)));
       M.toArray(MB, kc * 16); si.push(Math.floor(x / SEC) * 8192 + Math.floor(z / SEC)); kc++;
-      if (!rock && h >= 6 && rr0 < 700 && climb.length < 120 && Math.abs(tl) < .05 && r() < .35) climb.push([x, y, z, h * s]);   // vine-wrapped: climbable
-      if (h >= 3 && rr0 < 700) { const ck = Math.floor(x / 8) * 4096 + Math.floor(z / 8); if (!tgrid.has(ck)) tgrid.set(ck, []); tgrid.get(ck).push(x, z, rock ? .5 * h * s : .45, rock ? y + h * s * .8 : 0); }   // trunks and rocks are solid
+      if (!rock && h >= 6 && rr0 < 700 && climb.length < 120 && Math.abs(tl) < .05 && r() < .35) climb.push([x, yN, z, h * s]);   // vine-wrapped: climbable
+      if (h >= 3 && rr0 < 700) { const ck = Math.floor(x / 8) * 4096 + Math.floor(z / 8); if (!tgrid.has(ck)) tgrid.set(ck, []); tgrid.get(ck).push(x, z, rock ? .5 * h * s : .45, rock ? yN + h * s * .8 : 0); }   // trunks and rocks are solid
     }
     if (!kc) continue;
     // Horizon-style culling: plants split into sectors, each with its own bounds, so the GPU skips every sector behind or beside the camera
@@ -6516,9 +6544,9 @@ function build(me, i) {
       else if (H(nx, pos.z) > -.6) pos.x = nx; else if (H(pos.x, nz) > -.6) pos.z = nz;   // slide along the shore instead of stopping dead
       me.walkT += dt * Math.hypot(me.vx, me.vz) * 1.6;
     }
-    if (!me.flying && !me.mantle && !me.perch) { const h0 = H(px0, pz0) + (me.jy || 0) + 1.05; if (H(pos.x, pos.z) > h0) { if (H(pos.x, pz0) <= h0) pos.z = pz0; else if (H(px0, pos.z) <= h0) pos.x = px0; else { pos.x = px0; pos.z = pz0; } me.vx *= .3; me.vz *= .3; } }   /* voxel walls: a step of one block walks up, two need a jump, more need Tab */
+    if (!me.flying && !me.mantle && !me.perch && me.vox && me.vox.blocked) { const V = me.vox, ft = (me.by ?? pos.y) + (me.jy || 0); if (V.blocked(pos.x, pos.z, ft)) { if (!V.blocked(pos.x, pz0, ft)) pos.z = pz0; else if (!V.blocked(px0, pos.z, ft)) pos.x = px0; else { pos.x = px0; pos.z = pz0; } me.vx *= .3; me.vz *= .3; } }   /* cell walls: up to 2 cells walks up, higher needs a jump or Tab; no walking through blocks */
     if (me.flying) { const uy = (k.Space ? 1 : 0) - (k.ControlLeft || k.ControlRight ? 1 : 0); me.flyY = clamp((me.flyY ?? pos.y) + uy * (run ? 130 : 48) * dt, H(pos.x, pos.z) + 1.4, 1500); me.by = me.flyY; me.jy = 0; me.vy = 0; }   /* god mode altitude: SPACE up, CTRL down, SHIFT fast (owner, 11-01) */
-    else me.by = lerp(me.by ?? pos.y, b.w ? Math.max(H(pos.x, pos.z), -.3) : H(pos.x, pos.z), 1 - Math.exp(-dt * 12));   /* only lands with water hold you at its surface; dry valleys used to leave you floating */
+    else { const gH = me.vox && me.vox.G ? me.vox.G(pos.x, pos.z, (me.by ?? pos.y) + (me.jy || 0)) : H(pos.x, pos.z); me.by = lerp(me.by ?? pos.y, b.w ? Math.max(gH, -.3) : gH, 1 - Math.exp(-dt * (gH < (me.by ?? 0) - .7 ? 7 : 14))); }   /* stands on the cell under your feet: tunnels, bridges, your own towers */   /* only lands with water hold you at its surface; dry valleys used to leave you floating */
     { // Tab: quick climb onto what is in front, then stand on it until you step off (user, 11-01)
       const ml = me.mantle;
       if (ml) { ml.t += dt; const e = Math.min(1, ml.t / ml.d), q2 = e * e * (3 - 2 * e); pos.x = ml.x0 + (ml.x1 - ml.x0) * q2; pos.z = ml.z0 + (ml.z1 - ml.z0) * q2; me.by = H(pos.x, pos.z); me.jy = ml.y0 + (ml.y1 - ml.y0) * Math.min(1, e * 1.6) - me.by; me.vy = 0; if (e >= 1) { me.mantle = null; me.perch = ml.perch; if (!ml.perch) me.jy = Math.max(0, me.jy); } }
@@ -6713,7 +6741,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   let C = null, loading = null;
   const lib = () => C ? Promise.resolve(C) : loading || (loading = import("https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js").then(m => (C = m)).catch(e => { loading = null; throw e; }));
   const cur = () => window.SV && SV.S3;
-  const PS = 8;
+  const PS = 12;
   const world = me => {
     if (me.pw) return me.pw;
     const w = new C.World({ gravity: new C.Vec3(0, -15, 0) }); w.broadphase = new C.SAPBroadphase(w); w.allowSleep = true; w.solver.iterations = 12;
@@ -6728,14 +6756,14 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     };
     return P;
   };
-  const patch = (me, px, pz) => {   // 8 x 8 block columns as static boxes, made when a body comes near
-    const P = me.pw, key = px * 4096 + pz; if (P.patches.has(key)) return; const hb = new C.Body({ mass: 0 });
-    for (let a = 0; a < PS; a++) for (let c = 0; c < PS; c++) { const cx = px * PS + a, cz = pz * PS + c; hb.addShape(new C.Box(new C.Vec3(.5, 1.5, .5)), new C.Vec3(cx + .5, me.H(cx + .5, cz + .5) - 1.5, cz + .5)); }
+  const patch = (me, px, pz) => {   // 12 x 12 cell columns as static boxes (each column's top), made when a body comes near
+    const P = me.pw, V = me.vox, S = V.VS, key = (px + 4096) * 8192 + pz + 4096; if (P.patches.has(key)) return; const hb = new C.Body({ mass: 0 });
+    for (let a = 0; a < PS; a++) for (let c = 0; c < PS; c++) { const cx = px * PS + a, cz = pz * PS + c; hb.addShape(new C.Box(new C.Vec3(S / 2, .75, S / 2)), new C.Vec3((cx + .5) * S, V.yb(V.topOf(cx, cz)) - .75, (cz + .5) * S)); }
     P.w.addBody(hb); P.patches.set(key, hb);
   };
-  const around = (me, x, z) => { const px = Math.floor(x / PS), pz = Math.floor(z / PS); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) patch(me, px + a, pz + c); };
-  const repatch = (me, cx, cz) => { const P = me.pw; if (!P) return; const px = Math.floor(cx / PS), pz = Math.floor(cz / PS), key = px * 4096 + pz, hb = P.patches.get(key); if (hb) { P.w.removeBody(hb); P.patches.delete(key); patch(me, px, pz); }
-    for (const e of P.bodies) if (Math.hypot(e.b.position.x - cx - .5, e.b.position.z - cz - .5) < 3) e.b.wakeUp(); };
+  const around = (me, x, z) => { const S = me.vox.VS, px = Math.floor(x / S / PS), pz = Math.floor(z / S / PS); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) patch(me, px + a, pz + c); };
+  const repatch = (me, cx, cz) => { const P = me.pw; if (!P) return; const S = me.vox.VS, px = Math.floor(cx / PS), pz = Math.floor(cz / PS), key = (px + 4096) * 8192 + pz + 4096, hb = P.patches.get(key); if (hb) { P.w.removeBody(hb); P.patches.delete(key); patch(me, px, pz); }
+    for (const e of P.bodies) if (Math.hypot(e.b.position.x - (cx + .5) * S, e.b.position.z - (cz + .5) * S) < 2) e.b.wakeUp(); };
   const poses = me => { const V = me.vox; let ch = 0; for (const e of me.pw.bodies) if (e.idx >= 0) { const b = e.b, p = [b.position.x, b.position.y, b.position.z, b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w].map(u => Math.round(u * 1000) / 1000), o = V.t.get(e.idx); if (!o || o.some((u, k) => Math.abs(u - p[k]) > .01)) { V.t.set(e.idx, p); ch = 1; } } if (ch) V.save(); };
   // ---- trees ----
   const unsolid = (me, t) => { const ck = Math.floor(t.x / 8) * 4096 + Math.floor(t.z / 8), a = me.tgrid && me.tgrid.get(ck); if (a) for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - t.x) < .01 && Math.abs(a[i + 1] - t.z) < .01) { a.splice(i, 4); break; }
@@ -6772,42 +6800,48 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     return best;
   };
   window.hxChop = chop;
-  // ---- blocks: aim with the crosshair ----
+  // ---- cells: aim with the crosshair anywhere - down, ahead or up ----
   const aim = me => {
-    const T = me.T, d = new T.Vector3(); me.cam.getWorldDirection(d); const o = me.cam.position; let prev = null;
-    for (let s = 0; s < (me.dist || 2.2) + 7; s += .08) { const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s, cx = Math.floor(x), cz = Math.floor(z);
-      if (Math.hypot(x - me.pos.x, z - me.pos.z) > 6.5) { if (s > (me.dist || 2.2) + 1) break; continue; }
-      if (y < me.H(x, z)) return { cx, cz, prev: prev && (prev[0] !== cx || prev[1] !== cz) ? prev : null }; prev = [cx, cz]; }
+    const T = me.T, V = me.vox, d = new T.Vector3(); me.cam.getWorldDirection(d); const o = me.cam.position, hx = me.pos.x, hy = me.pos.y + 1.2, hz = me.pos.z; let prev = null;
+    for (let s = 0; s < (me.dist || 2.2) + 6; s += V.VS / 4) { const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s, cx = V.ci(x), cz = V.ci(z), iy = V.cyi(y);
+      if (Math.hypot(x - hx, y - hy, z - hz) > 5) { if (s > (me.dist || 2.2) + 1) break; continue; }
+      const t = V.cell(cx, iy, cz); if (t) return { cx, iy, cz, t, prev }; if (!prev || prev[0] !== cx || prev[1] !== iy || prev[2] !== cz) prev = [cx, iy, cz]; }
     return null;
   };
   const junkMat = new Map(), boxG = {}, mat = (me, c) => junkMat.get(c) || (junkMat.set(c, new me.T.MeshLambertMaterial({ color: c, flatShading: true })), junkMat.get(c));
   const geo = (me, s) => boxG[s] || (boxG[s] = new me.T.BoxGeometry(s, s, s));
-  const junk = (me, x, y, z, s, c, kind) => {   // a block as a rigid body
+  const junk = (me, x, y, z, s, c, kind, t) => {   // a cell as a rigid body
     const P = world(me), o = new me.T.Mesh(geo(me, s), mat(me, c)); me.scene.add(o);
-    const b = new C.Body({ mass: s * s * s * 40, linearDamping: .02, angularDamping: .1 }); b.addShape(new C.Box(new C.Vec3(s / 2, s / 2, s / 2))); b.position.set(x, y, z); P.w.addBody(b);
-    const e = { b, o, off: new me.T.Vector3(), idx: -1, kind, t0: me.tnow, hit: new Set() }; P.bodies.push(e); around(me, x, z);
-    const js = P.bodies.filter(u => u.kind); if (js.length > 70) drop(me, js[0]);
+    const b = new C.Body({ mass: Math.max(.5, s * s * s * 60), linearDamping: .02, angularDamping: .1 }); b.addShape(new C.Box(new C.Vec3(s / 2, s / 2, s / 2))); b.position.set(x, y, z); P.w.addBody(b);
+    const e = { b, o, off: new me.T.Vector3(), idx: -1, kind, t0: me.tnow, hit: new Set(), type: t }; P.bodies.push(e); around(me, x, z);
+    const js = P.bodies.filter(u => u.kind); if (js.length > 90) drop(me, js[0]);
     return e;
   };
   const drop = (me, e) => { const P = me.pw; P.w.removeBody(e.b); me.scene.remove(e.o); P.bodies.splice(P.bodies.indexOf(e), 1); };
-  const breakBlock = me => {
-    const a = aim(me), V = me.vox; if (!a) return; const top = me.H(a.cx + .5, a.cz + .5);
-    if (!V.edit(a.cx, a.cz, -1)) { me.say && me.say("Too deep to dig here", 900); return; }
-    me.tone && me.tone(180, .06); me.shake = Math.max(me.shake || 0, .08); const c = V.col(a.cx, a.cz, top);
-    chips(me, new me.T.Vector3(a.cx + .5, top, a.cz + .5), c, 6);
-    for (const t of me.cut || []) if (!t.down && Math.abs(t.x - a.cx - .5) < 1 && Math.abs(t.z - a.cz - .5) < 1) { t.hits = 3; lib().then(() => cur() === me && !t.down && fell(me, t)); }   // dig under a tree: down it comes
-    lib().then(() => { if (cur() !== me) return; world(me); repatch(me, a.cx, a.cz); const e = junk(me, a.cx + .5, top - .5 + .05, a.cz + .5, .9, c, "debris"); e.b.velocity.set((Math.random() - .5) * 3, 5, (Math.random() - .5) * 3); e.b.angularVelocity.set(Math.random() * 4, Math.random() * 4, Math.random() * 4); })
-      .catch(() => { V.inv++; V.save(); });
+  const give = (me, t, n = 1) => { const V = me.vox; V.inv[t] = (V.inv[t] || 0) + n; if (!V.inv[V.sel]) V.sel = t; V.save(); };
+  const mine = me => {   // B (hold to keep digging): dirt, grass, sand, snow 1 blow, wood 2, stone 3
+    const a = aim(me), V = me.vox; me.mineT = me.tnow; if (!a) return; const key = a.cx + "," + a.iy + "," + a.cz, S = V.VS, cx0 = (a.cx + .5) * S, cy0 = V.yb(a.iy) + S / 2, cz0 = (a.cz + .5) * S, c = V.tcol(a.t, a.cx, a.cz, a.iy);
+    if (me.mineK !== key) { me.mineK = key; me.mineN = 0; } me.mineN++;
+    const hard = V.HARD[a.t] || 1; chips(me, new me.T.Vector3(cx0, cy0 + S / 2, cz0), c, a.t === 5 ? 4 : 3); me.tone && me.tone(a.t === 5 ? 260 : 150, .05);
+    if (me.mineN < hard) { me.shake = Math.max(me.shake || 0, .04); me.say && me.say(`${V.NAME[a.t]} ${me.mineN}/${hard}`, 500); return; }
+    me.mineK = null; const top = V.topOf(a.cx, a.cz); V.set(a.cx, a.iy, a.cz, 0); me.shake = Math.max(me.shake || 0, .07);
+    if (a.iy === top - 1) for (const t of me.cut || []) if (!t.down && Math.abs(t.x - cx0) < .5 && Math.abs(t.z - cz0) < .5) { t.hits = 3; lib().then(() => cur() === me && !t.down && fell(me, t)); }   // dig out a tree's foot: down it comes
+    lib().then(() => { if (cur() !== me) return; world(me); repatch(me, a.cx, a.cz); const e = junk(me, cx0, cy0, cz0, S * .92, c, "debris", a.t); e.b.velocity.set((Math.random() - .5) * 2, 3, (Math.random() - .5) * 2); e.b.angularVelocity.set(Math.random() * 4, Math.random() * 4, Math.random() * 4); })
+      .catch(() => give(me, a.t));
   };
+  const pick = me => { const V = me.vox; if ((V.inv[V.sel] || 0) > 0) return V.sel; const k = Object.keys(V.inv).find(k => V.inv[k] > 0); if (k) V.sel = +k; return k ? +k : 0; };
   const place = me => {
-    const a = aim(me), V = me.vox; if (!a) return; if (V.inv <= 0) { me.say && me.say("No blocks: break some (B) and pick them up", 1200); return; }
-    const [cx, cz] = a.prev || [a.cx, a.cz]; if (!V.edit(cx, cz, 1)) return; V.inv--; V.save(); me.tone && me.tone(440, .05); repatch(me, cx, cz);
+    const a = aim(me), V = me.vox, t = pick(me); if (!a || !a.prev) return; if (!t) { me.say && me.say("No blocks: mine some (B) and pick them up", 1200); return; }
+    const [cx, iy, cz] = a.prev, S = V.VS, y0 = V.yb(iy), ft = (me.by ?? me.pos.y) + (me.jy || 0);
+    if (Math.abs((cx + .5) * S - me.pos.x) < S / 2 + .3 && Math.abs((cz + .5) * S - me.pos.z) < S / 2 + .3 && y0 < ft + V.HH && y0 + S > ft + .05) return;   // never inside yourself
+    V.set(cx, iy, cz, t); V.inv[t]--; V.save(); me.tone && me.tone(440, .04); repatch(me, cx, cz);
   };
+  const cycle = me => { const V = me.vox, ks = Object.keys(V.inv).filter(k => V.inv[k] > 0).map(Number).sort((u, v) => u - v); if (!ks.length) return; V.sel = ks[(ks.indexOf(V.sel) + 1) % ks.length]; V.save(); me.say && me.say(`Placing ${V.NAME[V.sel]} (${V.inv[V.sel]})`, 800); };
   const throwBlock = me => {
-    const V = me.vox; if (V.inv <= 0) { me.say && me.say("No blocks to throw: break some (B)", 1100); return; }
-    lib().then(() => { if (cur() !== me) return; V.inv--; V.save(); const T = me.T, d = new T.Vector3(); me.cam.getWorldDirection(d);
-      const p = me.pos, e = junk(me, p.x + d.x * .9, p.y + 1.6, p.z + d.z * .9, .5, me.vox.col(Math.floor(p.x), Math.floor(p.z), p.y), "thrown");
-      e.b.velocity.set(d.x * 26, d.y * 26 + 3.5, d.z * 26); e.b.angularVelocity.set(8, 3, 5); me.tone && me.tone(520, .05); me.atkT = me.tnow; });
+    const V = me.vox, t = pick(me); if (!t) { me.say && me.say("No blocks to throw: mine some (B)", 1100); return; }
+    lib().then(() => { if (cur() !== me || !V.inv[t]) return; V.inv[t]--; V.save(); const T = me.T, d = new T.Vector3(); me.cam.getWorldDirection(d);
+      const p = me.pos, e = junk(me, p.x + d.x * .9, p.y + 1.5, p.z + d.z * .9, V.VS * 1.3, V.tcol(t, 0, 0, 0), "thrown", t);
+      e.b.velocity.set(d.x * 26, d.y * 26 + 3.5, d.z * 26); e.b.angularVelocity.set(8, 3, 5); me.tone && me.tone(520, .05); });
   };
   // ---- the slain fall as bodies; voxel chips on every hit ----
   const rag = (me, m, from) => {
@@ -6829,7 +6863,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   const hurtMe = (me, v, who) => {
     if (me.hp <= 0) return; me.hp -= v / (me.up ? me.up("hp") : 1); me.hurtT = 1; me.hpDraw && me.hpDraw(); const hu = document.getElementById("svHurt"); if (hu) { hu.style.opacity = .55; setTimeout(() => hu.style.opacity = 0, 180); }
     me.shake = Math.max(me.shake || 0, .35);
-    if (me.hp <= 0) { me.say && me.say(`Killed by a ${who}`, 1500); setTimeout(() => { if (cur() !== me) return; me.hp = 100; me.pos.set(me.sx || 0, me.H(me.sx || 0, me.sz || 0), me.sz || 0); (me.mobs || []).forEach(x => { x.angry = 0; }); me.hpDraw && me.hpDraw(); }, 0); }
+    if (me.hp <= 0) { me.say && me.say(`Killed by a ${who}`, 1500); setTimeout(() => { if (cur() !== me) return; me.hp = 100; me.pos.set(me.sx || 0, me.H(me.sx || 0, me.sz || 0), me.sz || 0); me.by = me.pos.y; (me.mobs || []).forEach(x => { x.angry = 0; }); me.hpDraw && me.hpDraw(); }, 0); }
   };
   const solid = (me, x, z) => { const L = me.tgrid && me.tgrid.get(Math.floor(x / 8) * 4096 + Math.floor(z / 8)); if (L) for (let q = 0; q < L.length; q += 4) if (Math.hypot(x - L[q], z - L[q + 1]) < L[q + 2] + .5) return true; return false; };
   const RANK = [[30, "SS", 1], [22, "S", .8], [15, "A", .6], [10, "B", .45], [6, "C", .3], [3, "D", .15]];
@@ -6839,14 +6873,15 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     const ring = new T.Mesh(new T.RingGeometry(.5, 1.2, 40), new T.MeshBasicMaterial({ color: 0xff8a30, transparent: true, side: T.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(p.x, me.H(p.x, p.z) + .2, p.z); me.scene.add(ring); me.fx.push({ o: ring, t: 0, d: .55, s: 8 });
     for (const m of me.mobs || []) { if (m.dead) continue; const R0 = m.root, dx = R0.position.x - p.x, dz = R0.position.z - p.z, d = Math.hypot(dx, dz); if (d > 10) continue;
       me.hurtMob(m, 45 * (1 + (me.lvlB || 0)), p, true); if (!m.dead) { m.stun = Math.max(m.stun || 0, 1.8); const k = (10 - d) * .5 / (d || 1); R0.position.x += dx * k; R0.position.z += dz * k; } }
-    const cells = []; for (let n = 0; n < 34; n++) { const a = Math.random() * 6.28, d = 2.4 + Math.random() * 5, cx = Math.floor(p.x + Math.cos(a) * d), cz = Math.floor(p.z + Math.sin(a) * d); if ((V.e.get(V.VK(cx, cz)) || 0) <= -3) continue; const top = me.H(cx + .5, cz + .5); if (V.edit(cx, cz, -1, true)) cells.push([cx, cz, top]); }
+    const S = V.VS, cells = []; for (let n = 0; n < 90; n++) { const a = Math.random() * 6.28, d = 1.6 + Math.random() * 5, cx = V.ci(p.x + Math.cos(a) * d), cz = V.ci(p.z + Math.sin(a) * d), top = V.topOf(cx, cz); if (top < V.nt(cx, cz) - 9) continue; const t = V.cell(cx, top - 1, cz); if (t && V.set(cx, top - 1, cz, 0, true)) cells.push([cx, top - 1, cz, t]); }
     V.flush();
-    lib().then(() => { if (cur() !== me) return; world(me); for (const [cx, cz, top] of cells) { repatch(me, cx, cz); const e = junk(me, cx + .5, top + .1, cz + .5, .9, V.col(cx, cz, top), "debris"); const dx = cx + .5 - p.x, dz = cz + .5 - p.z, dl = Math.hypot(dx, dz) || 1; e.b.velocity.set(dx / dl * 4, 7 + Math.random() * 5, dz / dl * 4); e.b.angularVelocity.set(Math.random() * 9, Math.random() * 9, Math.random() * 9); } });
+    lib().then(() => { if (cur() !== me) return; world(me); for (const [cx, iy, cz, t] of cells) { repatch(me, cx, cz); if (Math.random() < .55) continue; const e = junk(me, (cx + .5) * S, V.yb(iy) + S / 2, (cz + .5) * S, S * .92, V.tcol(t, cx, cz, iy), "debris", t); const dx = (cx + .5) * S - p.x, dz = (cz + .5) * S - p.z, dl = Math.hypot(dx, dz) || 1; e.b.velocity.set(dx / dl * 3, 5 + Math.random() * 5, dz / dl * 3); e.b.angularVelocity.set(Math.random() * 9, Math.random() * 9, Math.random() * 9); } });
   };
   window.hxKey = (code, me) => {
     if (!me || !me.pos || me.hp <= 0 && code !== "KeyG") return false;
     if (code === "KeyG") { chop(); return true; }
-    if (code === "KeyB") { breakBlock(me); return true; }
+    if (code === "KeyB") { me.keys.KeyB = 1; mine(me); return true; }
+    if (code === "KeyM") { cycle(me); return true; }
     if (code === "KeyN") { place(me); return true; }
     if (code === "KeyY") { throwBlock(me); return true; }
     if (code === "KeyZ") { if ((me.rage || 0) >= 100) shatter(me); else me.say && me.say(`Rage ${Math.floor(me.rage || 0)}% - land hits to fill it`, 900); return true; }
@@ -6870,12 +6905,13 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     if (me.ambush) return; me.ambush = 1; let hud = null, hudT = 0;
     me.ps.push((dt, ts) => {
       if (cur() !== me) return;
+      if (me.keys && me.keys.KeyB && me.tnow - (me.mineT ?? -9) > .24) mine(me);   // holding B keeps digging
       // rage drains slowly once you stop landing hits
       if (me.tnow - (me.rageT ?? -9) > 4) me.rage = Math.max(0, (me.rage || 0) - dt * 2);
       // HUD
       if ((hudT += dt) > .1) { hudT = 0; if (!hud) { hud = document.createElement("div"); hud.id = "svVox"; hud.style.cssText = "position:absolute;right:12px;bottom:56px;z-index:30;pointer-events:none;font:600 12px system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px #000;text-align:right;line-height:1.5"; (document.getElementById("sv") || document.body).appendChild(hud); }
         const rk = rankOf(me), rg = Math.floor(me.rage || 0);
-        hud.innerHTML = `${rk ? `<div style="font:900 22px system-ui;color:${rk[1][0] === "S" ? "#ffd23a" : "#9fe0ff"}">${rk[1]} <span style="font-size:13px">x${me.chain} combo</span></div>` : ""}<div>RAGE <span style="display:inline-block;width:110px;height:8px;background:rgba(0,0,0,.45);border-radius:4px;vertical-align:middle;overflow:hidden"><i style="display:block;height:100%;width:${rg}%;background:${rg >= 100 ? "#ff5a1f" : "#d8892a"}"></i></span>${rg >= 100 ? " <b style='color:#ff8a3a'>Z!</b>" : ""}</div><div>▣ ${me.vox.inv} blocks · B break · N place · Y throw</div>${me.ambS ? `<div style="color:#ffd23a">AMBUSH · ${me.ambS.ms.filter(u => !u.dead).length} left</div>` : ""}`; }
+        hud.innerHTML = `${rk ? `<div style="font:900 22px system-ui;color:${rk[1][0] === "S" ? "#ffd23a" : "#9fe0ff"}">${rk[1]} <span style="font-size:13px">x${me.chain} combo</span></div>` : ""}<div>RAGE <span style="display:inline-block;width:110px;height:8px;background:rgba(0,0,0,.45);border-radius:4px;vertical-align:middle;overflow:hidden"><i style="display:block;height:100%;width:${rg}%;background:${rg >= 100 ? "#ff5a1f" : "#d8892a"}"></i></span>${rg >= 100 ? " <b style='color:#ff8a3a'>Z!</b>" : ""}</div><div>${Object.keys(me.vox.inv).filter(k => me.vox.inv[k] > 0).map(k => `<span style="${+k === me.vox.sel ? "color:#ffd23a" : ""}">${me.vox.NAME[k]} ${me.vox.inv[k]}</span>`).join(" · ") || "no blocks"}</div><div style="opacity:.8">B mine (hold) · N place · M switch · Y throw</div>${me.ambS ? `<div style="color:#ffd23a">AMBUSH · ${me.ambS.ms.filter(u => !u.dead).length} left</div>` : ""}`; }
       // tells follow their fighter
       const T = me.T, v = new T.Vector3();
       for (let i = tells.length - 1; i >= 0; i--) { const tl = tells[i]; tl.t -= dt; if (tl.me !== me || tl.t <= 0 || tl.m.dead) { tl.el.remove(); tells.splice(i, 1); continue; }
@@ -6886,7 +6922,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
       if (me.pw) for (const e of me.pw.bodies.slice()) { if (!e.kind) continue; const b = e.b, sp = b.velocity.length();
         if (e.kind === "thrown" && sp > 5) for (const m of me.mobs || []) { if (m.dead || e.hit.has(m)) continue; const R0 = m.root, cy = R0.position.y + (m.a[2] || 1) * .6 * R0.scale.y, rr = (m.a[1] || 1) * .55 * R0.scale.x + .45;
           if (Math.hypot(b.position.x - R0.position.x, b.position.z - R0.position.z) < rr && Math.abs(b.position.y - cy) < rr + .8) { e.hit.add(m); me.hurtMob(m, 12 + sp * 1.1, me.pos, sp > 18); m.stun = Math.max(m.stun || 0, .5); b.velocity.scale(-.25, b.velocity); me.tone && me.tone(240, .07); } }
-        if (me.tnow - e.t0 > .9 && sp < 2.5 && Math.hypot(b.position.x - me.pos.x, b.position.z - me.pos.z) < 1.7 && Math.abs(b.position.y - me.pos.y - .5) < 2) { drop(me, e); me.vox.inv++; me.vox.save(); me.tone && me.tone(1180, .03); } }
+        if (me.tnow - e.t0 > .9 && sp < 2.5 && Math.hypot(b.position.x - me.pos.x, b.position.z - me.pos.z) < 1.7 && Math.abs(b.position.y - me.pos.y - .5) < 2) { drop(me, e); give(me, e.type || 2); me.tone && me.tone(1180, .03); } }
       // new fighters
       const p = me.pos;
       for (const m of me.mobs || []) {
