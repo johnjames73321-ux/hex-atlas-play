@@ -5817,7 +5817,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   const arrows = [], bowPos = new T.Vector3(), arrowTrailMat = new T.LineBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: .4, depthWrite: false });
   function setWeapon(w) { if (me.weapon === w) return; me.weapon = w; try { localStorage.setItem("hexatlas-w", w); } catch (e) {} me.draw = null; me.atk = null; bowG.visible = w === "bow"; hero.sword.visible = w === "sword" && me.blade; flash(w === "bow" ? "Bow · hold LMB to draw, release to shoot" : MELEE_N[MELEE], 900); tone(600, .03); }
   me.setWeapon = setWeapon;
-  me.setMelee = k => { if (!MELEE_ON[k]) return; MELEE = k; try { localStorage.setItem("hexatlas-melee", k); } catch (e) {} armWeapon(hero.sword, k); armWeapon(thr, k); if (me.weapon === "sword") flash(MELEE_N[k], 900); else setWeapon("sword"); };
+  me.setMelee = k => { if (!MELEE_ON[k]) return; MELEE = k; me.melee = k; try { localStorage.setItem("hexatlas-melee", k); } catch (e) {} armWeapon(hero.sword, k); armWeapon(thr, k); if (me.weapon === "sword") flash(MELEE_N[k], 900); else setWeapon("sword"); };
   try { const mw = localStorage.getItem("hexatlas-melee"), ww = localStorage.getItem("hexatlas-w"); if (mw && mw !== MELEE && TRIPO[mw] && MELEE_ON[mw]) { MELEE = mw; armWeapon(hero.sword, mw); armWeapon(thr, mw); } if (ww === "bow") setWeapon("bow"); } catch (e) {}   // start with the last weapon
   const drawTime = () => .45 * (1 - .2 * sk("draw"));   // quick draw (user, 11-01)
   function fire() {
@@ -6087,7 +6087,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     if (me.poison > 0 && me.hp > 0) { me.poison -= dt; me.hp -= 3 * dt / me.up("hp"); hpDraw(); }
     if (me.hp > 0 && me.hp < 100) { me.hurtT -= dt; if (me.hurtT < -4) { me.hp = Math.min(100, me.hp + dt * 4); hpDraw(); } }
   });
-  Object.assign(me, { hurtMob, say, tone, gainXP, spark, dropCoins, spawn, popNum, hpDraw, mobs, wl: { r } });
+  Object.assign(me, { hurtMob, say, tone, gainXP, spark, dropCoins, spawn, popNum, hpDraw, mobs, wl: { r }, melee: MELEE });
   return sizes.map(k => AN[k]);
 }
 
@@ -6347,18 +6347,21 @@ function build(me, i) {
     const hn = (x, z) => { let h = (x * 374761393 + z * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
     const kindAt = (cx, cz, y) => { const x = (cx + .5) * VS, z = (cz + .5) * VS; if (b.sn && y > b.sn + 15 * Math.sin(x * .03) * Math.sin(z * .025)) return 2; if (b.w && y < .9) return 1; return 0; };   // 0 grass, 1 sand, 2 snow
     // cell types: 1 grass 2 dirt 3 sand 4 snow 5 stone 6 wood; hardness = blows to mine
-    const HARD = [0, 1, 1, 1, 1, 3, 2], NAME = ["", "grass", "dirt", "sand", "snow", "stone", "wood"];
+    const HARD = [0, 1, 1, 1, 1, 3, 2, 1], NAME = ["", "grass", "dirt", "sand", "snow", "stone", "wood", "leaves"], leafC = col("3f7a2a");
+    const tc = VX.tc = new Map();   // tree cells by column as spans: [from iy, to iy (excl.), type, colour, tree] (owner 11-06: every tree near you is made of cells)
     const natType = (cx, iy, cz, n) => { const d = n - 1 - iy, k = kindAt(cx, cz, yb(n)); if (d === 0) return [1, 3, 4][k]; if (k === 1) return d < 6 ? 3 : 5; if (k === 2) return d < 2 ? 4 : 5; return d < 4 ? 2 : 5; };
-    const cell = (cx, iy, cz, n) => { const c = cols.get(CK(cx, cz)); if (c) { const v = c.m.get(iy); if (v !== undefined) return v; } if (n === undefined) n = nt(cx, cz); return iy < n ? natType(cx, iy, cz, n) : 0; };
+    const treeE = (cx, iy, cz) => { const L = tc.get(CK(cx, cz)); if (L) for (const e of L) if (iy >= e[0] && iy < e[1]) return e; return null; };
+    const cell = (cx, iy, cz, n) => { const k = CK(cx, cz), c = cols.get(k); if (c) { const v = c.m.get(iy); if (v !== undefined) return v; } if (n === undefined) n = nt(cx, cz); if (iy < n) return natType(cx, iy, cz, n); const L = tc.get(k); if (L) for (const e of L) if (iy >= e[0] && iy < e[1]) return e[2]; return 0; };
     const grassC = (cx, cz) => { const x = (cx + .5) * VS, z = (cz + .5) * VS; cA.copy(g0).lerp(g1, clamp(.5 + .5 * Math.sin(x * .021 + z * .007) * Math.sin(z * .017 - x * .011) + (hn(cx, cz) - .5) * .3, 0, 1)); if (b.w) cA.lerp(sand, smooth(1.4, .6, yb(nt(cx, cz))) * .8); return cA; };
     const tcol = (t, cx, cz, iy, top, out) => {   // the colour of one face of one cell
       if (t === 1) { if (top) out.copy(grassC(cx, cz)); else out.copy(dirt).lerp(grassC(cx, cz), .3); }
-      else out.copy(t === 2 ? dirt : t === 3 ? sand : t === 4 ? snow : t === 5 ? stone : wood);
+      else out.copy(t === 2 ? dirt : t === 3 ? sand : t === 4 ? snow : t === 5 ? stone : t === 7 ? leafC : wood);
+      if (t >= 6) { const e = treeE(cx, iy, cz); if (e) out.setHex(e[3]); }
       return out.multiplyScalar(.9 + hn(cx * 3 + iy, cz * 7 - iy) * .18);
     };
     const mk = (kx, kz) => {
       const x0 = kx * CH, z0 = kz * CH, N = CH + 2, ns = new Int32Array(N * N), ed = new Uint8Array(N * N), P = [], NR = [], U = [], C = [], I = [];
-      for (let a = 0; a < N; a++) for (let c = 0; c < N; c++) { const cx = x0 + a - 1, cz = z0 + c - 1; ns[a * N + c] = nt(cx, cz); ed[a * N + c] = cols.has(CK(cx, cz)) ? 1 : 0; }
+      for (let a = 0; a < N; a++) for (let c = 0; c < N; c++) { const cx = x0 + a - 1, cz = z0 + c - 1; ns[a * N + c] = nt(cx, cz); const kk = CK(cx, cz); ed[a * N + c] = cols.has(kk) || tc.has(kk) ? 1 : 0; }
       const quad = (ox, oy, oz, e1x, e1y, e1z, e2x, e2y, e2z, nx, ny, nz, cl) => { const o = P.length / 3; P.push(ox, oy, oz, ox + e1x, oy + e1y, oz + e1z, ox + e1x + e2x, oy + e1y + e2y, oz + e1z + e2z, ox + e2x, oy + e2y, oz + e2z); for (let q = 0; q < 4; q++) { NR.push(nx, ny, nz); C.push(cl.r, cl.g, cl.b); } U.push(0, 0, 1, 0, 1, 1, 0, 1); I.push(o, o + 1, o + 2, o, o + 2, o + 3); };
       const at = (a, c, iy) => { const k = a * N + c; return ed[k] ? cell(x0 + a - 1, iy, z0 + c - 1, ns[k]) : iy < ns[k] ? 1 : 0; };   // neighbours only need solid or not
       const NB = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -6366,7 +6369,7 @@ function build(me, i) {
         const k = a * N + c, cx = x0 + a - 1, cz = z0 + c - 1, n = ns[k], any = ed[k] || ed[k + N] || ed[k - N] || ed[k + 1] || ed[k - 1];
         let lo = Math.min(n, ns[k + N], ns[k - N], ns[k + 1], ns[k - 1]) - 1, hi = n;   // always the top cell itself, flat land too
         if (a === 1 || c === 1 || a === CH || c === CH) lo = Math.min(lo, n - 5);   // the outer ring reaches down to the far sheet
-        if (any) for (const q of [k, k + N, k - N, k + 1, k - 1]) if (ed[q]) { const m = cols.get(CK(x0 + Math.floor(q / N) - 1, z0 + q % N - 1)); for (const iy of m.m.keys()) { if (iy < lo) lo = iy; if (q === k && iy + 1 > hi) hi = iy + 1; } }
+        if (any) for (const q of [k, k + N, k - N, k + 1, k - 1]) if (ed[q]) { const qk = CK(x0 + Math.floor(q / N) - 1, z0 + q % N - 1), m = cols.get(qk), L = tc.get(qk); if (m) for (const iy of m.m.keys()) { if (iy - 1 < lo) lo = iy - 1; if (q === k && iy + 1 > hi) hi = iy + 1; }   /* the floor under a dug cell shows too */ if (L && q === k) for (const e of L) if (e[1] > hi) hi = e[1]; }
         for (let iy = lo; iy < hi; iy++) {
           const t = ed[k] ? cell(cx, iy, cz, n) : iy < n ? natType(cx, iy, cz, n) : 0; if (!t) continue;
           const x = cx * VS, y = yb(iy), z = cz * VS;
@@ -6388,22 +6391,62 @@ function build(me, i) {
     const put = (kx, kz) => { const key = mkey(kx, kz), old = chunks.get(key); if (old) { scene.remove(old); old.geometry.dispose(); } const m = mk(kx, kz); scene.add(m); chunks.set(key, m); setMask(kx, kz, 255); };
     const tick = (budget = 2) => {
       const p = me.pos; if (!p) return; const kx = Math.floor(p.x / CW), kz = Math.floor(p.z / CW);
-      for (const [a, c] of ring) { if (budget <= 0) break; if (!chunks.has(mkey(kx + a, kz + c))) { put(kx + a, kz + c); budget--; } }
-      if ((VX.gc = (VX.gc || 0) + 1) % 30 === 0) for (const [key, m] of chunks) { const ax = Math.floor(key / 1024) - 512 - kx, az = key % 1024 - 512 - kz; if (ax * ax + az * az > (VR + 2) ** 2) { scene.remove(m); m.geometry.dispose(); chunks.delete(key); setMask(ax + kx, az + kz, 0); } }
+      for (const [a, c] of ring) { if (budget <= 0) break; if (!chunks.has(mkey(kx + a, kz + c))) { if (me.cut) { for (let u = -1; u <= 1; u++) for (let w = -1; w <= 1; w++) for (const t of treesOf(kx + a + u, kz + c + w)) voxTree(t); pend.delete(mkey(kx + a, kz + c)); VX.flush(); } put(kx + a, kz + c); budget--; } }
+      if ((VX.gc = (VX.gc || 0) + 1) % 30 === 0) for (const [key, m] of chunks) { const ax = Math.floor(key / 1024) - 512 - kx, az = key % 1024 - 512 - kz; if (ax * ax + az * az > (VR + 2) ** 2) { scene.remove(m); m.geometry.dispose(); chunks.delete(key); setMask(ax + kx, az + kz, 0); if (me.cut) for (let u = -1; u <= 1; u++) for (let w = -1; w <= 1; w++) for (const t of treesOf(ax + kx + u, az + kz + w)) if (t.vx) { const ux = Math.floor(t.x / CW) - kx, uz = Math.floor(t.z / CW) - kz; if (ux * ux + uz * uz > (VR + 1) ** 2) unvox(t, 1); } } }
     };
+    const CONI = /pine|spruce|\bfir|cedar|larch|cypress|juniper|hemlock|sequoia|redwood|yew|taiga|conifer|araucaria|kauri|podocarp|thuja|tamarack/i, PALM = /palm|coconut|date|dragon|joshua|yucca|cycad|pandan|cocos|phoenix/i;
+    const genTree = t => {   // the tree as cell spans per column: trunk to its height, crown by its kind (cone for conifers, fronds for palms, a round crown for the rest), its own colours
+      if (t.cells) return t.cells;
+      let wc = 0x6a4a30, lc = 0x3f7a2a; const tmpc = new T.Color();
+      for (const [m, j] of t.ms) { const mt = m.material; if (!mt) continue; if (mt.side === T.DoubleSide) { if (m.instanceColor) { m.getColorAt(j, tmpc); lc = tmpc.getHex(); } else if (mt.color && mt.color.getHex() !== 0xffffff) lc = mt.color.getHex(); } else if (mt.color) wc = mt.color.getHex(); }
+      const sp = SP[t.k] || [], nm = (sp[5] || "") + " " + (t.k || ""), kind = PALM.test(nm) ? 2 : CONI.test(nm) ? 1 : 0, out = [], cx0 = ci(t.x), cz0 = ci(t.z), iy0 = nt(cx0, cz0);
+      const Hc = Math.max(6, Math.round(t.h / VS)), rt = Math.max(0, Math.round(t.h * .02 / VS - .35)), top = kind === 2 ? Hc : kind === 1 ? Math.round(Hc * .9) : Math.round(Hc * .62);
+      for (let a = -rt; a <= rt; a++) for (let c = -rt; c <= rt; c++) if (a * a + c * c <= rt * rt + .5) out.push([cx0 + a, cz0 + c, iy0, iy0 + top, 6, wc]);
+      const leaf = (a, c, lo, hi) => { if (hi > lo) out.push([cx0 + a, cz0 + c, iy0 + Math.max(1, lo), iy0 + hi, 7, lc]); };
+      if (kind === 1) { const y0 = Math.round(Hc * .25), R0 = Math.max(2, t.h * .16 / VS), Ri = Math.ceil(R0 + .6); for (let a = -Ri; a <= Ri; a++) for (let c = -Ri; c <= Ri; c++) { const d = Math.hypot(a, c); if (d > R0 + .6) continue; leaf(a, c, y0 + Math.round((hn(a + cx0, c + cz0) - .5) * 2), Math.round(y0 + (Hc + 1 - y0) * (1 - Math.max(0, d - .6) / R0)) + 1); } }
+      else if (kind === 2) { const R = Math.max(3, t.h * .24 / VS), Ri = Math.ceil(R); for (let a = -Ri; a <= Ri; a++) for (let c = -Ri; c <= Ri; c++) { const d = Math.hypot(a, c); if (d > R || !(Math.abs(a) < 1.5 || Math.abs(c) < 1.5 || Math.abs(Math.abs(a) - Math.abs(c)) < 1.2 || d < 2.2)) continue; const dy = Math.round(-d * d / R * .4); leaf(a, c, Hc + dy, Hc + dy + 2); } }
+      else { const cy0 = Math.round(Hc * .7), RX = Math.max(2.5, t.h * .22 / VS), RY = Math.max(2, t.h * .17 / VS), Rx = Math.ceil(RX); for (let a = -Rx; a <= Rx; a++) for (let c = -Rx; c <= Rx; c++) { const q = 1 - (a * a + c * c) / (RX * RX) + (hn(a + cx0, c + cz0) - .5) * .25; if (q <= 0) continue; const hy = Math.round(RY * Math.sqrt(q)); leaf(a, c, cy0 - hy, cy0 + hy + 1); } }
+      return (t.cells = out);
+    };
+    const voxTree = t => {
+      if (t.vx || t.down) return; t.vx = 1; const cs = genTree(t);
+      if (!t.saved) { const zero = new T.Matrix4().makeScale(0, 0, 0); t.saved = []; for (const [m, j] of t.ms) { const im = new T.Matrix4(); m.getMatrixAt(j, im); t.saved.push([m, im, j]); m.setMatrixAt(j, zero); m.instanceMatrix.needsUpdate = true; } }
+      else for (const [m, , j] of t.saved) { m.setMatrixAt(j, new T.Matrix4().makeScale(0, 0, 0)); m.instanceMatrix.needsUpdate = true; }
+      for (const e of cs) { const k = CK(e[0], e[1]); let L = tc.get(k); if (!L) tc.set(k, L = []); const sp = [e[2], e[3], e[4], e[5], t]; e[4] === 6 ? L.unshift(sp) : L.push(sp); }   // trunk spans first: wood wins inside the crown
+      const g = me.tgrid, ck = Math.floor(t.x / 8) * 4096 + Math.floor(t.z / 8), a = g && g.get(ck); if (a) for (let q = 0; q < a.length; q += 4) if (Math.abs(a[q] - t.x) < .01 && Math.abs(a[q + 1] - t.z) < .01) { t.solid = a.splice(q, 4); break; }   // the cells are solid now
+      for (const k of new Set(cs.map(e => mkey(Math.floor(e[0] / CH), Math.floor(e[1] / CH))))) pend.add(k);
+    };
+    const unvox = (t, back) => {   // the tree's cells leave the land (felled), or turn back into the far mesh tree (chunk unloaded)
+      if (!t.vx) return; t.vx = 0; const cs = genTree(t);
+      for (const e of cs) { const k = CK(e[0], e[1]), L = tc.get(k); if (!L) continue; for (let q = L.length - 1; q >= 0; q--) if (L[q][4] === t) L.splice(q, 1); if (!L.length) tc.delete(k); }
+      if (back && t.saved && !t.down) { for (const [m, im, j] of t.saved) { m.setMatrixAt(j, im); m.instanceMatrix.needsUpdate = true; } if (t.solid && me.tgrid) { const ck = Math.floor(t.x / 8) * 4096 + Math.floor(t.z / 8); if (!me.tgrid.has(ck)) me.tgrid.set(ck, []); me.tgrid.get(ck).push(...t.solid); t.solid = null; } }
+      for (const k of new Set(cs.map(e => mkey(Math.floor(e[0] / CH), Math.floor(e[1] / CH))))) pend.add(k);
+      if (!back) VX.flush();
+    };
+    const cubeG = new T.BoxGeometry(VS, VS, VS), cubeM = new T.MeshLambertMaterial({ color: 0xffffff });
+    const treeMesh = (t, ox, oy, oz) => {   // a felled tree: the outside of its remaining cells as one instanced mesh around the log's centre
+      const sp = genTree(t), by = new Map(); for (const e of sp) { const k = e[0] + "," + e[1]; if (!by.has(k)) by.set(k, []); by.get(k).push(e); }
+      const has = (cx, cz, iy) => { const L = by.get(cx + "," + cz); if (L) for (const e of L) if (iy >= e[2] && iy < e[3]) { const c = cols.get(CK(cx, cz)); return !(c && c.m.get(iy) === 0); } return false; };
+      const cs = []; for (const e of sp) for (let iy = e[2]; iy < e[3]; iy++) { if (!has(e[0], e[1], iy)) continue; if (iy === e[2] || iy === e[3] - 1 || !has(e[0] + 1, e[1], iy) || !has(e[0] - 1, e[1], iy) || !has(e[0], e[1] + 1, iy) || !has(e[0], e[1] - 1, iy)) cs.push([e[0], iy, e[1], e[5]]); }
+      const m = new T.InstancedMesh(cubeG, cubeM, Math.max(1, cs.length)), M4 = new T.Matrix4(), cc = new T.Color();
+      cs.forEach((e, q) => { M4.makeTranslation((e[0] + .5) * VS - ox, yb(e[1]) + VS / 2 - oy, (e[2] + .5) * VS - oz); m.setMatrixAt(q, M4); m.setColorAt(q, cc.setHex(e[3]).multiplyScalar(.9 + hn(e[0], e[2] + e[1]) * .18)); });
+      m.count = cs.length; m.computeBoundingSphere(); return m;
+    };
+    let tidx = null; const treesOf = (kx, kz) => { if (!tidx) { tidx = new Map(); for (const t of me.cut || []) { const k = mkey(Math.floor(t.x / CW), Math.floor(t.z / CW)); if (!tidx.has(k)) tidx.set(k, []); tidx.get(k).push(t); } } return tidx.get(mkey(kx, kz)) || []; };
     const pend = new Set();
     const recalc = (cx, cz) => { const c = cols.get(CK(cx, cz)); if (!c) return; const n = nt(cx, cz); let iy = n; for (const k of c.m.keys()) if (k + 1 > iy) iy = k + 1; while (iy > n - 400 && !cell(cx, iy - 1, cz, n)) iy--; c.top = iy; };
     Object.assign(VX, { H, Hn, VS, OY, HH, yb, ci, cyi, nt, CK, cell, HARD, NAME, tick, topOf,
       tcol: (t, cx, cz, iy) => tcol(t, cx, cz, iy, 1, new T.Color()).getHex(),
       G: (x, z, f) => {   // the floor under feet f: the highest solid cell at most two cells above them, so you walk into tunnels and under bridges
-        const cx = ci(x), cz = ci(z), c = cols.get(CK(cx, cz)), n = nt(cx, cz); let iy = cyi(f + VS * 2.2) - 1;
-        if (!c) return yb(Math.min(n, iy + 1)); for (let s = 0; s < 400; s++, iy--) { const v = c.m.get(iy); if (v !== undefined ? v : iy < n) return yb(iy + 1); } return yb(n); },
-      blocked: (x, z, f) => { const cx = ci(x), cz = ci(z), c = cols.get(CK(cx, cz)), n = nt(cx, cz); for (let iy = cyi(f + VS * 2.2), e = cyi(f + HH - .05); iy <= e; iy++) { const v = c ? c.m.get(iy) : undefined; if (v !== undefined ? v : iy < n) return true; } return false; },
+        const cx = ci(x), cz = ci(z), k = CK(cx, cz), n = nt(cx, cz); let iy = cyi(f + VS * 2.2) - 1;
+        if (!cols.has(k) && !tc.has(k)) return yb(Math.min(n, iy + 1)); for (let s = 0; s < 400; s++, iy--) if (cell(cx, iy, cz, n)) return yb(iy + 1); return yb(n); },
+      blocked: (x, z, f) => { const cx = ci(x), cz = ci(z), k = CK(cx, cz), n = nt(cx, cz), any = cols.has(k) || tc.has(k); for (let iy = cyi(f + VS * 2.2), e = cyi(f + HH - .05); iy <= e; iy++) if (any ? cell(cx, iy, cz, n) : iy < n) return true; return false; },
+      treeAt: (cx, iy, cz) => { const e = treeE(cx, iy, cz); return e ? e[4] : null; }, genTree: t => genTree(t), unvox: t => unvox(t), treeMesh: (t, ox, oy, oz) => treeMesh(t, ox, oy, oz),
       dirty: (cx, cz) => { for (const [a, c] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) pend.add(mkey(Math.floor((cx + a) / CH), Math.floor((cz + c) / CH))); },
       flush: () => { for (const key of pend) if (chunks.has(key)) put(Math.floor(key / 1024) - 512, key % 1024 - 512); pend.clear(); },
       set: (cx, iy, cz, t, defer) => {   // t: 0 air, else a cell type
         const k = CK(cx, cz); let c = cols.get(k); if (!c) cols.set(k, c = { m: new Map(), top: 0 });
-        if (t === 0 && iy >= nt(cx, cz)) c.m.delete(iy); else c.m.set(iy, t);
+        if (t === 0 && iy >= nt(cx, cz) && !treeE(cx, iy, cz)) c.m.delete(iy); else c.m.set(iy, t);
         if (!c.m.size) cols.delete(k); else recalc(cx, cz);
         VX.dirty(cx, cz); if (!defer) VX.flush(); VX.save(); return true; } });
     for (const [k, c] of cols) recalc(Math.floor(k / 16384) - 8192, k % 16384 - 8192);
@@ -6457,7 +6500,7 @@ function build(me, i) {
     }
     if (!kc) continue;
     // Horizon-style culling: plants split into sectors, each with its own bounds, so the GPU skips every sector behind or beside the camera
-    const CT = isTree(k) && h >= 3 && !rock ? Array.from({ length: kc }, (_, q) => ({ x: MB[q * 16 + 12], y: MB[q * 16 + 13], z: MB[q * 16 + 14], h: h * Math.hypot(MB[q * 16 + 4], MB[q * 16 + 5], MB[q * 16 + 6]), ms: [], q, mb: MB, hits: 0 })) : null;   // owner 11-06: every tree can be cut down (G)
+    const CT = isTree(k) && h >= 3 && !rock ? Array.from({ length: kc }, (_, q) => ({ x: MB[q * 16 + 12], y: MB[q * 16 + 13], z: MB[q * 16 + 14], h: h * Math.hypot(MB[q * 16 + 4], MB[q * 16 + 5], MB[q * 16 + 6]), ms: [], q, mb: MB, hits: 0, k })) : null;   // owner 11-06: every tree can be cut down (G)
     if (CT) { me.cut = me.cut || []; for (const c of CT) me.cut.push(c); }
     const secs = new Map(); for (let q = 0; q < kc; q++) { const sk = si[q]; if (!secs.has(sk)) secs.set(sk, []); secs.get(sk).push(q); }
     for (const [geo, c, leaf] of shape(k)) for (const L of secs.values()) {
@@ -6579,7 +6622,7 @@ function build(me, i) {
   };
   me.raf = requestAnimationFrame(loop); me.loop = loop;   // me.loop: tests can step frames while the tab is hidden
   if (FLYON) me.fly();
-  VX.tick(70); try { window.hxRestore && window.hxRestore(me); } catch (e) { console.warn(e); }   // the nearest blocks at once; felled trees stay felled   /* the owner already pressed J: every new area opens in god mode */
+  try { window.hxRestore && window.hxRestore(me); } catch (e) { console.warn(e); } VX.tick(70);   // the nearest blocks at once; felled trees stay felled   /* the owner already pressed J: every new area opens in god mode */
   window.SV.last = { biome: b.n, hex: i, lat, lon };
 }
 function close() {
@@ -6771,14 +6814,15 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   const unsolid = (me, t) => { const ck = Math.floor(t.x / 8) * 4096 + Math.floor(t.z / 8), a = me.tgrid && me.tgrid.get(ck); if (a) for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - t.x) < .01 && Math.abs(a[i + 1] - t.z) < .01) { a.splice(i, 4); break; }
     if (me.trees) for (let i = me.trees.length - 1; i >= 0; i--) if (Math.abs(me.trees[i][0] - t.x) < .01 && Math.abs(me.trees[i][2] - t.z) < .01) me.trees.splice(i, 1); };
   const hide = (me, t) => {   // takes the tree's instances out of the forest (keeps their matrices for the log)
-    if (t.saved) return; const T = me.T, zero = new T.Matrix4().makeScale(0, 0, 0); t.saved = [];
-    for (const [m, j] of t.ms) { const im = new T.Matrix4(); m.getMatrixAt(j, im); t.saved.push([m, im]); m.setMatrixAt(j, zero); m.instanceMatrix.needsUpdate = true; }
+    const T = me.T, zero = new T.Matrix4().makeScale(0, 0, 0);
+    if (!t.saved) { t.saved = []; for (const [m, j] of t.ms) { const im = new T.Matrix4(); m.getMatrixAt(j, im); t.saved.push([m, im, j]); m.setMatrixAt(j, zero); m.instanceMatrix.needsUpdate = true; } }
     unsolid(me, t); t.down = true;
   };
   const fell = (me, t, pose) => {
     const T = me.T, P = world(me); hide(me, t);
-    const g = new T.Group(), inv = new T.Matrix4().makeTranslation(t.x, t.y + t.h / 2, t.z).invert();
-    for (const [m, im] of t.saved) { const c = new T.Mesh(m.geometry, m.material); c.matrixAutoUpdate = false; c.matrix.multiplyMatrices(inv, im); g.add(c); }
+    const g = new T.Group(), inv = new T.Matrix4().makeTranslation(t.x, t.y + t.h / 2, t.z).invert(), V = me.vox;
+    if (V && V.treeMesh) { V.unvox(t); g.add(V.treeMesh(t, t.x, t.y + t.h / 2, t.z)); }   // owner 11-06: it falls as the cells it is made of
+    else for (const [m, im] of t.saved) { const c = new T.Mesh(m.geometry, m.material); c.matrixAutoUpdate = false; c.matrix.multiplyMatrices(inv, im); g.add(c); }
     g.position.set(t.x, t.y + t.h / 2, t.z); me.scene.add(g);
     const r = Math.max(.25, t.h * .025), body = new C.Body({ mass: 60 * t.h, linearDamping: .05, angularDamping: .25 });
     body.addShape(new C.Box(new C.Vec3(r, t.h / 2, r))); body.addShape(new C.Sphere(t.h * .16), new C.Vec3(0, t.h * .32, 0));
@@ -6797,8 +6841,8 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     const fx = face != null ? Math.sin(face) : -Math.sin(me.yaw), fz = face != null ? Math.cos(face) : -Math.cos(me.yaw); let best = null, bd = face != null ? 3.6 : 3.2;
     for (const t of me.cut) { if (t.down) continue; const dx = t.x - me.pos.x, dz = t.z - me.pos.z, d = Math.hypot(dx, dz); if (d < bd && (dx * fx + dz * fz) / (d || 1) > .3) { bd = d; best = t; } }
     if (!best) return;
-    best.hits += /slam|whirl|heavy|charge/.test(kind || "") ? 2 : 1; me.shake = Math.max(me.shake || 0, .14); me.stopT = Math.max(me.stopT || 0, .03); chips(me, new me.T.Vector3(best.x, best.y + 1.2, best.z), 0x8a6a40, 5);
-    lib().then(() => { if (best.hits >= 3 && !best.down && cur() === me) fell(me, best); });
+    best.hits += /slam|whirl|heavy|charge|sweep|spin/.test(kind || "") || (me.melee || "") === "axe" ? 2 : 1; me.shake = Math.max(me.shake || 0, .14); me.stopT = Math.max(me.stopT || 0, .03); chips(me, new me.T.Vector3(best.x, best.y + 1.2, best.z), 0x8a6a40, 5);
+    lib().then(() => { if (best.hits >= 2 && !best.down && cur() === me) fell(me, best); });   // two blows (one heavy or axe blow) and down it comes
     return best;
   };
   window.hxChop = chop;
@@ -6819,19 +6863,38 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     return e;
   };
   const drop = (me, e) => { const P = me.pw; P.w.removeBody(e.b); me.scene.remove(e.o); P.bodies.splice(P.bodies.indexOf(e), 1); };
+  const footGone = (me, t) => { const V = me.vox, tr = V.genTree(t).filter(e => e[4] === 6); return !tr.some(e => V.cell(e[0], e[2], e[1]) || V.cell(e[0], e[2] + 1, e[1])); };   // both lowest trunk layers cut through
+  const treeCheck = (me, trees) => { for (const t of trees) if (t && !t.down && footGone(me, t)) { t.hits = 9; lib().then(() => cur() === me && !t.down && fell(me, t)); } };
   const give = (me, t, n = 1) => { const V = me.vox; V.inv[t] = (V.inv[t] || 0) + n; if (!V.inv[V.sel]) V.sel = t; V.save(); };
   const mine = (me, reach, blows = 1) => {   // B (hold to keep digging) or any melee swing: dirt, grass, sand, snow 1 blow, wood 2, stone 3
     const a = aim(me, reach), V = me.vox; me.mineT = me.tnow; if (!a) return false; const key = a.cx + "," + a.iy + "," + a.cz, S = V.VS, cx0 = (a.cx + .5) * S, cy0 = V.yb(a.iy) + S / 2, cz0 = (a.cz + .5) * S, c = V.tcol(a.t, a.cx, a.cz, a.iy);
     if (me.mineK !== key) { me.mineK = key; me.mineN = 0; } me.mineN += blows;
     const hard = V.HARD[a.t] || 1; chips(me, new me.T.Vector3(cx0, cy0 + S / 2, cz0), c, a.t === 5 ? 4 : 3); me.tone && me.tone(a.t === 5 ? 260 : 150, .05);
     if (me.mineN < hard) { me.shake = Math.max(me.shake || 0, .04); me.say && me.say(`${V.NAME[a.t]} ${me.mineN}/${hard}`, 500); return true; }
-    me.mineK = null; const top = V.topOf(a.cx, a.cz); V.set(a.cx, a.iy, a.cz, 0); me.shake = Math.max(me.shake || 0, .07);
-    if (a.iy === top - 1) for (const t of me.cut || []) if (!t.down && Math.abs(t.x - cx0) < .5 && Math.abs(t.z - cz0) < .5) { t.hits = 3; lib().then(() => cur() === me && !t.down && fell(me, t)); }   // dig out a tree's foot: down it comes
+    me.mineK = null; const tr = V.treeAt(a.cx, a.iy, a.cz); V.set(a.cx, a.iy, a.cz, 0); me.shake = Math.max(me.shake || 0, .07); treeCheck(me, [tr]);   // cut through a trunk's foot: down it comes
     lib().then(() => { if (cur() !== me) return; world(me); repatch(me, a.cx, a.cz); const e = junk(me, cx0, cy0, cz0, S * .92, c, "debris", a.t); e.b.velocity.set((Math.random() - .5) * 2, 3, (Math.random() - .5) * 2); e.b.angularVelocity.set(Math.random() * 4, Math.random() * 4, Math.random() * 4); })
       .catch(() => give(me, a.t));
     return true;
   };
-  window.hxSwingMine = kind => { const me = cur(); if (!me || !me.vox || me.hp <= 0) return; mine(me, 3.6, /slam|whirl|sweep|spin2/.test(kind || "") ? 2 : 1); };
+  const mineArea = (me, reach, kind) => {   // owner 11-06: weapons smash a whole ball of cells; axe x2 on wood and leaves, hammer x2 on stone and bigger, spear smaller
+    const a = aim(me, reach), V = me.vox; if (!a) return; const w = me.melee || "sword", heavy = /slam|whirl|sweep|spin/.test(kind || ""), S = V.VS;
+    const R = ({ sword: 1.7, axe: 1.9, hammer: 2.6, spear: 1.3 }[w] || 1.7) * (heavy ? 1.5 : 1), pw = (w === "hammer" ? 3 : 2) + (heavy ? 1 : 0), Ri = Math.ceil(R), broke = [], trees = new Set(), dm = me.vdmg || (me.vdmg = new Map());
+    if (dm.size > 3000) dm.clear();
+    for (let dy = -Ri; dy <= Ri; dy++) for (let dx = -Ri; dx <= Ri; dx++) for (let dz = -Ri; dz <= Ri; dz++) { if (dx * dx + dy * dy + dz * dz > R * R) continue;
+      const cx = a.cx + dx, iy = a.iy + dy, cz = a.cz + dz, t = V.cell(cx, iy, cz); if (!t) continue;
+      const k = cx + "," + iy + "," + cz, p = (dm.get(k) || 0) + pw * (w === "axe" && t >= 6 ? 2 : w === "hammer" && t === 5 ? 2 : 1); if (p < (V.HARD[t] || 1)) { dm.set(k, p); continue; } dm.delete(k);
+      trees.add(V.treeAt(cx, iy, cz)); V.set(cx, iy, cz, 0, true); broke.push([cx, iy, cz, t]); if (broke.length > 140) break; }
+    if (!broke.length) { chips(me, new me.T.Vector3((a.cx + .5) * S, V.yb(a.iy) + S, (a.cz + .5) * S), V.tcol(a.t, a.cx, a.cz, a.iy), 4); me.tone && me.tone(300, .04); return; }
+    V.flush(); me.shake = Math.max(me.shake || 0, .1 + Math.min(.2, broke.length * .004)); me.tone && me.tone(120, .08);
+    const cols = new Set(); for (const [cx, , cz] of broke) cols.add(cx + "," + cz);
+    for (const [cx, iy, cz, t] of broke.slice(5)) give(me, t);   // the rest straight into the bag
+    for (const [cx, iy, cz, t] of broke.slice(0, 14)) chips(me, new me.T.Vector3((cx + .5) * S, V.yb(iy) + S / 2, (cz + .5) * S), V.tcol(t, cx, cz, iy), 2);
+    treeCheck(me, trees); for (const t of trees) if (t && !t.down && (t.hits = (t.hits || 0) + (heavy || w === "axe" ? 2 : 1)) >= 2) lib().then(() => cur() === me && !t.down && fell(me, t));   // two blade bites into a trunk fell it
+    lib().then(() => { if (cur() !== me) return; world(me); for (const c of cols) { const [cx, cz] = c.split(",").map(Number); repatch(me, cx, cz); }
+      for (const [cx, iy, cz, t] of broke.slice(0, 5)) { const e = junk(me, (cx + .5) * S, V.yb(iy) + S / 2, (cz + .5) * S, S * .92, V.tcol(t, cx, cz, iy), "debris", t); e.b.velocity.set((Math.random() - .5) * 4, 3 + Math.random() * 3, (Math.random() - .5) * 4); e.b.angularVelocity.set(Math.random() * 6, Math.random() * 6, Math.random() * 6); } })
+      .catch(() => { for (const [, , , t] of broke.slice(0, 5)) give(me, t); });
+  };
+  window.hxSwingMine = kind => { const me = cur(); if (!me || !me.vox || me.hp <= 0) return; mineArea(me, 4, kind); };
   const pick = me => { const V = me.vox; if ((V.inv[V.sel] || 0) > 0) return V.sel; const k = Object.keys(V.inv).find(k => V.inv[k] > 0); if (k) V.sel = +k; return k ? +k : 0; };
   const place = me => {
     const a = aim(me), V = me.vox, t = pick(me); if (!a || !a.prev) return; if (!t) { me.say && me.say("No blocks: mine some (B) and pick them up", 1200); return; }
