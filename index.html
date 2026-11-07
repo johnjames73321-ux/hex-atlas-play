@@ -7111,7 +7111,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     while (I.b.length > cap) { const it = I.b.pop(); if (it) dropItem(me, it); }
     while (I.b.length < cap) I.b.push(null);
     const R = I.s.hr1 || I.s.hr2, rd = R && ITEMS[R.t]; let w = 0, def = 0;
-    for (const k of allSlots(I)) { const it = I.s[k]; if (!it) continue; const d = ITEMS[it.t]; w += d.w * (ARM.includes(k) ? 4 : WEAR.includes(k) ? .5 : 1);   // worn armour sits well: half weight if (WEAR.includes(k) && d.kind === "armor") def += d.def * rMul(it.r); }
+    for (const k of allSlots(I)) { const it = I.s[k]; if (!it) continue; const d = ITEMS[it.t]; w += d.w * (ARM.includes(k) ? 4 : WEAR.includes(k) ? .5 : 1);   /* worn armour sits well: half weight */ if (WEAR.includes(k) && d.kind === "armor") def += d.def * rMul(it.r); }
     for (const it of I.b) if (it) w += ITEMS[it.t].w;
     const sh = HAND.map(k => I.s[k]).find(it => it && ITEMS[it.t].slot === "shield"); if (sh) def += ITEMS[sh.t].def * rMul(sh.r) * .5;
     me.carryW = w; const aw = ARM.reduce((a, k) => a + (I.s[k] ? ITEMS[I.s[k].t].w : 0), 0); me.carry = Math.max(.3, Math.min(1, 1 - Math.max(0, w - aw * 4 - 15) / 60 - aw * 4 / 50)); me.armK = 1 + def; me.hasShield = !!sh;
@@ -7283,7 +7283,43 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     if (!it) { me.say && me.say("Reforge shrine: hold a weapon in your right hand · 30 🪙 for a new rarity", 1600); return true; } const P = me.prog; if (!P || (P.coins || 0) < 30) { me.say && me.say(`Need 30 🪙 (you have ${P ? P.coins || 0 : 0})`, 1100); return true; }
     P.coins -= 30; me.saveProg && me.saveProg(); const o = it.r; it.r = roll(8); const rr = rarOf(it.r); me.say && me.say(`${ITEMS[it.t].name}: ${o} → ${rr[1]} ${it.r}`, 1500); me.tone && me.tone(it.r > o ? 990 : 220, .12); chips(me, g.position.clone().setY(g.position.y + 1.5), 0xc070ff, 12); applyInv(me); return true; };
   const extrasTick = me => { if (me.exHex !== me.hex) { me.exHex = me.hex; treasures(me); shrine(me); } chestTick(me); if (me.shr) me.shr.userData.cr.rotation.y += .03; };
-  window.hxDbg = { logHit, logCut, ITEMS, applyInv, craft, recipes };   // for tests
+  // ---- storms (surprise): every few minutes the sky darkens, rain (snow in the cold) falls and lightning strikes - craters, hurt animals, set off hives and crates ----
+  const stormTick = (me, dt) => {
+    const T = me.T, S = me.stS || (me.stS = { next: 90 + Math.random() * 150, on: 0, t: 0, bolt: 0 }), mood = me.bio && me.bio.t;
+    if (mood === "haze" || mood === "dusk") return;   // deserts stay dry
+    if (S.hex !== me.hex) { S.hex = me.hex; S.lights = null; S.rain = null; S.bolts = []; S.k = -1; }   // a new land has its own scene
+    if (!S.lights) { S.lights = []; me.scene.traverse(o => { if (o.isLight) S.lights.push([o, o.intensity]); }); S.fog = me.scene.fog ? me.scene.fog.color.clone() : null; }
+    S.next -= dt; if (!S.on && S.next <= 0) { S.on = 1; S.t = 0; S.len = 35 + Math.random() * 30; S.bolt = 4; me.say && me.say("A storm rolls in", 1400); }
+    const k = S.on ? Math.min(1, S.t / 4, (S.len - S.t) / 4) : 0;
+    if (S.on) { S.t += dt; if (S.t >= S.len) { S.on = 0; S.next = 160 + Math.random() * 220; } }
+    if (!S.dim) { S.dim = document.createElement("div"); S.dim.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:5;background:#141a24;opacity:0;transition:opacity .08s"; (document.getElementById("sv") || document.body).appendChild(S.dim); }   // the whole view darkens, lightning flashes it white
+    S.dim.style.background = S.flash > 0 ? "#e8eeff" : "#141a24"; S.dim.style.opacity = S.flash > 0 ? .55 : (k * .42).toFixed(3); S.dim.style.display = me.hp > -1 ? "" : "none";
+    if (S.k !== k || S.flash > 0) { S.k = k; const f = S.flash > 0 ? (S.flash -= dt, 2.2) : 1; for (const [o, i] of S.lights) o.intensity = i * (1 - .55 * k) * f; if (S.fog && me.scene.fog) me.scene.fog.color.copy(S.fog).lerp(new T.Color(S.flash > 0 ? 0xdde4ff : 0x3a404a), k * (S.flash > 0 ? .6 : .7)); }
+    // rain or snow around the camera
+    if (k > 0 && !S.rain) { const snow = mood === "polar" || mood === "highalt", n = snow ? 1400 : 1800, g = new T.BufferGeometry(), p = new Float32Array(n * 6);   // rain = falling streaks, snow = flakes
+      for (let i = 0; i < n; i++) { const x = (Math.random() - .5) * 40, y = (Math.random() - .5) * 40, z = (Math.random() - .5) * 40; p.set([x, y, z, x + .05, y - (snow ? .06 : .55), z], i * 6); }
+      g.setAttribute("position", new T.BufferAttribute(p, 3)); S.rain = new T.LineSegments(g, new T.LineBasicMaterial({ color: snow ? 0xffffff : 0xa8bcd4, transparent: true, opacity: .6, depthWrite: false })); S.rain.frustumCulled = false; S.snow = snow; me.scene.add(S.rain); }
+    if (S.rain) { S.rain.visible = k > 0; S.rain.material.opacity = .6 * k; if (k > 0) { const a = S.rain.geometry.attributes.position, A = a.array, c = me.cam.position, sp = (S.snow ? 3 : 24) * dt; for (let i = 1; i < A.length; i += 3) { A[i] -= sp; } for (let i = 1; i < A.length; i += 6) if (A[i] < -20) { A[i] += 40; A[i + 3] += 40; } a.needsUpdate = true; S.rain.position.set(c.x, c.y, c.z); } }
+    // lightning
+    if (S.on && k > .6 && (S.bolt -= dt) <= 0) { S.bolt = 2 + Math.random() * 5; strike(me, S); }
+    for (const b of S.bolts || []) b.o.material.opacity = Math.max(0, b.o.material.opacity - dt * 3);
+    if (S.bolts) for (let i = S.bolts.length - 1; i >= 0; i--) if (S.bolts[i].o.material.opacity <= 0) { me.scene.remove(S.bolts[i].o); S.bolts.splice(i, 1); }
+  };
+  const strike = (me, S) => {
+    const T = me.T, V = me.vox; let x, z; const mob = (me.mobs || []).filter(m => !m.dead && m.root.position.distanceTo(me.pos) < 40);
+    if (mob.length && Math.random() < .35) { const m = mob[Math.floor(Math.random() * mob.length)]; x = m.root.position.x; z = m.root.position.z; }
+    else { const a = Math.random() * 6.28, d = 8 + Math.random() * 30; x = me.pos.x + Math.sin(a) * d; z = me.pos.z + Math.cos(a) * d; }
+    const cx = V.ci(x), cz = V.ci(z), top = V.topOf(cx, cz), y = V.yb(top); if (y < -.3) return;
+    const pts = [], h = 70; let px = x, pz = z; for (let s = 0; s <= 14; s++) { const yy = y + h * (1 - s / 14); pts.push(new T.Vector3(px, yy, pz)); px += (Math.random() - .5) * 3 * (1 - s / 14); pz += (Math.random() - .5) * 3 * (1 - s / 14); } pts[pts.length - 1].set(x, y, z);
+    const o = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineBasicMaterial({ color: 0xeef4ff, transparent: true, opacity: 1, fog: false })); me.scene.add(o); (S.bolts = S.bolts || []).push({ o });
+    S.flash = .12; const d = me.pos.distanceTo(new T.Vector3(x, y, z)); setTimeout(() => me.tone && (me.tone(45, .6), me.tone(70, .4)), Math.min(2500, d * 25)); me.shake = Math.max(me.shake || 0, Math.max(.1, .6 - d / 60));
+    smash(me, [cx, top - 1, cz], 1.8, 9, "blast", 0);
+    for (const m of me.mobs || []) if (!m.dead && Math.hypot(m.root.position.x - x, m.root.position.z - z) < 4) { me.hurtMob(m, 70, new T.Vector3(x, y, z), true); if (!m.dead) m.stun = Math.max(m.stun || 0, 2); }
+    for (const p of me.props || []) if (!p.dead && Math.hypot(p.g.position.x - x, p.g.position.z - z) < 3.5) p.fuse = .1;
+    if (Math.hypot(me.pos.x - x, me.pos.z - z) < 2.5) hurtMe(me, 30, "lightning");
+    chips(me, new T.Vector3(x, y + .3, z), 0xfff0a0, 10);
+  };
+  window.hxDbg = { logHit, logCut, ITEMS, applyInv, craft, recipes, strike };   // for tests
   const killLoot = (me, m) => { const ch = m.champ || m.boss; if (Math.random() < (ch ? 1 : .35)) dropItem(me, mkItem(Math.floor(Math.random() * ITEMS.length), roll(ch ? 25 : 0)), m.root.position.clone()); };
   window.hxKey = (code, me) => {
     if (!me || !me.pos || me.hp <= 0 && code !== "KeyG") return false;
@@ -7317,7 +7353,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     me.ps.push((dt, ts) => {
       if (cur() !== me) return;
       if (me.keys && me.keys.KeyB && me.tnow - (me.mineT ?? -9) > .24) mine(me);   // holding B keeps digging
-      if (me.vox) { me.xhit = () => xhit(me); try { if (!me.up.hx) { const u0 = me.up; me.up = k => u0(k) * (k === "spd" || k === "dex" ? (me.carry ?? 1) : k === "hp" ? (me.armK ?? 1) : 1); me.up.hx = 1; } invTick(me, dt); extrasTick(me); if (me.drag && me.lmb) { me.lmb = null; fling(me); } bladeCut(me); throwCut(me); props(me, dt); } catch (e) { console.warn(e); } }
+      if (me.vox) { me.xhit = () => xhit(me); try { if (!me.up.hx) { const u0 = me.up; me.up = k => u0(k) * (k === "spd" || k === "dex" ? (me.carry ?? 1) : k === "hp" ? (me.armK ?? 1) : 1); me.up.hx = 1; } invTick(me, dt); extrasTick(me); stormTick(me, dt); if (me.drag && me.lmb) { me.lmb = null; fling(me); } bladeCut(me); throwCut(me); props(me, dt); } catch (e) { console.warn(e); } }
       // rage drains slowly once you stop landing hits
       if (me.tnow - (me.rageT ?? -9) > 4) me.rage = Math.max(0, (me.rage || 0) - dt * 2);
       // HUD
