@@ -818,22 +818,17 @@ function labels(r, x0, y0, x1, y1) {
   }
   if (gameOn) gameLabels(r, z, fits);                 // country names first, then province names where room is left
   if (hexPx < 14) return;   // owner 11-06: all province names or none, never a few
-  const big = Math.max(11, Math.min(26, hexPx * 0.3));   // owner 11-06: names grow with the hex, Poppins Bold
+  const big = Math.max(9, Math.min(19, hexPx * 0.22));   // owner 11-06: names grow with the hex, Poppins Bold; 11-07: smaller
   lctx.font = `700 ${big}px ${css("--body")}`; lctx.lineJoin = "round";
   // owner 11-06: every province name shows, kept inside its own land: first the font shrinks (to 67%), then the name goes on two
   // lines, then each line loses letters from its end (at most half of them) until it fits
   const font = (px) => `700 ${px}px Poppins, ${css("--body")}`, tw = (t, px) => { const k = px + "|" + t; let w = widthCache.get(k); if (w === undefined) { lctx.font = font(px); w = lctx.measureText(t).width; widthCache.set(k, w); } return w; };
-  const fitName = (name, aw, ah) => {
-    let one = 0; for (let px = big; px >= big * 0.65 - 0.01; px -= 0.5) if (tw(name, px) <= aw && px <= ah) { one = px; break; }
-    if (one >= big * 0.9) return { px: one, lines: [name] };   // one line nearly full size
-    let sp = name.indexOf(" ", Math.floor(name.length / 2) - 1); if (sp < 0) sp = name.lastIndexOf(" ");
-    let L2 = sp > 0 ? [name.slice(0, sp), name.slice(sp + 1)] : [name.slice(0, Math.ceil(name.length / 2)), name.slice(Math.ceil(name.length / 2))];
-    // two lines at the biggest size that fits (owner 11-06: never more than 35% smaller than the others)
-    for (let px = big; px >= big * 0.65 - 0.01; px -= 0.5) if (L2.every(t => tw(t, px) <= aw) && 2.1 * px <= ah) return px > one ? { px, lines: L2 } : { px: one, lines: [name] };
-    if (one) return { px: one, lines: [name] };
-    const px = big * 0.65;
-    L2 = L2.map(t => { let s = t; const min = Math.ceil(t.length / 2); while (s.length > min && tw(s, px) > aw) s = s.slice(0, -1); return s; });
-    return { px, lines: L2 };
+  const fitName = (name, aw, ah) => {   // owner 11-07: a word is never cut in half, and every name stays close to the same size (80-100%)
+    const lo = big * 0.8 - 0.01;
+    for (let px = big; px >= lo; px -= 0.5) if (tw(name, px) <= aw) return { px, lines: [name] };
+    const sp = name.indexOf(" ", Math.floor(name.length / 2) - 1), sp2 = sp < 0 ? name.lastIndexOf(" ") : sp;
+    if (sp2 > 0) { const L2 = [name.slice(0, sp2), name.slice(sp2 + 1)]; for (let px = big; px >= lo; px -= 0.5) if (L2.every(t => tw(t, px) <= aw) && 2.1 * px <= ah) return { px, lines: L2 }; }
+    return { px: big * 0.8, lines: [name], over: 1 };   // too long for its land: shown only where it has room
   };
   lctx.lineJoin = "round"; lctx.strokeStyle = "rgba(255,255,255,.55)"; lctx.lineWidth = 1.6; lctx.fillStyle = "#1f2133";
   let count = 0;
@@ -844,7 +839,7 @@ function labels(r, x0, y0, x1, y1) {
     const name = placeName(regAnchor[g]), ck = "fit|" + name + "|" + Math.round(aw) + "|" + big;
     let f = widthCache.get(ck); if (!f) { f = fitName(name, aw, ah); widthCache.set(ck, f); }
     const lh = f.px * 1.05, top = sy - (f.lines.length - 1) * lh / 2, wmax = Math.max(...f.lines.map(t => tw(t, f.px)));
-    if (!fits(sx - wmax / 2, top - f.px / 2, wmax, lh * f.lines.length) && gameOn) continue;   // country names keep their room in game mode
+    if (!fits(sx - wmax / 2, top - f.px / 2, wmax, lh * f.lines.length) && (gameOn || f.over)) continue;   // country names keep their room in game mode
     lctx.font = font(f.px);
     f.lines.forEach((t, k) => { lctx.strokeText(t, sx, top + k * lh); lctx.fillText(t, sx, top + k * lh); });
     if (++count > 6000) break;
@@ -1965,6 +1960,7 @@ toggle("t-mapcopy2", () => isleOn.mapCopy2, v => isleOn.mapCopy2 = v);
 if (!isleImg.mapCopy2) isleImg.mapCopy2 = isleImg.mapCopy;
 const OVB = { azores: "t-azores", madeira: "t-madeira", canary: "t-canary", hawaii: "t-hawaii", capeVerde: "t-capeverde", caribbean: "t-caribbean", mapCopy: "t-mapcopy", mapCopy2: "t-mapcopy2" };
 const syncMapBtns = () => { for (const k in OVB) { const b = $(OVB[k]); if (b) b.setAttribute("aria-pressed", !!isleOn[k]); } $("t-mapT").setAttribute("aria-pressed", !!showMapT); };   /* active maps = blue, re-synced every time the Maps menu opens */
+showMapT = false; for (const k in isleOn) isleOn[k] = false;   /* owner 11-07: every map overlay starts closed */
 $("mapFolder").addEventListener("toggle", syncMapBtns); syncMapBtns();
 // Maps dropdown shows blue while any map overlay (or THE MAP) is open; right-click it to turn every map off (owner, 11-03)
 const mapBtn = $("mapFolder").querySelector("summary");
@@ -5521,11 +5517,11 @@ function tripoMesh(k) {
   return new T.Mesh(g, new T.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
 }
 let MELEE = "sword";
-const MELEE_ON = { sword: 1 };   // only sword (+ bow) in play for now (user, 11-01); axe, hammer, spear stay in the files, add them here to bring them back
-const MELEE_N = { sword: "Longsword", axe: "Battle axe", hammer: "War hammer", spear: "Spear" };
+const MELEE_ON = { sword: 1, axe: 1, hammer: 1, spear: 1, stick: 1 };   /* owner 11-07: items bring every kind back */   // only sword (+ bow) in play for now (user, 11-01); axe, hammer, spear stay in the files, add them here to bring them back
+const MELEE_N = { stick: "Stick", sword: "Longsword", axe: "Battle axe", hammer: "War hammer", spear: "Spear" };
 function armWeapon(g, k) {   // swap the weapon a sword group holds
   const w = g.userData.w; for (const o of w.children.slice()) { w.remove(o); o.geometry.dispose(); o.material.dispose(); }
-  const m = tripoMesh(k); m.rotation.z = Math.PI / 2; w.add(m);   // flat side horizontal, like the old sword
+  const m = k === "stick" ? new T.Mesh(new T.CylinderGeometry(.035, .055, 1.25, 6).rotateX(Math.PI / 2).translate(0, 0, .5), new T.MeshLambertMaterial({ color: 0x8a5a30 })) : tripoMesh(k); m.rotation.z = Math.PI / 2; w.add(m);   // flat side horizontal, like the old sword
 }
 // the hero for the third-person view: a knight in Tripo armour, one weapon in the right hand (forward is +z, right is -x)
 function swordMesh() { const g = new T.Group(), w = new T.Group(); g.add(w); g.userData.w = w; armWeapon(g, MELEE); return g; }
@@ -5552,7 +5548,7 @@ function heroMesh() {   // an ordinary white stick figure (forward is +z, right 
   const tor = tripoMesh("torso"), neck = new T.Group(); neck.position.set(-.03, 1.4, .04); root.add(tor, neck);   /* the head is cut off the torso at the neck so the archer can look down the arrow while his body stands side-on (user, 11-03) */
   { const tp = tor.geometry.attributes.position, tc = tor.geometry.attributes.color, B = [[], []], Hd = [[], []]; for (let i = 0; i < tp.count; i += 3) { const hi = tp.getY(i) + tp.getY(i + 1) + tp.getY(i + 2) > 4.2, o = hi ? Hd : B; for (let k = i; k < i + 3; k++) { o[0].push(tp.getX(k) - (hi ? -.03 : 0), tp.getY(k) - (hi ? 1.4 : 0), tp.getZ(k) - (hi ? .04 : 0)); o[1].push(tc.getX(k), tc.getY(k), tc.getZ(k)); } }
     const mk = a => { const g = new T.BufferGeometry(); g.setAttribute("position", new T.Float32BufferAttribute(a[0], 3)); g.setAttribute("color", new T.Float32BufferAttribute(a[1], 3)); g.computeVertexNormals(); return g; }; tor.geometry.dispose(); tor.geometry = mk(B); neck.add(new T.Mesh(mk(Hd), tor.material)); }
-  legs[0].add(tripoMesh("legR")); legs[1].add(tripoMesh("legL")); armL.add(tripoMesh("armL")); armR.add(tripoMesh("armR"));
+  const tg = (m, k) => (m.userData.part = k, m); legs[0].add(tg(tripoMesh("legR"), "legs")); legs[1].add(tg(tripoMesh("legL"), "legs")); armL.add(tg(tripoMesh("armL"), "arms")); armR.add(tg(tripoMesh("armR"), "arms")); tor.userData.part = "chest"; for (const o of neck.children) if (o.isMesh) o.userData.part = "helm";
   sword.position.set(-.08, 0, .6);
   const shield = tripoMesh("shield"); shield.position.set(.1, -.4, .2); armL.add(shield);
   return { root, legs, armL, armR, sword, glow, trail, guard, shield, head: neck };
@@ -5743,7 +5739,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   //      E throw on a chain (tap = spear, hold = lob); it stays where it lands, E or LMB again yanks it back (a speared animal is dragged to you)
   //      Tab dash strike · Q block (tap right before a bite = parry) · animation cancels: an action pressed in the last part of an
   //      animation cuts its recovery for +25%, pressed earlier it waits. Angles: yaw like the animals (0 = +z), + = to the hero's left ----
-  const hero = me.hero, BASE = 12, REACH = 2.4, TIP = { sword: 1.16, axe: 1.07, hammer: 1.16, spear: 1.68 };
+  const hero = me.hero, BASE = 12, REACH = 2.4, TIP = { stick: 1.05, sword: 1.16, axe: 1.07, hammer: 1.16, spear: 1.68 };
   const reachOf = A => ((.9 + TIP[MELEE]) * (1 + (A.reach - 1) * .5) + .25) * 1.5 * 1.5;   // where the blade tip really is: shoulder + arm + weapon, so hits match what you see (user, 11-01)   // starting damage halved (user, 11-01); training raises it   // owner, 11-06: sword range 1.5x, then 1.5x again
   const ATK = {
     s0: { from: -1.25, to: 1.25, dur: .4, m: 1, reach: 1, lock: .42, lunge: .35 },          // right -> left
@@ -5768,7 +5764,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     o.rotation.order = "YXZ"; o.rotation.set(-Math.PI / 2, A.face, 0); o.position.set(me.pos.x, me.pos.y + .08, me.pos.z); scene.add(o); me.fx.push({ o, t: 0, d: A.dur + .2, s: 0, a: .5 });
   };
   const ss = u => u * u * (3 - 2 * u);
-  let startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (kind === "dash" ? 1 : 1.5) * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
+  let startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (kind === "dash" ? 1 : 1.5) * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte * (me.wMul ?? 1) }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
   { const sa = startAtk; startAtk = kind => { sa(kind); const a = me.atk; if (a && window.hxChop) setTimeout(() => { if (me.atk === a || !me.atk) { window.hxChop(a.face, kind); } }, a.dur * 450); }; }   // owner 11-06: the sword cuts trees too
   const CHAIN = ["s0", "s1", "s2", "slam", "whirl"];
   const nextSwing = () => { if (me.riposte > 1) { me.combo = 0; return startAtk("thrust"); } if (me.tnow - me.comboT > 1.1) me.combo = 0; const len = 3 + sk("combo"); me.comboT = me.tnow; startAtk(CHAIN[me.combo % len]); me.combo = (me.combo + 1) % len; };
@@ -5814,8 +5810,8 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     qBowT.setFromUnitVectors(AXB[2], BV[4].copy(G).sub(A).normalize()).multiply(qBowA.setFromAxisAngle(AXB[2], 1.05 - .26 * p + .2 * k)); bowG.quaternion.copy(h.armL.quaternion).invert().multiply(qBowT);   /* arrow from the hand through the grip; bow canted top to the right: 60 deg at rest, 45 at full draw */
     h.head.rotation.y = damp(h.head.rotation.y, tw * .92, 14, dt);   /* head turned back to look down the arrow */
   }
-  const arrows = [], bowPos = new T.Vector3(), arrowTrailMat = new T.LineBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: .4, depthWrite: false });
-  function setWeapon(w) { if (me.weapon === w) return; me.weapon = w; try { localStorage.setItem("hexatlas-w", w); } catch (e) {} me.draw = null; me.atk = null; bowG.visible = w === "bow"; hero.sword.visible = w === "sword" && me.blade; flash(w === "bow" ? "Bow · hold LMB to draw, release to shoot" : MELEE_N[MELEE], 900); tone(600, .03); }
+  const arrows = me.arrows = [], bowPos = new T.Vector3(), arrowTrailMat = new T.LineBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: .4, depthWrite: false });
+  function setWeapon(w) { if (me.weapon === w) return; if (w === "bow" && me.hasBow === false) { flash("No bow - find one (Tab)", 900); return; } me.weapon = w; try { localStorage.setItem("hexatlas-w", w); } catch (e) {} me.draw = null; me.atk = null; bowG.visible = w === "bow"; hero.sword.visible = w === "sword" && me.blade; flash(w === "bow" ? "Bow · hold LMB to draw, release to shoot" : MELEE_N[MELEE], 900); tone(600, .03); }
   me.setWeapon = setWeapon;
   me.setMelee = k => { if (!MELEE_ON[k]) return; MELEE = k; me.melee = k; try { localStorage.setItem("hexatlas-melee", k); } catch (e) {} armWeapon(hero.sword, k); armWeapon(thr, k); if (me.weapon === "sword") flash(MELEE_N[k], 900); else setWeapon("sword"); };
   try { const mw = localStorage.getItem("hexatlas-melee"), ww = localStorage.getItem("hexatlas-w"); if (mw && mw !== MELEE && TRIPO[mw] && MELEE_ON[mw]) { MELEE = mw; armWeapon(hero.sword, mw); armWeapon(thr, mw); } if (ww === "bow") setWeapon("bow"); } catch (e) {}   // start with the last weapon
@@ -5823,8 +5819,8 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   function fire() {
     const pw = clamp((me.tnow - me.draw) / drawTime(), .2, 1); me.draw = null; me.loose = me.tnow;
     const n = 1 + sk("multi"), st = bowG.getWorldPosition(bowPos).clone(), d = me.aim ? clamp(Math.hypot(me.aim.x - me.pos.x, me.aim.z - me.pos.z), 3, 60) : 25, v = 42 + 48 * pw, tt = Math.max(.1, d / v), vy = Math.min(25, (me.pos.y + 1 - st.y) / tt + 9 * tt);
-    const X = me.xhit && me.xhit(), vX = X ? (() => { const dd = X.clone().sub(st), t2 = Math.max(.05, dd.length() / v); return dd.divideScalar(t2).setY(dd.y / t2 + 9 * t2); })() : null;   // owner 11-07: the arrow goes where the crosshair is
-    for (let i = 0; i < n; i++) { const a = me.face + (i - (n - 1) / 2) * .07, o = arrowMesh(); o.position.copy(st); scene.add(o); const tg = new T.BufferGeometry(); tg.setAttribute("position", new T.BufferAttribute(new Float32Array(12), 3)); const tl = new T.Line(tg, arrowTrailMat); tl.frustumCulled = false; scene.add(tl); arrows.push({ o, p: st.clone(), v: vX ? vX.clone().applyAxisAngle(AXB[1], (i - (n - 1) / 2) * .07) : new T.Vector3(Math.sin(a) * v, vy, Math.cos(a) * v), dmg: 34 * pw * (pw >= 1 ? 1.25 : 1), t: 0, tl, tp: [st.clone(), st.clone(), st.clone(), st.clone()] }); }
+    const X = me.xhit && me.xhit(), vX = X ? (() => { const dd = X.clone().sub(st), t2 = Math.max(.05, dd.length() / v); return dd.divideScalar(t2).setY(dd.y + 9 * t2); })() : null;   // owner 11-07: the arrow goes where the crosshair is
+    for (let i = 0; i < n; i++) { const a = me.face + (i - (n - 1) / 2) * .07, o = arrowMesh(); o.position.copy(st); scene.add(o); const tg = new T.BufferGeometry(); tg.setAttribute("position", new T.BufferAttribute(new Float32Array(12), 3)); const tl = new T.Line(tg, arrowTrailMat); tl.frustumCulled = false; scene.add(tl); arrows.push({ o, p: st.clone(), v: vX ? vX.clone().applyAxisAngle(AXB[1], (i - (n - 1) / 2) * .07) : new T.Vector3(Math.sin(a) * v, vy, Math.cos(a) * v), dmg: 34 * pw * (pw >= 1 ? 1.25 : 1) * (me.bowMul ?? 1), t: 0, tl, tp: [st.clone(), st.clone(), st.clone(), st.clone()] }); }
     while (arrows.length > 60) { const A = arrows.shift(); scene.remove(A.o); }
     tone(320, .05); me.shake = Math.max(me.shake || 0, .05 + .05 * pw); me.shake = Math.max(me.shake || 0, .05 + .05 * pw);
   }
@@ -5849,14 +5845,14 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   let proj = null; Object.defineProperty(me, "proj", { get: () => proj, configurable: true });
   const handPos = out => { hero.armR.updateMatrixWorld(); return out.setFromMatrixPosition(hero.armR.matrixWorld); };
   function throwBlade(kind) {
-    if (!me.blade || me.hp <= 0) return; me.thrownT = me.tnow; me.shake = Math.max(me.shake || 0, .12); me.blade = false; hero.sword.visible = false; thr.visible = true; swoosh();
+    if (!me.blade || me.hp <= 0 || me.fist) return; me.thrownT = me.tnow; me.shake = Math.max(me.shake || 0, .12); me.blade = false; hero.sword.visible = false; thr.visible = true; swoosh();
     const L = me.lmb, pw = me.pwr != null ? me.pwr : L && L.charging ? clamp((me.tnow - L.t - .3) / .8, 0, 1) : -1, far = pw < 0 ? 1 : 1.8 + pw * .8;   // thrown out of a LMB charge (user, 11-01)
     me.pwr = null; if (pw >= 0) { me.lmb = null; tone(1400, .08); me.shake = .2; }
     const p0 = handPos(new T.Vector3()), dir = new T.Vector3(Math.sin(me.face), 0, Math.cos(me.face)), mul = me.bonus * me.riposte * (1 + .4 * sk("throwp")) * (pw < 0 ? 1 : 1.6 + pw * 1.4); me.bonus = 1; me.riposte = 1;
     if (kind === "lob") {                                              // underhand, 45° up: slow, short, lands with a wide hit
-      const d = me.aim ? clamp(Math.hypot(me.aim.x - me.pos.x, me.aim.z - me.pos.z), 4, 14) * far : 12 * far, tx = me.pos.x + dir.x * d, tz = me.pos.z + dir.z * d;
-      proj = { kind, p0, t: 0, dur: .85, tgt: new T.Vector3(tx, Math.max(H(tx, tz), -.3), tz), peak: d / 4 + 1, p: p0.clone(), dir, mul, out: 0 };
-    } else { const X = me.xhit && me.xhit(); proj = { kind, p: p0.clone(), d3: !!X, dir: X ? X.sub(p0).normalize() : dir, left: (26 + 6 * sk("throwp")) * far, speed: (45 + 5 * sk("throwp")) * (pw < 0 ? 1 : 1.35), mul, out: 0, pierce: sk("pierce"), done: new Set() }; }   // owner 11-07: flies straight at the crosshair // spear throw: fast, far, one target (chain length 26 m)
+      const X = me.xhit && me.xhit(), d = X ? Math.min(40, Math.hypot(X.x - p0.x, X.z - p0.z)) : me.aim ? clamp(Math.hypot(me.aim.x - me.pos.x, me.aim.z - me.pos.z), 4, 14) * far : 12 * far, tx = X && d < 40 ? X.x : me.pos.x + dir.x * d, tz = X && d < 40 ? X.z : me.pos.z + dir.z * d;   // owner 11-07: lands on the crosshair
+      proj = { kind, p0, t: 0, dur: .85, tgt: new T.Vector3(tx, X && d < 40 ? X.y : Math.max(H(tx, tz), -.3), tz), peak: d / 4 + 1, p: p0.clone(), dir, mul, out: 0 };
+    } else { const X = me.xhit && me.xhit(); proj = { kind, p: p0.clone(), d3: !!X, X: X && X.clone(), xd: X ? X.distanceTo(p0) : 1e9, trav: 0, dir: X ? X.sub(p0).normalize() : dir, left: (26 + 6 * sk("throwp")) * far, speed: (45 + 5 * sk("throwp")) * (pw < 0 ? 1 : 1.35), mul, out: 0, pierce: sk("pierce"), done: new Set() }; }   // owner 11-07: flies straight at the crosshair // spear throw: fast, far, one target (chain length 26 m)
   }
   function recall() { if (!proj || proj.ret) return; proj.ret = 1; tone(420, .06); }
   me.parried = m => { m.stun = 1.6; me.riposte = 2; me.cdQ = 0; me.slowT = .45; me.st = Math.min(100, me.st + 25); flash("PARRY! LMB = riposte (2x)", 900); tone(2200, .08); spark(handPos(new T.Vector3()), 16); };
@@ -5980,7 +5976,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
           for (const m of mobs) if (!m.dead && Math.hypot(m.root.position.x - q.p.x, m.root.position.z - q.p.z) < 3.5 + m.a[1] * .3 * GS) hurtMob(m, BASE * 1.3 * q.mul, q.p);
           const ring = new T.Mesh(new T.RingGeometry(.2, .45, 32), ringMat.clone()); ring.rotation.x = -Math.PI / 2; ring.position.copy(q.p).y += .1; scene.add(ring); me.fx.push({ o: ring, t: 0, d: .45, s: 8 }); }
       } else if (!q.landed) {
-        const step = q.speed * dt, a0 = q.p.clone(); q.p.addScaledVector(q.dir, step); if (!q.d3) q.p.y = lerp(q.p.y, Math.max(H(q.p.x, q.p.z), -.3) + 1.2, .3); else if (q.p.y < Math.max(H(q.p.x, q.p.z), -.3)) { q.p.y = Math.max(H(q.p.x, q.p.z), -.3); q.left = 0; } q.left -= step; thr.rotation.set(Math.PI / 2, me.face, 0, "YXZ");   // skims the ground over hills
+        const step = q.speed * dt, a0 = q.p.clone(); q.p.addScaledVector(q.dir, step); if (!q.d3) q.p.y = lerp(q.p.y, Math.max(H(q.p.x, q.p.z), -.3) + 1.2, .3); else if ((q.trav += step) >= q.xd) { q.p.copy(q.X); q.left = 0; } else if (q.p.y < Math.max(H(q.p.x, q.p.z), -.3)) { q.p.y = Math.max(H(q.p.x, q.p.z), -.3); q.left = 0; } q.left -= step; thr.rotation.set(Math.PI / 2, me.face, 0, "YXZ");   // skims the ground over hills
         let hit = null; for (const m of mobs) { if (m.dead || (q.done && q.done.has(m))) continue; const c = m.root.position.clone(); c.y += m.a[2] * .5 * GS; const rr = Math.max(.9, m.a[1] * .35 * GS); const ab = q.p.clone().sub(a0), u = clamp(c.clone().sub(a0).dot(ab) / (ab.lengthSq() || 1), 0, 1); if (a0.clone().addScaledVector(ab, u).distanceTo(c) < rr + .4) { hit = m; break; } }
         if (hit && q.pierce > 0) { q.pierce--; q.done.add(hit); hurtMob(hit, BASE * 3.2 * q.mul, me.pos, 1); tone(160, .1); hit = null; }   // Piercing Throw: straight through
         else if (hit) { hurtMob(hit, BASE * 3.2 * q.mul, me.pos, 1); tone(140, .12); q.stuck = hit; q.off = q.p.clone().sub(hit.root.position); }
@@ -5999,10 +5995,11 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
       A.t += dt;
       if (A.m) { if (A.m.dead && A.m.root.parent == null) A.t = 99; else A.o.position.copy(A.m.root.position).add(A.off); }
       else if (!A.stuck) {
-        const a0 = A.p.clone(); A.v.y -= 18 * dt; A.p.addScaledVector(A.v, dt);
+        const a0 = A.p.clone(); A.v.y -= 18 * dt; A.p.addScaledVector(A.v, dt); A.p.y += 9 * dt * dt;   /* exact arc, so it lands on the crosshair */
         for (const m of mobs) { if (m.dead) continue; const c = m.root.position.clone(); c.y += m.a[2] * .5 * GS; const rr = Math.max(.8, m.a[1] * .35 * GS), ab = A.p.clone().sub(a0), u = clamp(c.clone().sub(a0).dot(ab) / (ab.lengthSq() || 1), 0, 1);
           if (a0.clone().addScaledVector(ab, u).distanceTo(c) < rr + .2) { hurtMob(m, A.dmg, a0); tone(240, .06); spark(A.p, 5); A.m = m; A.off = A.p.clone().sub(m.root.position); A.t = Math.max(A.t, 3); break; } }
-        if (!A.m && (A.p.y < H(A.p.x, A.p.z) || (me.vox && me.vox.cell(me.vox.ci(A.p.x), me.vox.cyi(A.p.y), me.vox.ci(A.p.z))))) { A.stuck = 1; A.stickT = A.t; A.t = Math.max(A.t, 2); spark(A.p, 3); }
+        const inG = q => q.y < H(q.x, q.z) || (me.vox && me.vox.cell(me.vox.ci(q.x), me.vox.cyi(q.y), me.vox.ci(q.z)));
+        if (!A.m && inG(A.p)) { const ab = A.p.clone().sub(a0), L = ab.length(); for (let u = 0; u <= L; u += .08) { const q = a0.clone().addScaledVector(ab, u / (L || 1)); if (inG(q)) { A.p.copy(q); break; } }   /* owner 11-07: sticks where it hit, not a frame further on */ A.stuck = 1; A.stickT = A.t; A.t = Math.max(A.t, 2); spark(A.p, 3); }
         A.o.position.copy(A.p); if (!A.stuck && !A.m) { A.o.lookAt(tmpV.copy(A.p).add(A.v)); A.o.rotateZ(A.t * 16); }
       }
       if (A.stuck && A.t - (A.stickT || 0) < .45) A.o.rotateZ(Math.sin((A.t - A.stickT) * 46) * .03); else if (A.m) A.o.rotateZ(Math.sin(A.t * 30) * .02); if (A.tl) { const cp = A.o.position; if (isFinite(cp.x) && isFinite(cp.y) && isFinite(cp.z)) { A.tp.pop(); A.tp.unshift(cp.clone()); } const pa = A.tl.geometry.attributes.position; for (let j = 0; j < 4; j++) { const q = A.tp[j] || cp; if (isFinite(q.x) && isFinite(q.y) && isFinite(q.z)) pa.setXYZ(j, q.x, q.y, q.z); } pa.needsUpdate = true; } if (A.t > 8) { scene.remove(A.o); if (A.tl) { scene.remove(A.tl); A.tl.geometry.dispose(); A.tl = null; } }
@@ -6159,7 +6156,7 @@ document.querySelector("main").appendChild(peg);
 const ghost = document.createElement("div"); ghost.id = "pegGhost"; ghost.hidden = true; ghost.innerHTML = PEG;
 const tip = document.createElement("div"); tip.id = "pegTip"; tip.hidden = true;
 const ov = document.createElement("div"); ov.id = "sv"; ov.hidden = true;
-ov.innerHTML = `<div class="hud" id="svHud"></div><div class="btns"><button id="svSnd" aria-label="Sound on/off" title="Sound">🔊</button><button id="svX" aria-label="Back to the map" title="Back to the map (Esc)">✕</button></div><div class="help">WASD move · LMB swing · MMB jab · RMB block · B mine · N place · M block type · Y throw · Z rage · G chop · J fly · Esc map</div><div class="xh"></div><div class="joy" id="svJoy"><i></i></div><div class="load" id="svLoad">Loading…</div>`;
+ov.innerHTML = `<div class="hud" id="svHud"></div><div class="btns"><button id="svSnd" aria-label="Sound on/off" title="Sound">🔊</button><button id="svX" aria-label="Back to the map" title="Back to the map (Esc)">✕</button></div><div class="help">WASD move · LMB swing · MMB stab · RMB block · Tab bag · E pick up/drag/talk · B mine · N place · M block · Y throw block · Z rage · G chop · J fly · Esc map</div><div class="xh"></div><div class="joy" id="svJoy"><i></i></div><div class="load" id="svLoad">Loading…</div>`;
 document.body.append(ghost, tip, ov);
 ov.insertAdjacentHTML("beforeend", `<div class="nav"><canvas class="cmp" id="svCmp" width="88" height="88"></canvas><canvas class="mini" id="svMini" width="284" height="124"></canvas></div>`);
 // compass (turns with the camera, north up = -z) and the world map around the spot, corners rounded by 6 hexes
@@ -6295,6 +6292,7 @@ function voxState(i) {   // owner 11-06: what you changed in a hex (mined / plac
 }
 function build(me, i) {
   const [name, country, admin] = D.regions[D.reg[i]], [lat, lon] = hexLL(i), b = hexBiome(i), r = rng(i * 2654435761 ^ hs(b.n));
+  me.bio = b; me.ctry = country || "";   // for the addon (props)
   const td = TOD[b.t] || TOD.day, col = c => new T.Color(+("0x" + c)), K = Math.PI;
   const R = new T.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
   R.setPixelRatio(1 / PX); R.setSize(innerWidth, innerHeight); ov.prepend(R.domElement);
@@ -6350,6 +6348,7 @@ function build(me, i) {
     const kindAt = (cx, cz, y) => { const x = (cx + .5) * VS, z = (cz + .5) * VS; if (b.sn && y > b.sn + 15 * Math.sin(x * .03) * Math.sin(z * .025)) return 2; if (b.w && y < .9) return 1; return 0; };   // 0 grass, 1 sand, 2 snow
     // cell types: 1 grass 2 dirt 3 sand 4 snow 5 stone 6 wood; hardness = blows to mine
     const HARD = [0, 1, 1, 1, 1, 3, 2, 1], NAME = ["", "grass", "dirt", "sand", "snow", "stone", "wood", "leaves"], leafC = col("3f7a2a");
+    const FOOT = [[0, 0], [.16, 0], [-.16, 0], [0, .16], [0, -.16]], BODY = [[0, 0], ...[...Array(8)].map((_, j) => [Math.sin(j * Math.PI / 4) * .3, Math.cos(j * Math.PI / 4) * .3])];
     const tc = VX.tc = new Map();   // tree cells by column as spans: [from iy, to iy (excl.), type, colour, tree] (owner 11-06: every tree near you is made of cells)
     const natType = (cx, iy, cz, n) => { const d = n - 1 - iy, k = kindAt(cx, cz, yb(n)); if (d === 0) return [1, 3, 4][k]; if (k === 1) return d < 6 ? 3 : 5; if (k === 2) return d < 2 ? 4 : 5; return d < 4 ? 2 : 5; };
     const treeE = (cx, iy, cz) => { const L = tc.get(CK(cx, cz)); if (L) for (const e of L) if (iy >= e[0] && iy < e[1]) return e; return null; };
@@ -6429,20 +6428,22 @@ function build(me, i) {
     const treeMesh = (t, ox, oy, oz) => {   // a felled tree: the outside of its remaining cells as one instanced mesh around the log's centre
       const sp = genTree(t), by = new Map(); for (const e of sp) { const k = e[0] + "," + e[1]; if (!by.has(k)) by.set(k, []); by.get(k).push(e); }
       const has = (cx, cz, iy) => { const L = by.get(cx + "," + cz); if (L) for (const e of L) if (iy >= e[2] && iy < e[3]) { const c = cols.get(CK(cx, cz)); return !(c && c.m.get(iy) === 0); } return false; };
-      const cs = []; for (const e of sp) for (let iy = e[2]; iy < e[3]; iy++) { if (!has(e[0], e[1], iy)) continue; if (iy === e[2] || iy === e[3] - 1 || !has(e[0] + 1, e[1], iy) || !has(e[0] - 1, e[1], iy) || !has(e[0], e[1] + 1, iy) || !has(e[0], e[1] - 1, iy)) cs.push([e[0], iy, e[1], e[5]]); }
+      const cs = []; for (const e of sp) for (let iy = e[2]; iy < e[3]; iy++) { if (!has(e[0], e[1], iy)) continue; cs.push([e[0], iy, e[1], e[5], e[4]]); }   // owner 11-07: solid all through, so cutting a log never shows a hollow
       const m = new T.InstancedMesh(cubeG, cubeM, Math.max(1, cs.length)), M4 = new T.Matrix4(), cc = new T.Color();
       cs.forEach((e, q) => { M4.makeTranslation((e[0] + .5) * VS - ox, yb(e[1]) + VS / 2 - oy, (e[2] + .5) * VS - oz); m.setMatrixAt(q, M4); m.setColorAt(q, cc.setHex(e[3]).multiplyScalar(.9 + hn(e[0], e[2] + e[1]) * .18)); });
-      m.count = cs.length; m.computeBoundingSphere(); return m;
+      m.count = cs.length; m.computeBoundingSphere(); m.userData.cs = cs; return m;
     };
     let tidx = null; const treesOf = (kx, kz) => { if (!tidx) { tidx = new Map(); for (const t of me.cut || []) { const k = mkey(Math.floor(t.x / CW), Math.floor(t.z / CW)); if (!tidx.has(k)) tidx.set(k, []); tidx.get(k).push(t); } } return tidx.get(mkey(kx, kz)) || []; };
     const pend = new Set();
     const recalc = (cx, cz) => { const c = cols.get(CK(cx, cz)); if (!c) return; const n = nt(cx, cz); let iy = n; for (const k of c.m.keys()) if (k + 1 > iy) iy = k + 1; while (iy > n - 400 && !cell(cx, iy - 1, cz, n)) iy--; c.top = iy; };
     Object.assign(VX, { H, Hn, VS, OY, HH, yb, ci, cyi, nt, CK, cell, HARD, NAME, tick, topOf,
       tcol: (t, cx, cz, iy) => tcol(t, cx, cz, iy, 1, new T.Color()).getHex(),
-      G: (x, z, f) => {   // the floor under feet f: the highest solid cell at most two cells above them, so you walk into tunnels and under bridges
+      G: (x, z, f) => { let y = -1e9; for (const [a, b] of FOOT) y = Math.max(y, VX.G1(x + a, z + b, f)); return y; },   // owner 11-07: the floor under the whole body, not one point
+      G1: (x, z, f) => {   // the floor under feet f: the highest solid cell at most two cells above them, so you walk into tunnels and under bridges
         const cx = ci(x), cz = ci(z), k = CK(cx, cz), n = nt(cx, cz); let iy = cyi(f + VS * 2.2) - 1;
         if (!cols.has(k) && !tc.has(k)) return yb(Math.min(n, iy + 1)); for (let s = 0; s < 400; s++, iy--) if (cell(cx, iy, cz, n)) return yb(iy + 1); return yb(n); },
-      blocked: (x, z, f) => { const cx = ci(x), cz = ci(z), k = CK(cx, cz), n = nt(cx, cz), any = cols.has(k) || tc.has(k); for (let iy = cyi(f + VS * 2.2), e = cyi(f + HH - .05); iy <= e; iy++) if (any ? cell(cx, iy, cz, n) : iy < n) return true; return false; },
+      blocked: (x, z, f) => { for (const [a, b] of BODY) if (VX.blocked1(x + a, z + b, f)) return true; return false; },   // owner 11-07: walls stop the body as wide as the model
+      blocked1: (x, z, f) => { const cx = ci(x), cz = ci(z), k = CK(cx, cz), n = nt(cx, cz), any = cols.has(k) || tc.has(k); for (let iy = cyi(f + VS * 2.2), e = cyi(f + HH - .05); iy <= e; iy++) if (any ? cell(cx, iy, cz, n) : iy < n) return true; return false; },
       treeAt: (cx, iy, cz) => { const e = treeE(cx, iy, cz); return e ? e[4] : null; }, genTree: t => genTree(t), unvox: t => unvox(t), treeMesh: (t, ox, oy, oz) => treeMesh(t, ox, oy, oz),
       dirty: (cx, cz) => { for (const [a, c] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) pend.add(mkey(Math.floor((cx + a) / CH), Math.floor((cz + c) / CH))); },
       flush: () => { for (const key of pend) if (chunks.has(key)) put(Math.floor(key / 1024) - 512, key % 1024 - 512); pend.clear(); },
@@ -6670,12 +6671,12 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   document.head.appendChild(st);
   const m = document.createElement("div"); m.id = "hxStart";
   m.innerHTML = `<div class="box"><h1>HEX<span>QUESTS</span></h1>
-  <button data-a="play">▶ Play</button><button class="alt" data-a="new">🎲 Random land</button>
-  <div class="keys"><span><kbd>WASD</kbd> move · <kbd>Shift</kbd> run</span><span><kbd>LMB</kbd> swing · hold to charge</span><span><kbd>Space</kbd> jump · double = roll</span><span><kbd>Shift</kbd> ×2 dash</span><span><kbd>F</kbd> throw · hold = lob</span><span><kbd>R</kbd>/<kbd>T</kbd> spin</span><span><kbd>Tab</kbd> climb</span><span><kbd>E</kbd> talk</span><span><kbd>1</kbd> sword · <kbd>2</kbd> bow</span><span><kbd>K</kbd> / <kbd>"</kbd> skills &amp; shop</span><span><kbd>X</kbd>/<kbd>V</kbd> turn</span><span><kbd>Esc</kbd> back to map</span></div>
+  <button data-a="play">▶ Play</button><button class="alt" data-a="new">🎲 Random land</button><button class="alt" data-a="naked">🩲 Spawn naked</button>
+  <div class="keys"><span><kbd>WASD</kbd> move · <kbd>Shift</kbd> run</span><span><kbd>LMB</kbd> swing · hold to charge</span><span><kbd>Space</kbd> jump · double = roll</span><span><kbd>Shift</kbd> ×2 dash</span><span><kbd>F</kbd> throw · hold = lob</span><span><kbd>R</kbd>/<kbd>T</kbd> spin</span><span><kbd>Tab</kbd> inventory</span><span><kbd>E</kbd> pick up · drag · talk</span><span><kbd>Space</kbd> at a wall = climb</span><span><kbd>1</kbd> sword · <kbd>2</kbd> bow</span><span><kbd>K</kbd> / <kbd>"</kbd> skills &amp; shop</span><span><kbd>X</kbd>/<kbd>V</kbd> turn</span><span><kbd>Esc</kbd> back to map</span></div>
   <small>Blue light beams at the edge of each land lead to the next one</small></div>`;
   document.body.appendChild(m);
   const land = () => { const L = []; for (let k = 0; k < D.reg.length; k++) if (D.reg[k] >= 0) L.push(k); return L[Math.floor(Math.random() * L.length)]; };
-  m.onclick = e => { const a = e.target.closest("button")?.dataset.a; if (!a) return; m.hidden = true; if (a === "new") open(land()); };
+  m.onclick = e => { const a = e.target.closest("button")?.dataset.a; if (!a) return; m.hidden = true; if (a === "new") open(land()); if (a === "naked") { try { localStorage.setItem("hexatlas-inv2", JSON.stringify({ s: {}, b: [], naked: 1 })); } catch (e) {} if (window.SV && SV.S3 && window.hxNaked) window.hxNaked(); else open(land()); } };
 }
 
 })();
@@ -6811,7 +6812,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   const around = (me, x, z) => { const S = me.vox.VS, px = Math.floor(x / S / PS), pz = Math.floor(z / S / PS); for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) patch(me, px + a, pz + c); };
   const repatch = (me, cx, cz) => { const P = me.pw; if (!P) return; const S = me.vox.VS, px = Math.floor(cx / PS), pz = Math.floor(cz / PS), key = (px + 4096) * 8192 + pz + 4096, hb = P.patches.get(key); if (hb) { P.w.removeBody(hb); P.patches.delete(key); patch(me, px, pz); }
     for (const e of P.bodies) if (Math.hypot(e.b.position.x - (cx + .5) * S, e.b.position.z - (cz + .5) * S) < 2) e.b.wakeUp(); };
-  const poses = me => { const V = me.vox; let ch = 0; for (const e of me.pw.bodies) if (e.idx >= 0) { const b = e.b, p = [b.position.x, b.position.y, b.position.z, b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w].map(u => Math.round(u * 1000) / 1000), o = V.t.get(e.idx); if (!o || o.some((u, k) => Math.abs(u - p[k]) > .01)) { V.t.set(e.idx, p); ch = 1; } } if (ch) V.save(); };
+  const poses = me => { const V = me.vox; let ch = 0; for (const e of me.pw.bodies) if (e.idx >= 0) { const b = e.b, p = [b.position.x, b.position.y, b.position.z, b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w].map(u => Math.round(u * 1000) / 1000), o = V.t.get(e.idx); if (!o || o.slice(0, 7).some((u, k) => Math.abs(u - p[k]) > .01)) { V.t.set(e.idx, o && o.length > 7 ? [...p, ...o.slice(7)] : p); ch = 1; } } if (ch) V.save(); };
   // ---- trees ----
   const unsolid = (me, t) => { const ck = Math.floor(t.x / 8) * 4096 + Math.floor(t.z / 8), a = me.tgrid && me.tgrid.get(ck); if (a) for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - t.x) < .01 && Math.abs(a[i + 1] - t.z) < .01) { a.splice(i, 4); break; }
     if (me.trees) for (let i = me.trees.length - 1; i >= 0; i--) if (Math.abs(me.trees[i][0] - t.x) < .01 && Math.abs(me.trees[i][2] - t.z) < .01) me.trees.splice(i, 1); };
@@ -6823,7 +6824,8 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   const fell = (me, t, pose) => {
     const T = me.T, P = world(me); hide(me, t);
     const g = new T.Group(), inv = new T.Matrix4().makeTranslation(t.x, t.y + t.h / 2, t.z).invert(), V = me.vox;
-    if (V && V.treeMesh) { V.unvox(t); g.add(V.treeMesh(t, t.x, t.y + t.h / 2, t.z)); }   // owner 11-06: it falls as the cells it is made of
+    if (pose && pose[8]) { if (V && V.unvox) V.unvox(t); return; }   // cut away to nothing
+    if (V && V.treeMesh) { V.unvox(t); const im = V.treeMesh(t, t.x, t.y + t.h / 2, t.z); g.add(im); if (pose && pose[7]) { const Z = new T.Matrix4().makeScale(0, 0, 0); im.userData.gone = new Set(pose[7]); for (const j of pose[7]) if (j < im.count) im.setMatrixAt(j, Z); im.instanceMatrix.needsUpdate = true; } }   // owner 11-06: it falls as the cells it is made of
     else for (const [m, im] of t.saved) { const c = new T.Mesh(m.geometry, m.material); c.matrixAutoUpdate = false; c.matrix.multiplyMatrices(inv, im); g.add(c); }
     g.position.set(t.x, t.y + t.h / 2, t.z); me.scene.add(g);
     const r = Math.max(.25, t.h * .025), body = new C.Body({ mass: 60 * t.h, linearDamping: .05, angularDamping: .25 });
@@ -6874,7 +6876,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     const hard = V.HARD[a.t] || 1; chips(me, new me.T.Vector3(cx0, cy0 + S / 2, cz0), c, a.t === 5 ? 4 : 3); me.tone && me.tone(a.t === 5 ? 260 : 150, .05);
     if (me.mineN < hard) { me.shake = Math.max(me.shake || 0, .04); me.say && me.say(`${V.NAME[a.t]} ${me.mineN}/${hard}`, 500); return true; }
     me.mineK = null; const tr = V.treeAt(a.cx, a.iy, a.cz); V.set(a.cx, a.iy, a.cz, 0); me.shake = Math.max(me.shake || 0, .07); treeCheck(me, [tr]);   // cut through a trunk's foot: down it comes
-    lib().then(() => { if (cur() !== me) return; world(me); repatch(me, a.cx, a.cz); const e = junk(me, cx0, cy0, cz0, S * .92, c, "debris", a.t); e.b.velocity.set((Math.random() - .5) * 2, 3, (Math.random() - .5) * 2); e.b.angularVelocity.set(Math.random() * 4, Math.random() * 4, Math.random() * 4); })
+    lib().then(() => { if (cur() !== me) return; world(me); repatch(me, a.cx, a.cz); const e = junk(me, cx0, cy0, cz0, S, c, "debris", a.t); e.b.velocity.set((Math.random() - .5) * 2, 3, (Math.random() - .5) * 2); e.b.angularVelocity.set(Math.random() * 4, Math.random() * 4, Math.random() * 4); })
       .catch(() => give(me, a.t));
     return true;
   };
@@ -6892,7 +6894,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     for (const [cx, iy, cz, t] of broke.slice(0, 14)) chips(me, new me.T.Vector3((cx + .5) * S, V.yb(iy) + S / 2, (cz + .5) * S), V.tcol(t, cx, cz, iy), 2);
     treeCheck(me, trees); for (const t of trees) if (t && !t.down && (t.hits = (t.hits || 0) + (heavy || w === "axe" ? 2 : 1)) >= 2) lib().then(() => cur() === me && !t.down && fell(me, t));   // two blade bites into a trunk fell it
     lib().then(() => { if (cur() !== me) return; world(me); for (const c of cols) { const [cx, cz] = c.split(",").map(Number); repatch(me, cx, cz); }
-      for (const [cx, iy, cz, t] of broke.slice(0, 5)) { const e = junk(me, (cx + .5) * S, V.yb(iy) + S / 2, (cz + .5) * S, S * .92, V.tcol(t, cx, cz, iy), "debris", t); e.b.velocity.set((Math.random() - .5) * 4, 3 + Math.random() * 3, (Math.random() - .5) * 4); e.b.angularVelocity.set(Math.random() * 6, Math.random() * 6, Math.random() * 6); } })
+      for (const [cx, iy, cz, t] of broke.slice(0, 5)) { const e = junk(me, (cx + .5) * S, V.yb(iy) + S / 2, (cz + .5) * S, S, V.tcol(t, cx, cz, iy), "debris", t); e.b.velocity.set((Math.random() - .5) * 4, 3 + Math.random() * 3, (Math.random() - .5) * 4); e.b.angularVelocity.set(Math.random() * 6, Math.random() * 6, Math.random() * 6); } })
       .catch(() => { for (const [, , , t] of broke.slice(0, 5)) give(me, t); });
     return broke;
   };
@@ -6913,7 +6915,9 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     const prev = pr && pr.A === A ? pr : cur0, stab = A.kind === "jab" || A.kind === "thrust", S = V.VS;
     A.vdone = A.vdone || []; const zi = new T.Vector3(), oi = new T.Vector3();
     for (let u = 0; u <= 1.001; u += .25) { oi.lerpVectors(prev.o, o, u); zi.lerpVectors(prev.z, z, u).normalize();
-      for (let s = L * .25; s <= L * 1.02; s += S / 2) { const q = oi.clone().addScaledVector(zi, s), cx = V.ci(q.x), iy = V.cyi(q.y), cz = V.ci(q.z); if (!V.cell(cx, iy, cz)) continue;
+      for (let s = L * .25; s <= L * 1.02; s += S / 2) { const q = oi.clone().addScaledVector(zi, s), cx = V.ci(q.x), iy = V.cyi(q.y), cz = V.ci(q.z);
+        if (!(A.vlog > 2) && logHit(me, q)) { A.vlog = (A.vlog || 0) + 1; logCut(me, q, ballR(me, A.kind) * S * (stab ? .6 : .8)); break; }
+        if (!V.cell(cx, iy, cz)) continue;
         if (A.vdone.some(c => (c[0] - cx) ** 2 + (c[1] - iy) ** 2 + (c[2] - cz) ** 2 < (stab ? 9 : 4))) break;   // this part of the swing already bit here
         A.vdone.push([cx, iy, cz]); if (stab) dig2(me, q, zi, A.kind); else smash(me, [cx, iy, cz], ballR(me, A.kind) * .8, ballP(me, A.kind), A.kind); break; } }
   };
@@ -6928,7 +6932,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
   const xhit = me => {   // where the crosshair points in the world: first cell or animal along the view ray, else 120 m out
     const T = me.T, V = me.vox, d = new T.Vector3(); me.cam.getWorldDirection(d); const o = me.cam.position.clone(); let best = 999;
     for (const m of me.mobs || []) { if (m.dead) continue; const c = m.root.position.clone(); c.y += .6; const t = c.clone().sub(o).dot(d); if (t < (me.dist || 2) + .5) continue; if (o.clone().addScaledVector(d, t).distanceTo(c) < .9 && t < best) best = t; }
-    for (let s = (me.dist || 2.2) + .4; s < Math.min(best, 120); s += V.VS / 2) { const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s; if (V.cell(V.ci(x), V.cyi(y), V.ci(z)) || y < V.H(x, z) - .05) return o.addScaledVector(d, s); }
+    for (let s = .3; s < Math.min(best, 120); s += V.VS / 4) { const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s; if (V.cell(V.ci(x), V.cyi(y), V.ci(z)) || y < V.H(x, z) - .05) return o.addScaledVector(d, s); }
     return o.addScaledVector(d, Math.min(best, 120));
   };
   window.hxSwingMine = kind => { const me = cur(); if (!me || !me.vox || me.hp <= 0) return; mineArea(me, 4, kind); };   // kept for other callers; swings now cut by contact (bladeCut)
@@ -6978,10 +6982,274 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
       me.hurtMob(m, 45 * (1 + (me.lvlB || 0)), p, true); if (!m.dead) { m.stun = Math.max(m.stun || 0, 1.8); const k = (10 - d) * .5 / (d || 1); R0.position.x += dx * k; R0.position.z += dz * k; } }
     const S = V.VS, cells = []; for (let n = 0; n < 90; n++) { const a = Math.random() * 6.28, d = 1.6 + Math.random() * 5, cx = V.ci(p.x + Math.cos(a) * d), cz = V.ci(p.z + Math.sin(a) * d), top = V.topOf(cx, cz); if (top < V.nt(cx, cz) - 9) continue; const t = V.cell(cx, top - 1, cz); if (t && V.set(cx, top - 1, cz, 0, true)) cells.push([cx, top - 1, cz, t]); }
     V.flush();
-    lib().then(() => { if (cur() !== me) return; world(me); for (const [cx, iy, cz, t] of cells) { repatch(me, cx, cz); if (Math.random() < .55) continue; const e = junk(me, (cx + .5) * S, V.yb(iy) + S / 2, (cz + .5) * S, S * .92, V.tcol(t, cx, cz, iy), "debris", t); const dx = (cx + .5) * S - p.x, dz = (cz + .5) * S - p.z, dl = Math.hypot(dx, dz) || 1; e.b.velocity.set(dx / dl * 3, 5 + Math.random() * 5, dz / dl * 3); e.b.angularVelocity.set(Math.random() * 9, Math.random() * 9, Math.random() * 9); } });
+    lib().then(() => { if (cur() !== me) return; world(me); for (const [cx, iy, cz, t] of cells) { repatch(me, cx, cz); if (Math.random() < .55) continue; const e = junk(me, (cx + .5) * S, V.yb(iy) + S / 2, (cz + .5) * S, S, V.tcol(t, cx, cz, iy), "debris", t); const dx = (cx + .5) * S - p.x, dz = (cz + .5) * S - p.z, dl = Math.hypot(dx, dz) || 1; e.b.velocity.set(dx / dl * 3, 5 + Math.random() * 5, dz / dl * 3); e.b.angularVelocity.set(Math.random() * 9, Math.random() * 9, Math.random() * 9); } });
   };
+  // ---- owner 11-07: nature that blows up. Hit it with arrows (3) or a thrown blade (at once): hives and wasp nests burst into flying swarms,
+  //      ant hills and termite mounds into crawling ones, puffballs into a choking spore cloud, swamp gas and drink crates into plain blasts ----
+  const DRINK = [[/Japan/, "SAKE", 0xf2efe6], [/Korea/, "SOJU", 0x6fbf7a], [/China|Taiwan/, "白酒", 0xc8302a], [/Russia|Ukraine|Belarus|Poland|Kazakh|Lithuania|Latvia|Estonia/, "VODKA", 0xdfe6ee],
+    [/Mexico/, "TEQUILA", 0xe0b040], [/Turkey|Türkiye/, "RAKI", 0xeeeeee], [/Greece|Cyprus/, "OUZO", 0x4a7ad8], [/France|Italy|Spain|Portugal|Chile|Argentina|Georgia|Moldova|Hungary|Romania|South Africa/, "VINO", 0x7a1a3a],
+    [/Germany|Czech|Belgium|Austria|Netherlands|Denmark/, "BIER", 0xe0a020], [/Scotland|Ireland|United Kingdom|United States|Canada/, "WHISKY", 0xb06a28], [/Cuba|Jamaica|Dominican|Haiti|Puerto|Trinidad|Barbados|Bahamas|Guyana|Venezuela/, "RUM", 0x8a4a1a],
+    [/Brazil/, "CACHAÇA", 0x5aa040], [/Peru|Bolivia/, "PISCO", 0xd8c8a0], [/India|Sri Lanka|Nepal/, "ARRACK", 0xd09040], [/Thailand|Laos|Cambodia|Vietnam|Philippines|Indonesia|Malaysia|Myanmar/, "LAO", 0xd8d0b0],
+    [/Nigeria|Ghana|Kenya|Tanzania|Uganda|Congo|Cameroon|Ethiopia|Ivory|Senegal|Angola|Mozambique|Zambia|Zimbabwe/, "PALM", 0xe8dcb0], [/Sweden|Norway|Finland|Iceland/, "AKVAVIT", 0xd8c068], [/Australia|New Zealand/, "BEER", 0xe0a020]];
+  const pMat = new Map(), pm = (me, c, o = {}) => { const k = c + JSON.stringify(o); if (!pMat.has(k)) pMat.set(k, new me.T.MeshLambertMaterial({ color: c, ...o })); return pMat.get(k); };
+  const crateTex = (me, txt, c) => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const x = cv.getContext("2d"); x.fillStyle = "#8a5a2a"; x.fillRect(0, 0, 64, 64); x.fillStyle = "#6a4420"; for (let y = 0; y < 64; y += 16) x.fillRect(0, y, 64, 2); x.fillRect(0, 0, 4, 64); x.fillRect(60, 0, 4, 64);
+    x.fillStyle = "#" + c.toString(16).padStart(6, "0"); x.fillRect(6, 22, 52, 20); x.fillStyle = "#111"; x.font = "bold " + (txt.length > 5 ? 10 : 13) + "px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(txt, 32, 33);
+    const t = new me.T.CanvasTexture(cv); t.magFilter = me.T.NearestFilter; return t; };
+  const KINDS = {   // [hits, swarm: 1 flying / 2 crawling / 3 spores / 0 blast, colour]
+    hive: [3, 1, 0xf2b630], wasp: [3, 1, 0x3a3a30], ants: [3, 2, 0x2a1a10], termite: [3, 2, 0x8a3a1a], puff: [2, 3, 0xd8e8a0], gas: [2, 0, 0x60a0ff], crate: [3, 0, 0xffa030] };
+  const makeProp = (me, k, x, y, z, extra) => {
+    const T = me.T, g = new T.Group(); g.position.set(x, y, z); let r = .5;
+    if (k === "hive") { const b = new T.Mesh(new T.SphereGeometry(.32, 10, 8), pm(me, 0xc8902a)); b.scale.set(1, 1.5, 1); g.add(b); for (const yy of [-.25, 0, .25]) { const t = new T.Mesh(new T.TorusGeometry(.3 - Math.abs(yy) * .3, .04, 4, 12), pm(me, 0x8a5a18)); t.rotation.x = Math.PI / 2; t.position.y = yy; g.add(t); } const h = new T.Mesh(new T.CircleGeometry(.07, 6), pm(me, 0x1a1008)); h.position.set(0, -.3, .26); g.add(h); r = .55; }
+    else if (k === "wasp") { const b = new T.Mesh(new T.SphereGeometry(.3, 9, 7), pm(me, 0xa8a090, { flatShading: true })); b.scale.set(1, 1.2, 1); g.add(b); const s = new T.Mesh(new T.CylinderGeometry(.02, .02, .4, 4), pm(me, 0x4a3a2a)); s.position.y = .45; g.add(s); r = .5; }
+    else if (k === "ants") { const c = new T.Mesh(new T.ConeGeometry(.75, .55, 9), pm(me, 0x7a5a3a, { flatShading: true })); c.position.y = .27; g.add(c); r = .8; }
+    else if (k === "termite") { for (let q = 0; q < 3; q++) { const c = new T.Mesh(new T.ConeGeometry(.45 - q * .1, 2.2 - q * .5, 7), pm(me, 0xa8603a, { flatShading: true })); c.position.set(q * .25 - .25, 1.1 - q * .25, q * .15); g.add(c); } r = .9; }
+    else if (k === "puff") { const c = new T.Mesh(new T.SphereGeometry(.3, 10, 8), pm(me, 0xf2efe0)); c.scale.y = .75; c.position.y = .2; g.add(c); r = .45; }
+    else if (k === "gas") { const c = new T.Mesh(new T.SphereGeometry(.45, 12, 9), pm(me, 0x90c0a0, { transparent: true, opacity: .45 })); c.position.y = .2; g.add(c); r = .6; }
+    else { const m = new T.MeshLambertMaterial({ map: crateTex(me, extra[0], extra[1]) }), c = new T.Mesh(new T.BoxGeometry(.7, .55, .5), m); c.position.y = .28; g.add(c); r = .6; }
+    me.scene.add(g); return { k, g, r, hits: 0, tree: null };
+  };
+  const props = (me, dt) => {
+    const V = me.vox, T = me.T; if (!V || !me.scene) return;
+    if (me.propsHex !== me.hex) {   // lay them out once per hex, the same every visit; burst ones stay gone
+      me.propsHex = me.hex; for (const p of me.props || []) me.scene.remove(p.g); me.props = []; me.swarms = me.swarms || [];
+      const i = me.hex, b = me.bio || { t: "day", s: [] }, ctry = me.ctry || "", r = (s0 => () => { s0 = (s0 + 0x6D2B79F5) | 0; let t = Math.imul(s0 ^ (s0 >>> 15), 1 | s0); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; })(i * 7919 + 17), mood = b.t, wet = b.w === "swamp" || b.w === "river" || b.w === "lake", treed = (me.cut || []).filter(t => t.h > 4);
+      let gone = {}; try { gone = JSON.parse(localStorage.getItem("hexatlas-props-" + i) || "{}"); } catch (e) {}
+      const cold = mood === "polar", dry = mood === "haze" || mood === "dusk", d = DRINK.find(([re]) => re.test(ctry)) || [0, "BEER", 0xe0a020];
+      const plan = []; if (!cold && treed.length) { plan.push(["hive", dry ? 2 : 7, 1], ["wasp", 4, 1]); } if (!cold) plan.push(["ants", dry ? 7 : 5, 0]); if (dry || mood === "tropic" || b.s.some(([k]) => /termite/.test(k))) plan.push(["termite", 4, 0]);
+      if (!cold && !dry) plan.push(["puff", 6, 0]); if (wet || mood === "mist") plan.push(["gas", 5, 0]); plan.push(["crate", 5, 0]);
+      const sx = me.sx ?? me.pos.x, sz = me.sz ?? me.pos.z; let id = 0;
+      for (const [k, n, hang] of plan) for (let q = 0; q < n; q++, id++) {
+        const ro = r(), ra = r(), rd = r(); if (gone[id]) continue;
+        if (hang) { const t = treed[Math.floor(ro * treed.length)]; if (!t || t.down) continue; const a = ra * 6.28, x = t.x + Math.sin(a) * .55, z = t.z + Math.cos(a) * .55, p = makeProp(me, k, x, V.Hn(t.x, t.z) + t.h * (.4 + rd * .15), z); p.tree = t; p.id = id; me.props.push(p); continue; }
+        const a = ra * 6.28, dd = 6 + rd * 70, x = sx + Math.sin(a) * dd, z = sz + Math.cos(a) * dd, y = V.H(x, z); if (k !== "gas" && y < .1) continue;
+        const p = makeProp(me, k, x, Math.max(y, k === "gas" ? 0 : y), z, k === "crate" ? [d[1], d[2]] : null); p.id = id; me.props.push(p); }
+    }
+    const P = me.props; if (!P) return;
+    // hits: arrows (1 each) and the thrown blade (bursts at once)
+    for (const A of me.arrows || []) { if (A.pz || A.t > 3) continue; const ap = A.o.position; for (const p of P) { if (p.dead) continue; const c = p.g.position; if (Math.abs(ap.y - c.y - p.r * .4) < p.r + .4 && Math.hypot(ap.x - c.x, ap.z - c.z) < p.r + .25) { A.pz = 1; A.stuck = 1; A.stickT = A.t; A.v.set(0, 0, 0); hitProp(me, p, 1); break; } } }
+    const q = me.proj; if (q && !q.ret && q.pz !== 1) for (const p of P) { if (p.dead) continue; const c = p.g.position; if (q.p.distanceTo(c.clone().setY(c.y + p.r * .4)) < p.r + .6) { q.pz = 1; hitProp(me, p, 9); break; } }
+    for (const p of P) { if (p.dead) continue;
+      if (p.tree && p.tree.down && !p.fall) p.fall = { v: 0 };   // its tree came down: it drops and bursts on the ground
+      if (p.fall) { p.fall.v -= 18 * dt; p.g.position.y += p.fall.v * dt; const gy = V.H(p.g.position.x, p.g.position.z); if (p.g.position.y <= gy) { p.g.position.y = gy; burst(me, p); } }
+      if (p.shake > 0) { p.shake -= dt; p.g.rotation.z = Math.sin(me.tnow * 60) * p.shake * .5; }
+      if (p.k === "gas") p.g.children[0].scale.setScalar(1 + Math.sin(me.tnow * 2 + p.id) * .08);
+      if (p.fuse != null && (p.fuse -= dt) <= 0) burst(me, p); }
+    for (let n = P.length - 1; n >= 0; n--) if (P[n].dead) P.splice(n, 1);
+    swarmTick(me, dt);
+  };
+  const hitProp = (me, p, n) => { p.hits += n; p.shake = .5; me.tone && me.tone(p.k === "crate" ? 220 : 160, .05); chips(me, p.g.position.clone().setY(p.g.position.y + p.r * .5), KINDS[p.k][2], 4);
+    const need = KINDS[p.k][0]; if (p.hits >= need) burst(me, p); else me.say && me.say(`${p.hits}/${need}`, 450); };
+  const burst = (me, p) => {
+    if (p.dead) return; p.dead = 1; me.scene.remove(p.g); const T = me.T, c = p.g.position.clone(), [, sw, col] = KINDS[p.k];
+    try { const k = "hexatlas-props-" + me.hex, o = JSON.parse(localStorage.getItem(k) || "{}"); o[p.id] = 1; localStorage.setItem(k, JSON.stringify(o)); } catch (e) {}
+    const big = sw === 0 ? (p.k === "crate" ? 1 : 1.3) : .5;
+    const ball = new T.Mesh(new T.SphereGeometry(.6, 14, 10), new T.MeshBasicMaterial({ color: sw === 3 ? 0xc8e080 : sw ? col : 0xffb040, transparent: true, opacity: .85, depthWrite: false, fog: false })); ball.position.copy(c).y += .4; me.scene.add(ball); me.fx.push({ o: ball, t: 0, d: sw === 3 ? 1.6 : .45, s: sw === 3 ? 9 : 12 * big, a: .85 });
+    me.shake = Math.max(me.shake || 0, sw === 0 ? .6 : .25); me.tone && (me.tone(sw === 0 ? 55 : 300, .3), me.tone(sw === 0 ? 110 : 600, .15));
+    chips(me, c.clone().setY(c.y + .3), p.k === "crate" ? 0x8a5a2a : col, 16);
+    if (sw === 0) {   // plain blast: hurts and hurls everything near, digs a crater, sets off its neighbours
+      const R = 6 * big; for (const m of me.mobs || []) { if (m.dead) continue; const d = m.root.position.distanceTo(c); if (d < R) { me.hurtMob(m, 90 * (1 - d / R) + 15, c, true); if (!m.dead) { m.stun = Math.max(m.stun || 0, 1.2); const dx = m.root.position.x - c.x, dz = m.root.position.z - c.z, dl = Math.hypot(dx, dz) || 1; m.root.position.x += dx / dl * (R - d) * .5; m.root.position.z += dz / dl * (R - d) * .5; } } }
+      const dm = me.pos.distanceTo(c); if (dm < R * .7) hurtMe(me, 40 * (1 - dm / (R * .7)), p.k === "crate" ? "crate of " + "drink" : "gas blast");
+      const V = me.vox; smash(me, [V.ci(c.x), V.cyi(c.y), V.ci(c.z)], 3.2 * big, 9, "blast", 0);
+      if (me.pw) for (const e of me.pw.bodies) { if (!e.b || e.rag) continue; const bp = e.b.position, dx = bp.x - c.x, dy = bp.y - c.y, dz = bp.z - c.z, d = Math.hypot(dx, dy, dz); if (d < R && d > .01) { const f = (R - d) * 2.5 / d; e.b.velocity.x += dx * f; e.b.velocity.y += Math.abs(dy) * f + 4; e.b.velocity.z += dz * f; e.b.wakeUp && e.b.wakeUp(); } }
+      if (p.k === "crate") for (let j = 0; j < 1 + (Math.random() < .5); j++) dropItem(me, mkItem(Math.floor(Math.random() * ITEMS.length), roll(10)), c.clone());
+      for (const o of me.props || []) if (!o.dead && o.fuse == null && o.g.position.distanceTo(c) < R) o.fuse = .15 + o.g.position.distanceTo(c) * .05;   // chain reaction
+      return; }
+    // swarms: a cloud that hunts the nearest animal for 12 s (spores linger in place and choke)
+    const n = sw === 3 ? 60 : 46, im = new T.InstancedMesh(sw === 3 ? new T.SphereGeometry(.09, 5, 4) : new T.BoxGeometry(.07, .05, .1), new T.MeshBasicMaterial({ color: sw === 3 ? 0xd8e8a0 : p.k === "hive" ? 0xf2c030 : p.k === "wasp" ? 0x2a2a20 : p.k === "termite" ? 0xd08a50 : 0x1a1008, transparent: sw === 3, opacity: .6 }), n);
+    im.frustumCulled = false; me.scene.add(im);
+    const pts = []; for (let q = 0; q < n; q++) { const a = Math.random() * 6.28, rr = Math.random() * 1.5; pts.push([Math.cos(a) * rr, sw === 2 ? 0 : Math.random() * 1.5, Math.sin(a) * rr, Math.random() * 6.28]); }
+    me.swarms.push({ k: p.k, sw, im, pts, c: c.clone(), t: 0, d: sw === 3 ? 8 : 12, tgt: null, buzz: 0 });
+    if (p.k === "hive" && p.id >= 0) dropItem(me, mkItem(IX("Honeycomb")), c.clone());
+    me.say && me.say(p.k === "hive" ? "BEES!" : p.k === "wasp" ? "WASPS!" : p.k === "puff" ? "SPORES!" : "ANTS!", 700);
+  };
+  const M4 = new Map();
+  const swarmTick = (me, dt) => {
+    const S = me.swarms; if (!S || !S.length) return; const T = me.T, m4 = M4.get(me) || (M4.set(me, new T.Matrix4()), M4.get(me)), V = me.vox;
+    for (let n = S.length - 1; n >= 0; n--) { const s = S[n]; s.t += dt;
+      if (s.sw !== 3) { if (!s.tgt || s.tgt.dead || s.t % 1 < dt) { let best = 25; s.tgt = null; for (const m of me.mobs || []) { if (m.dead) continue; const d = m.root.position.distanceTo(s.c); if (d < best) { best = d; s.tgt = m; } } }
+        if (s.tgt) { const to = s.tgt.root.position.clone().sub(s.c); to.y += s.sw === 1 ? 1 : 0; const L = to.length(); if (L > .2) s.c.addScaledVector(to, Math.min(1, (s.sw === 1 ? 6 : 3.2) * dt / L)); } }
+      if (s.sw === 2) s.c.y = V.H(s.c.x, s.c.z); else if (s.sw === 1) s.c.y = Math.max(s.c.y, V.H(s.c.x, s.c.z) + .5);
+      if ((s.buzz -= dt) <= 0) { s.buzz = .25; for (const m of me.mobs || []) if (!m.dead && m.root.position.distanceTo(s.c) < (s.sw === 3 ? 3.5 : 2.2)) { me.hurtMob(m, s.sw === 3 ? 4 : 3, s.c, false); m.stun = Math.max(m.stun || 0, .3); }
+        if (s.sw === 1 && s.t < 1) me.tone && me.tone(s.k === "hive" ? 230 : 180, .03); }
+      const fade = s.t > s.d - 1.5 ? (s.d - s.t) / 1.5 : 1;
+      s.pts.forEach((q, j) => { q[3] += dt * (s.sw === 1 ? 9 : 4); const sp = s.sw === 3 ? 1 + s.t * .35 : 1;
+        const x = s.c.x + q[0] * sp + Math.sin(q[3] + j) * .35, y = s.sw === 2 ? s.c.y + .04 : s.c.y + q[1] * sp + Math.cos(q[3] * 1.3 + j) * .3, z = s.c.z + q[2] * sp + Math.cos(q[3] + j * 2) * .35;
+        m4.makeRotationY(q[3]).setPosition(x, s.sw === 2 ? V.H(x, z) + .03 : y, z); if (fade < 1) m4.scale(new T.Vector3(fade, fade, fade)); s.im.setMatrixAt(j, m4); });
+      s.im.instanceMatrix.needsUpdate = true;
+      if (s.t >= s.d) { me.scene.remove(s.im); s.im.geometry.dispose(); S.splice(n, 1); } }
+  };
+  // ---- owner 11-07: 200 items, rarity 1-100 (apart from the material), and a body you carry them on ----
+  //      naked: no bag; 1 butt slot, 2 per hand (held items show in game), 2 per arm (weight there counts x4 against speed and dexterity)
+  const MATW = [["Wood", 1, .5, 0x9a6a3a], ["Bone", 2, .7, 0xe8e0c8], ["Stone", 3, 1.6, 0x8a8a88], ["Copper", 4, 1.1, 0xd07a40], ["Bronze", 5, 1.15, 0xc08a3a], ["Iron", 6, 1.2, 0x9aa0a8], ["Steel", 7, 1.1, 0xc8d0d8], ["Silver", 8, 1.3, 0xeef2f6], ["Gold", 9, 1.9, 0xf0c040], ["Obsidian", 10, .9, 0x3a2848], ["Mythril", 11, .4, 0x8fe8ff]];
+  const MATA = [["Cloth", 1, .3, 0xd8cfb8], ["Leather", 2, .6, 0x8a5a30], ["Bone", 3, .8, 0xe8e0c8], ["Copper", 4, 1.1, 0xd07a40], ["Bronze", 5, 1.15, 0xc08a3a], ["Iron", 6, 1.2, 0x9aa0a8], ["Steel", 7, 1.1, 0xc8d0d8], ["Silver", 8, 1.3, 0xeef2f6], ["Gold", 9, 1.9, 0xf0c040], ["Mythril", 10, .4, 0x8fe8ff]];
+  const WK = [["Stick", "stick", .8, .5, .8, "🪵"], ["Club", "stick", 1.25, .75, 2, "🪵"], ["Dagger", "sword", .6, .7, .8, "🗡️"], ["Sword", "sword", 1, 1, 2, "🗡️"], ["Longsword", "sword", 1.2, 1.25, 3, "⚔️"], ["Axe", "axe", 1, 1.05, 2.4, "🪓"],
+    ["Battle axe", "axe", 1.25, 1.35, 4, "🪓"], ["Hammer", "hammer", 1, 1.1, 3, "🔨"], ["Maul", "hammer", 1.3, 1.45, 5.5, "🔨"], ["Spear", "spear", 1, 1, 2, "🔱"], ["Pike", "spear", 1.25, 1.2, 3.2, "🔱"], ["Bow", "bow", 1, 1, 1.2, "🏹"]];
+  const AK = [["Helmet", "head", .7, 1.5, "⛑️"], ["Chestplate", "chest", 1.4, 5, "🥋"], ["Greaves", "legs", 1, 3.5, "👖"], ["Boots", "feet", .5, 1.5, "🥾"], ["Gauntlets", "hands", .5, 1.2, "🧤"], ["Shield", "shield", .9, 3, "🛡️"]];
+  const MISC = [["Pouch", "belt", .2, { bag: 2 }, "👝"], ["Belt", "belt", .4, { bag: 3 }, "🎗️"], ["Backpack", "back", 1, { bag: 6 }, "🎒"], ["Apple", "food", .2, { heal: 15 }, "🍎"], ["Honeycomb", "food", .3, { heal: 30 }, "🍯"], ["Healing potion", "food", .3, { heal: 60 }, "🧪"], ["Bomb", "throw", 1, { blast: 1 }, "💣"], ["Jar of bees", "throw", .6, { bees: 1 }, "🐝"]];
+  const ITEMS = [];
+  for (const [n, mesh, sc, dmg, w, ic] of WK) for (const [mn, tier, den, col] of MATW) ITEMS.push({ name: mn + " " + n.toLowerCase(), base: n, kind: mesh === "bow" ? "bow" : "weapon", mesh, sc, dmg: dmg * (.55 + tier * .13), w: +(w * den).toFixed(1), col, tier, ic, mat: mn });
+  for (const [n, slot, def, w, ic] of AK) for (const [mn, tier, den, col] of MATA) ITEMS.push({ name: mn + " " + n.toLowerCase(), base: n, kind: "armor", slot, def: def * tier * .03, w: +(w * den).toFixed(1), col, tier, ic, mat: mn });
+  for (const [n, slot, w, fx, ic] of MISC) ITEMS.push({ name: n, base: n, kind: slot === "food" ? "food" : slot === "throw" ? "throw" : "bag", slot: slot === "belt" || slot === "back" ? slot : null, w, ...fx, col: 0xd8c8a0, tier: 1, ic, mat: "" });
+  const IX = n => ITEMS.findIndex(t => t.name === n);
+  const RAR = [[100, "Mythic", "#ff3b5c"], [94, "Legendary", "#ffa020"], [83, "Epic", "#c070ff"], [66, "Rare", "#4aa8ff"], [41, "Uncommon", "#b6ff3a"], [1, "Common", "#c8c8c8"]];
+  const rarOf = r => RAR.find(x => r >= x[0]), rMul = r => 1 + (r - 1) / 99 * .9, roll = (boost = 0) => Math.min(100, 1 + Math.floor(99 * Math.random() ** 2.2) + boost);
+  const mkItem = (t, r) => ({ t, r: r ?? roll() });
+  const HAND = ["hr1", "hr2", "hl1", "hl2"], ARM = ["ar1", "ar2", "al1", "al2"], WEAR = ["head", "chest", "legs", "feet", "hands", "belt", "back"];
+  const SLOTN = { head: "Head", chest: "Chest", legs: "Legs", feet: "Feet", hands: "Hands", belt: "Belt", back: "Back", hr1: "R hand", hr2: "R hand", hl1: "L hand", hl2: "L hand", ar1: "R arm", ar2: "R arm", al1: "L arm", al2: "L arm", butt: "Butt" };
+  const bagCap = I => WEAR.reduce((a, k) => a + ((I.s[k] && ITEMS[I.s[k].t].bag) || 0), 0);
+  const fits = (it, k) => { const d = ITEMS[it.t]; if (WEAR.includes(k)) return d.slot === k || (d.kind === "armor" && d.slot === k); return true; };
+  const invSave = me => { try { localStorage.setItem("hexatlas-inv2", JSON.stringify(me.I)); } catch (e) {} };
+  const kit = () => ({ s: { hr1: mkItem(IX("Steel sword"), 20), hl1: mkItem(IX("Iron shield"), 12), head: mkItem(IX("Iron helmet"), 10), chest: mkItem(IX("Iron chestplate"), 10), legs: mkItem(IX("Iron greaves"), 10), feet: mkItem(IX("Leather boots"), 8), hands: mkItem(IX("Iron gauntlets"), 10), back: mkItem(IX("Backpack"), 5) }, b: [mkItem(IX("Wood bow"), 15), mkItem(IX("Apple"), 1)] });
+  const invLoad = me => { if (me.I) return; let I = null; try { I = JSON.parse(localStorage.getItem("hexatlas-inv2") || "null"); } catch (e) {} me.I = I && I.s ? I : kit(); };
+  const allSlots = I => [...WEAR, ...HAND, ...ARM, "butt"];
+  // what you carry -> what you are: weapon in the right hand, shield or bow in hand, armour pieces, weight
+  const skin = new Map();
+  const applyInv = me => {
+    const I = me.I, T = me.T, h = me.hero; if (!I || !h) return; const cap = bagCap(I);
+    while (I.b.length > cap) { const it = I.b.pop(); if (it) dropItem(me, it); }
+    while (I.b.length < cap) I.b.push(null);
+    const R = I.s.hr1 || I.s.hr2, rd = R && ITEMS[R.t]; let w = 0, def = 0;
+    for (const k of allSlots(I)) { const it = I.s[k]; if (!it) continue; const d = ITEMS[it.t]; w += d.w * (ARM.includes(k) ? 4 : 1); if (WEAR.includes(k) && d.kind === "armor") def += d.def * rMul(it.r); }
+    for (const it of I.b) if (it) w += ITEMS[it.t].w;
+    const sh = HAND.map(k => I.s[k]).find(it => it && ITEMS[it.t].slot === "shield"); if (sh) def += ITEMS[sh.t].def * rMul(sh.r) * .5;
+    me.carryW = w; const aw = ARM.reduce((a, k) => a + (I.s[k] ? ITEMS[I.s[k].t].w : 0), 0); me.carry = Math.max(.3, Math.min(1, 1 - Math.max(0, w - aw * 4 - 15) / 60 - aw * 4 / 50)); me.armK = 1 + def; me.hasShield = !!sh;
+    const bow = [...HAND, ...ARM].map(k => I.s[k]).concat(I.b).find(it => it && ITEMS[it.t].kind === "bow"); me.hasBow = !!bow; me.bowMul = bow ? ITEMS[bow.t].dmg * rMul(bow.r) : 1;
+    if (rd && rd.kind === "weapon") { me.fist = false; me.wMul = rd.dmg * rMul(R.r); if (me.melee !== rd.mesh || me.wItem !== R) { me.wItem = R; me.setMelee && me.setMelee(rd.mesh); } const ww = h.sword.userData.w; ww.scale.setScalar(rd.sc); tint(me, ww, rd.col); }
+    else { me.fist = true; me.wMul = .3; me.wItem = null; }
+    if (me.weapon === "bow" && !me.hasBow) me.setWeapon && me.setWeapon("sword");
+    // armour pieces show, bare skin where there is none
+    const has = k => !!(I.s[k] && ITEMS[I.s[k].t].kind === "armor");
+    h.root.traverse(o => { const p = o.userData && o.userData.part; if (!p) return; o.visible = p === "chest" ? has("chest") : p === "helm" ? has("head") : p === "legs" ? has("legs") : p === "arms" ? has("hands") || has("chest") : o.visible; if (o.userData.tint !== undefined) {} });
+    for (const [p, k] of [["chest", "chest"], ["helm", "head"], ["legs", "legs"], ["arms", "hands"]]) { const it = I.s[k]; if (it) h.root.traverse(o => { if (o.userData && o.userData.part === p) tint(me, o, ITEMS[it.t].col); }); }
+    bare(me); for (const [o, k] of me.bareP) o.visible = k === "body" ? !has("chest") : k === "head" ? !has("head") : k === "leg" ? !has("legs") : !(has("hands") || has("chest"));
+    held(me); invSave(me); if (me.invEl && !me.invEl.hidden) drawInv(me);
+  };
+  const tint = (me, o, col) => { o.traverse(m => { if (!m.isMesh || !m.material || !m.material.color) return; const c = new me.T.Color(0xffffff).lerp(new me.T.Color(col), .55); if (m.material.color.getHex() !== c.getHex()) { m.material = m.material.clone(); m.material.color.copy(c); } }); };
+  const bare = me => {   // the naked man: skin capsules over the stick figure's joints
+    if (me.bareP) return; const T = me.T, h = me.hero, M = new T.MeshLambertMaterial({ color: 0xf0d0b4 }), L = [];
+    const limb = (par, a, b, r, k) => { const d = b.clone().sub(a), o = new T.Mesh(new T.CapsuleGeometry(r, Math.max(.01, d.length() - r * 2), 4, 8), M); o.position.copy(a).addScaledVector(d, .5); o.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), d.normalize()); par.add(o); L.push([o, k]); };
+    const V = (x, y, z) => new T.Vector3(x, y, z);
+    limb(h.root, V(0, .72, 0), V(0, 1.38, 0), .19, "body"); { const hd = new T.Mesh(new T.SphereGeometry(.16, 12, 9), M); hd.position.set(0, 1.62, .02); h.root.add(hd); L.push([hd, "head"]); }
+    for (const lg of h.legs) limb(lg, V(0, 0, 0), V(0, -.58, 0), .085, "leg");
+    limb(h.armL, V(0, 0, 0), V(.08, -.5, 0), .065, "arm"); limb(h.armR, V(0, 0, 0), V(0, -.05, .45), .065, "arm");
+    me.bareP = L;
+  };
+  const icMesh = (me, d) => {   // a small model of a carried item
+    const T = me.T, g = new T.Group(), c = new T.Color(d.col);
+    if (d.kind === "weapon" || d.kind === "bow") { const L = d.kind === "bow" ? .8 : .9 * d.sc; const m = new T.Mesh(new T.BoxGeometry(.05, .05, L).translate(0, 0, L / 2), new T.MeshLambertMaterial({ color: c })); g.add(m); if (d.mesh === "axe" || d.mesh === "hammer") { const hd = new T.Mesh(new T.BoxGeometry(.22, .14, .1), new T.MeshLambertMaterial({ color: c })); hd.position.z = L * .9; g.add(hd); } if (d.kind === "bow") m.material.color.setHex(0x8a5a30); }
+    else if (d.kind === "armor") g.add(new T.Mesh(d.slot === "shield" ? new T.CylinderGeometry(.28, .28, .05, 10).rotateX(Math.PI / 2) : new T.BoxGeometry(.25, .22, .12), new T.MeshLambertMaterial({ color: c })));
+    else g.add(new T.Mesh(new T.SphereGeometry(.1, 8, 6), new T.MeshLambertMaterial({ color: d.name === "Apple" ? 0xd83030 : d.name === "Bomb" ? 0x222222 : d.name === "Honeycomb" ? 0xf0b030 : c })));
+    return g;
+  };
+  const AN = { hr2: ["armR", [.05, -.05, .3], [0, .6, 0]], hl1: ["armL", [.1, -.45, .2], [0, 0, 0]], hl2: ["armL", [.0, -.5, .25], [.3, 0, 0]], ar1: ["armR", [-.08, -.02, .18], [0, 0, 1.4]], ar2: ["armR", [.08, -.02, .18], [0, 0, -1.4]], al1: ["armL", [.06, -.22, .08], [0, 0, 1.4]], al2: ["armL", [.06, -.3, -.06], [0, 0, 1.4]], butt: ["root", [0, .82, -.2], [-2.4, 0, 0]] };
+  const held = me => {   // everything in hands, on arms and in the butt shows on the body (the right hand's first item is the real weapon)
+    const h = me.hero, I = me.I; for (const o of me.heldO || []) o.parent && o.parent.remove(o); me.heldO = [];
+    for (const k in AN) { const it = I.s[k]; if (!it) continue; const d = ITEMS[it.t]; if (k === "hl1" && d.slot === "shield") continue; const [p, pos, rot] = AN[k], par = p === "root" ? h.root : h[p], o = icMesh(me, d); o.position.set(...pos); o.rotation.set(...rot); par.add(o); me.heldO.push(o); }
+    if (h.shield) { const sh = I.s.hl1 && ITEMS[I.s.hl1.t].slot === "shield" ? I.s.hl1 : null; h.shield.userData.on = !!sh; if (sh) tint(me, h.shield, ITEMS[sh.t].col); }
+  };
+  // ground loot
+  const emo = new Map(), emoTex = (me, ic, col) => { const k = ic + col; if (emo.has(k)) return emo.get(k); const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d"); x.beginPath(); x.arc(32, 32, 29, 0, 6.29); x.fillStyle = "rgba(10,12,18,.65)"; x.fill(); x.lineWidth = 5; x.strokeStyle = col; x.stroke(); x.font = "34px serif"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(ic, 32, 35); const t = new me.T.CanvasTexture(c); emo.set(k, t); return t; };
+  const dropItem = (me, it, at, keep) => { const T = me.T, d = ITEMS[it.t], p = at ? at.clone() : me.pos.clone().add(new T.Vector3((Math.random() - .5) * 1.2, 0, (Math.random() - .5) * 1.2)); p.y = me.vox ? me.vox.G(p.x, p.z, p.y + 1) : p.y;
+    const s = new T.Sprite(new T.SpriteMaterial({ map: emoTex(me, d.ic, rarOf(it.r)[2]), depthWrite: false })); s.scale.setScalar(.55); s.position.copy(p).y += .45; me.scene.add(s); (me.loot = me.loot || []).push({ it, s, p, keep, t0: me.tnow }); };
+  const worldLoot = me => {   // a few things lying around every land, the same each visit until picked up
+    const i = me.hex, r = (s0 => () => { s0 = (s0 + 0x6D2B79F5) | 0; let t = Math.imul(s0 ^ (s0 >>> 15), 1 | s0); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; })(i * 104729 + 3);
+    let got = {}; try { got = JSON.parse(localStorage.getItem("hexatlas-loot-" + i) || "{}"); } catch (e) {}
+    const sx = me.sx ?? me.pos.x, sz = me.sz ?? me.pos.z;
+    for (let q = 0; q < 10; q++) { const t = Math.floor(r() * ITEMS.length), rr = Math.min(100, 1 + Math.floor(99 * r() ** 2.2)), a = r() * 6.28, d = 4 + r() * 60; if (got[q]) continue; const x = sx + Math.sin(a) * d, z = sz + Math.cos(a) * d; if (me.vox.H(x, z) < .05) continue; dropItem(me, { t, r: rr }, new me.T.Vector3(x, 0, z), q); }
+  };
+  const store = (me, it) => {   // where a picked-up item goes: its own place first, then the bag, then hands, butt, arms
+    const I = me.I, d = ITEMS[it.t];
+    if (d.kind === "weapon" && !I.s.hr1) return I.s.hr1 = it, "hr1";
+    if (d.slot && WEAR.includes(d.slot) && !I.s[d.slot]) return I.s[d.slot] = it, d.slot;
+    if (d.slot === "shield" && !I.s.hl1) return I.s.hl1 = it, "hl1";
+    const b = I.b.indexOf(null); if (b >= 0) return I.b[b] = it, "bag";
+    for (const k of [...HAND, "butt", ...ARM]) if (!I.s[k]) return I.s[k] = it, k;
+    return null;
+  };
+  const pickUp = me => {
+    let best = null, bd = 2.4; for (const L of me.loot || []) { const d = Math.hypot(L.p.x - me.pos.x, L.p.z - me.pos.z); if (d < bd && Math.abs(L.p.y - me.pos.y) < 2) { bd = d; best = L; } }
+    if (!best) return false; const k = store(me, best.it), d = ITEMS[best.it.t], rr = rarOf(best.it.r);
+    if (!k) { me.say && me.say("No room - Tab to make some", 1000); return true; }
+    me.scene.remove(best.s); me.loot.splice(me.loot.indexOf(best), 1); if (best.keep != null) try { const kk = "hexatlas-loot-" + me.hex, o = JSON.parse(localStorage.getItem(kk) || "{}"); o[best.keep] = 1; localStorage.setItem(kk, JSON.stringify(o)); } catch (e) {}
+    me.say && me.say(`${d.ic} ${d.name} · ${rr[1]} ${best.it.r} → ${SLOTN[k] || "Bag"}${ARM.includes(k) ? " (heavy x4)" : ""}`, 1300); me.tone && me.tone(880, .04); applyInv(me); return true;
+  };
+  // inventory screen (Tab): click an item, then click where it goes; right-click uses or wears it; Drop throws it on the ground
+  const stat = (d, it) => d.kind === "weapon" ? `Damage ${(d.dmg * rMul(it.r) * 12).toFixed(0)}` : d.kind === "bow" ? `Arrow damage ${(d.dmg * rMul(it.r) * 34).toFixed(0)}` : d.kind === "armor" ? `Armour +${(d.def * rMul(it.r) * 100).toFixed(0)}%` : d.bag ? `+${d.bag} bag slots` : d.heal ? `Heals ${d.heal}` : d.blast ? "Throw (right-click): blast" : d.bees ? "Throw (right-click): bees" : "";
+  const drawInv = me => {
+    const I = me.I, el = me.invEl, sel = me.invSel;
+    const cell = (k, it, lab) => { const d = it && ITEMS[it.t], rr = it && rarOf(it.r); return `<div class="c${sel === k ? " s" : ""}${ARM.includes(k) ? " a" : ""}" data-k="${k}" title="${it ? `${d.name}\n${rr[1]} · rarity ${it.r}/100${d.mat ? "\nMaterial: " + d.mat : ""}\n${stat(d, it)}\nWeight ${d.w}${ARM.includes(k) ? " (x4 on the arm)" : ""}` : lab}">${it ? `<i>${d.ic}</i><b style="color:${rr[2]}">${it.r}</b>` : `<u>${lab}</u>`}</div>`; };
+    const row = (ks) => ks.map(k => cell(k, I.s[k], SLOTN[k])).join("");
+    el.innerHTML = `<div class="w"><h3>Body</h3><div class="g">${row(WEAR)}</div><h3>Hands <small>(held = in game)</small></h3><div class="g">${row(HAND)}</div><h3>Arms <small>(slow: weight x4)</small></h3><div class="g">${row(ARM)}</div><h3>Butt</h3><div class="g">${row(["butt"])}</div>
+      <h3>Bag <small>${I.b.length ? I.b.length + " slots" : "none - wear a pouch, belt or backpack"}</small></h3><div class="g">${I.b.map((it, j) => cell("b" + j, it, "·")).join("")}</div>
+      <p>Weight ${me.carryW.toFixed(1)} · speed ${(me.carry * 100).toFixed(0)}% · armour ${((me.armK - 1) * 100).toFixed(0)}% · ${me.fist ? "fists" : ITEMS[me.wItem.t].name}</p>
+      <p class="h">Click an item, then a slot · right-click = use / wear / throw · <button data-a="drop">Drop selected</button> · <kbd>Tab</kbd> close · <kbd>E</kbd> pick up / drag</p></div>`;
+  };
+  const getK = (I, k) => k[0] === "b" && k !== "butt" && k !== "back" && k !== "belt" ? I.b[+k.slice(1)] : I.s[k];
+  const setK = (I, k, v) => { if (k[0] === "b" && k !== "butt" && k !== "back" && k !== "belt") I.b[+k.slice(1)] = v; else I.s[k] = v; };
+  const useItem = (me, k) => { const I = me.I, it = getK(I, k); if (!it) return; const d = ITEMS[it.t];
+    if (d.kind === "food") { me.hp = Math.min(100, me.hp + d.heal * rMul(it.r)); me.hpDraw && me.hpDraw(); setK(I, k, null); me.say && me.say(`${d.ic} +${Math.round(d.heal * rMul(it.r))} HP`, 800); }
+    else if (d.kind === "throw") { setK(I, k, null); lobThing(me, d); }
+    else { const tgt = d.kind === "armor" && d.slot !== "shield" ? d.slot : d.slot === "shield" ? "hl1" : d.slot || "hr1"; if (tgt !== k) { const o = getK(I, tgt); setK(I, tgt, it); setK(I, k, o && fits(o, k) ? o : null); if (o && !fits(o, k)) store(me, o) || dropItem(me, o); } }
+    applyInv(me); };
+  const lobThing = (me, d) => {   // a bomb or a jar of bees: thrown at the crosshair, bursts where it lands
+    const X = me.xhit ? me.xhit() : me.pos.clone(), T = me.T, o = new T.Mesh(new T.SphereGeometry(.14, 8, 6), new T.MeshLambertMaterial({ color: d.blast ? 0x222222 : 0xf0c030 })), p0 = me.pos.clone(); p0.y += 1.6; o.position.copy(p0); me.scene.add(o);
+    (me.lobs = me.lobs || []).push({ o, p0, X, t: 0, dur: Math.max(.4, Math.min(1.4, X.distanceTo(p0) / 18)), d }); me.tone && me.tone(500, .04); };
+  const invUI = me => {
+    if (me.invEl) return; const st = document.createElement("style"); st.textContent = `#hxInv{position:absolute;inset:0;z-index:60;display:grid;place-items:center;background:rgba(6,8,12,.55);font:13px system-ui,sans-serif;color:#eee}#hxInv[hidden]{display:none}
+#hxInv .w{background:rgba(18,22,30,.95);border:1px solid #3a4250;border-radius:12px;padding:12px 16px;max-width:620px;max-height:90vh;overflow:auto}#hxInv h3{margin:8px 0 4px;font-size:13px;color:#8fdcff}#hxInv h3 small{color:#889;font-weight:400}
+#hxInv .g{display:flex;flex-wrap:wrap;gap:5px}#hxInv .c{width:54px;height:54px;border-radius:8px;background:#232a36;border:2px solid #333c4a;display:grid;place-items:center;position:relative;cursor:pointer;user-select:none}
+#hxInv .c.a{border-style:dashed}#hxInv .c.s{border-color:#b6ff3a;box-shadow:0 0 8px #b6ff3a}#hxInv .c i{font-style:normal;font-size:26px}#hxInv .c b{position:absolute;right:3px;bottom:1px;font-size:11px}#hxInv .c u{text-decoration:none;font-size:10px;color:#667;text-align:center}
+#hxInv p{margin:8px 0 0;color:#aab}#hxInv .h{font-size:11px;color:#778}#hxInv button{font:12px system-ui;padding:2px 8px;border-radius:6px;border:0;background:#3a4250;color:#eee;cursor:pointer}#hxInv kbd{background:#2a3240;border-radius:4px;padding:0 4px}`;
+    document.head.appendChild(st); const el = document.createElement("div"); el.id = "hxInv"; el.hidden = true; (document.getElementById("sv") || document.body).appendChild(el); me.invEl = el;
+    el.addEventListener("mousedown", e => e.stopPropagation()); el.addEventListener("mouseup", e => e.stopPropagation());
+    el.addEventListener("click", e => { e.stopPropagation(); const I = me.I; if (e.target.closest("[data-a=drop]")) { if (me.invSel) { const it = getK(I, me.invSel); if (it) { setK(I, me.invSel, null); dropItem(me, it); } me.invSel = null; applyInv(me); } return; }
+      const c = e.target.closest(".c"); if (!c) { me.invSel = null; drawInv(me); return; } const k = c.dataset.k;
+      if (!me.invSel) { if (getK(I, k)) me.invSel = k; drawInv(me); return; }
+      const a = me.invSel, A = getK(I, a), B = getK(I, k); me.invSel = null; if (a === k || !A) { drawInv(me); return; }
+      if (!fits(A, k) || (B && !fits(B, a))) { me.say && me.say("Does not go there", 700); drawInv(me); return; }
+      setK(I, k, A); setK(I, a, B); applyInv(me); });
+    el.addEventListener("contextmenu", e => { e.preventDefault(); e.stopPropagation(); const c = e.target.closest(".c"); if (c) { me.invSel = null; useItem(me, c.dataset.k); } });
+  };
+  const toggleInv = me => { invUI(me); const el = me.invEl; el.hidden = !el.hidden; if (!el.hidden) { document.exitPointerLock && document.exitPointerLock(); drawInv(me); } };
+  // drag (E): grab a loose thing - a felled log, a broken cell, a body - with both hands; what you held goes to the bag or falls
+  const dragTry = me => {
+    const P = me.pw; if (!P) return false; const T = me.T, d = new T.Vector3(); me.cam.getWorldDirection(d); const o = me.cam.position; let best = null, bs = 1e9;
+    for (const e of P.bodies) { if (!e.b || e.b.mass <= 0) continue; const c = e.b.position, q = e.b.quaternion, ax = new T.Vector3(0, 1, 0).applyQuaternion(new T.Quaternion(q.x, q.y, q.z, q.w)), hl = e.idx >= 0 && me.cut[e.idx] ? me.cut[e.idx].h / 2 : 0;   // a log is a line: grab it anywhere along it
+      for (let u = -1; u <= 1.001; u += hl ? .125 : 2) { const tc = new T.Vector3(c.x, c.y, c.z).addScaledVector(ax, u * hl), t = tc.clone().sub(o).dot(d); if (t < 0) continue; const off = o.clone().addScaledVector(d, t).distanceTo(tc), dh = Math.hypot(tc.x - me.pos.x, tc.z - me.pos.z); if (off < (hl ? 1.2 : 1) && dh < 4 && dh + off < bs) { bs = dh + off; best = e; } } }
+    if (!best) return false; const I = me.I; for (const k of HAND) { const it = I.s[k]; if (!it) continue; I.s[k] = null; const b = I.b.indexOf(null); if (b >= 0) I.b[b] = it; else dropItem(me, it); }
+    me.drag = best; best.b.wakeUp && best.b.wakeUp(); applyInv(me); me.say && me.say("Dragging · E let go · LMB fling", 900); return true; };
+  const dragTick = (me, dt) => { const e = me.drag; if (!e) return; if (!me.pw || !me.pw.bodies.includes(e)) { me.drag = null; return; } me.atk = null; const T = me.T, d = new T.Vector3(); me.cam.getWorldDirection(d);
+    const tgt = me.pos.clone().addScaledVector(new T.Vector3(d.x, 0, d.z).normalize(), e.idx >= 0 ? 2.6 : 1.4); tgt.y = me.pos.y + 1 + d.y * 1.2; const b = e.b, k = Math.min(10, 10 / Math.sqrt(1 + b.mass / 200)), v = tgt.sub(new T.Vector3(b.position.x, b.position.y, b.position.z)).multiplyScalar(k);
+    if (v.length() > 14) v.setLength(14); b.velocity.set(v.x, v.y, v.z); b.angularVelocity.scale(.9, b.angularVelocity); b.wakeUp && b.wakeUp(); };
+  const fling = me => { const e = me.drag; if (!e) return false; const d = new me.T.Vector3(); me.cam.getWorldDirection(d); const f = 22 / Math.sqrt(1 + e.b.mass / 200); e.b.velocity.set(d.x * f, d.y * f + 3, d.z * f); me.drag = null; me.tone && me.tone(300, .06); return true; };
+  // felled logs are made of cells you can cut away, piece by piece
+  const logCut = (me, q, R) => { const P = me.pw, V = me.vox; if (!P) return 0; let n = 0;
+    for (const e of P.bodies) { if (e.idx < 0 || !e.o || !e.o.children[0] || !e.o.children[0].userData.cs) continue; const im = e.o.children[0], cs = im.userData.cs; if (e.o.position.distanceTo(q) > 40) continue;
+      const lq = e.o.worldToLocal(q.clone()), gone = im.userData.gone || (im.userData.gone = new Set()), M4 = new me.T.Matrix4(), Z = new me.T.Matrix4().makeScale(0, 0, 0), pv = new me.T.Vector3();
+      for (let j = 0; j < cs.length; j++) { if (gone.has(j)) continue; im.getMatrixAt(j, M4); pv.setFromMatrixPosition(M4); if (pv.distanceTo(lq) > R) continue; gone.add(j); im.setMatrixAt(j, Z); n++; if (n <= 4) chips(me, q, cs[j][3], 2); give(me, cs[j][4] || 6); }
+      if (!n) continue; im.instanceMatrix.needsUpdate = true; const o = V.t.get(e.idx); if (o) { o[7] = [...gone]; V.save(); }
+      if (gone.size > cs.length * .92) { P.w.removeBody(e.b); me.scene.remove(e.o); P.bodies.splice(P.bodies.indexOf(e), 1); if (o) { o[8] = 1; V.save(); } if (me.drag === e) me.drag = null; }
+      me.tone && me.tone(140, .05); break; }
+    return n; };
+  const logHit = (me, q) => { const P = me.pw; if (!P) return false; for (const e of P.bodies) { if (e.idx < 0 || !e.o || !e.o.children[0] || !e.o.children[0].userData.cs) continue; const im = e.o.children[0]; if (e.o.position.distanceTo(q) > 40) continue; const lq = e.o.worldToLocal(q.clone()), M4 = new me.T.Matrix4(), pv = new me.T.Vector3(), g = im.userData.gone, cs = im.userData.cs, S = me.vox.VS * .7;
+      for (let j = 0; j < cs.length; j++) { if (g && g.has(j)) continue; im.getMatrixAt(j, M4); pv.setFromMatrixPosition(M4); if (Math.abs(pv.x - lq.x) < S && Math.abs(pv.y - lq.y) < S && Math.abs(pv.z - lq.z) < S) return true; } } return false; };
+  const lobTick = (me, dt) => { const L = me.lobs; if (!L) return; for (let n = L.length - 1; n >= 0; n--) { const q = L[n]; q.t += dt; const u = Math.min(1, q.t / q.dur); q.o.position.lerpVectors(q.p0, q.X, u); q.o.position.y += Math.sin(u * Math.PI) * q.X.distanceTo(q.p0) * .25;
+      if (u >= 1) { me.scene.remove(q.o); L.splice(n, 1); const g = new me.T.Group(); g.position.copy(q.X); burst(me, { k: q.d.blast ? "gas" : "hive", g, r: .5, id: -1 }); } } };
+  const invTick = (me, dt) => {
+    invLoad(me); if (!me.invInit || me.invHex !== me.hex) { me.invHex = me.hex; for (const L of me.loot || []) me.scene.remove(L.s); me.loot = []; if (!me.invInit) { me.invInit = 1; applyInv(me); } else held(me); worldLoot(me); if (me.I.naked) { me.I.naked = 0; dropItem(me, mkItem(IX("Wood stick"), roll()), me.pos.clone().add(new me.T.Vector3(1.2, 0, .6))); dropItem(me, mkItem(IX("Apple"), 1), me.pos.clone().add(new me.T.Vector3(-1, 0, 1))); invSave(me); } }
+    if (me.fist) me.hero.sword.visible = false;
+    if (me.hero.shield) me.hero.shield.visible = me.hero.shield.visible && !!me.hero.shield.userData.on;
+    for (const L of me.loot || []) { L.s.position.y = L.p.y + .45 + Math.sin(me.tnow * 2.4 + L.p.x) * .06; }
+    dragTick(me, dt); lobTick(me, dt);
+  };
+  window.hxNaked = () => { const me = cur(); const I = { s: {}, b: [], naked: 1 }; try { localStorage.setItem("hexatlas-inv2", JSON.stringify(I)); } catch (e) {} if (me && me.hero) { for (const L of me.loot || []) me.scene.remove(L.s); me.I = I; me.invHex = null; applyInv(me); } };
+  window.hxDbg = { logHit, logCut, ITEMS, applyInv };   // for tests
+  const killLoot = (me, m) => { const ch = m.champ || m.boss; if (Math.random() < (ch ? 1 : .35)) dropItem(me, mkItem(Math.floor(Math.random() * ITEMS.length), roll(ch ? 25 : 0)), m.root.position.clone()); };
   window.hxKey = (code, me) => {
     if (!me || !me.pos || me.hp <= 0 && code !== "KeyG") return false;
+    if (code === "Tab") { toggleInv(me); return true; }   // owner 11-07: Tab = inventory (climbing is on Space at a wall)
+    if (code === "KeyE") { if (me.drag) { me.drag = null; return true; } return pickUp(me) || dragTry(me); }   // pick up, drag, else talk
+    if (code === "Space" && me.vox && !me.flying && me.climbTab) { const V = me.vox, f = me.face, ft = (me.by ?? me.pos.y) + (me.jy || 0); if (V.blocked(me.pos.x + Math.sin(f) * .45, me.pos.z + Math.cos(f) * .45, ft) && !V.blocked(me.pos.x, me.pos.z, ft + V.VS * 6)) { me.climbTab(); return true; } return false; }
     if (code === "KeyG") { chop(); return true; }
     if (code === "KeyB") { me.keys.KeyB = 1; mine(me); return true; }
     if (code === "KeyM") { cycle(me); return true; }
@@ -6997,7 +7265,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     lib().then(() => { if (cur() !== me) return; world(me); for (const [idx, pose] of keep) { const t = me.cut && me.cut[idx]; if (t) fell(me, t, pose); } }).catch(() => {});
     me.rage = 0; me.tele = (m, d, txt, c) => tele(me, m, d, txt, c); me.unrag = m => { const P = me.pw; if (!P) return; const e = P.bodies.find(u => u.rag === m); if (e) { P.w.removeBody(e.b); P.bodies.splice(P.bodies.indexOf(e), 1); } };
     me.onHit = (m, dmg, crit) => { me.rage = Math.min(100, (me.rage || 0) + (crit ? 8 : 4)); me.rageT = me.tnow; chips(me, m.root.position.clone().setY(m.root.position.y + .8), colOf(m), crit ? 7 : 3); };
-    me.onKill = (m, from, heavy) => {
+    me.onKill = (m, from, heavy) => { try { killLoot(me, m); } catch (e) {}
       me.rage = Math.min(100, (me.rage || 0) + 12); chips(me, m.root.position.clone().setY(m.root.position.y + .8), colOf(m), 14);
       const rk = rankOf(me); if (rk && me.gainXP) { const x = Math.round((m.a[6] * .6 + 5) * rk[2]); me.gainXP(x); setTimeout(() => me.say && me.say(`${rk[1]} rank kill · +${x} style XP`, 1100), 1300); }
       if (m.champ && me.dropCoins) me.dropCoins(m.root.position, 30);
@@ -7009,7 +7277,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     me.ps.push((dt, ts) => {
       if (cur() !== me) return;
       if (me.keys && me.keys.KeyB && me.tnow - (me.mineT ?? -9) > .24) mine(me);   // holding B keeps digging
-      if (me.vox) { me.xhit = () => xhit(me); try { bladeCut(me); throwCut(me); } catch (e) { console.warn(e); } }
+      if (me.vox) { me.xhit = () => xhit(me); try { if (!me.up.hx) { const u0 = me.up; me.up = k => u0(k) * (k === "spd" || k === "dex" ? (me.carry ?? 1) : k === "hp" ? (me.armK ?? 1) : 1); me.up.hx = 1; } invTick(me, dt); if (me.drag && me.lmb) { me.lmb = null; fling(me); } bladeCut(me); throwCut(me); props(me, dt); } catch (e) { console.warn(e); } }
       // rage drains slowly once you stop landing hits
       if (me.tnow - (me.rageT ?? -9) > 4) me.rage = Math.max(0, (me.rage || 0) - dt * 2);
       // HUD
