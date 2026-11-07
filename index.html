@@ -5764,12 +5764,12 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   const flash = (t, ms = 650) => say(t, ms);
   const zoneMat = new T.MeshBasicMaterial({ color: 0x8fdcff, transparent: true, opacity: .45, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending });
   const zone = A => {   // the reach of a thrust, drawn flat on the ground in front (user, 11-01)
-    const o = new T.Mesh(new T.RingGeometry(.4, reachOf(A) + A.lunge, 18, 1, -Math.PI / 2 - A.w, A.w * 2), zoneMat.clone());
+    const L = reachOf(A) + A.lunge, o = new T.Mesh(new T.PlaneGeometry(.55, L).translate(0, -(L / 2 + .3), 0), zoneMat.clone());   // owner 11-07: a stab is a straight line, not a wedge
     o.rotation.order = "YXZ"; o.rotation.set(-Math.PI / 2, A.face, 0); o.position.set(me.pos.x, me.pos.y + .08, me.pos.z); scene.add(o); me.fx.push({ o, t: 0, d: A.dur + .2, s: 0, a: .5 });
   };
   const ss = u => u * u * (3 - 2 * u);
   let startAtk = kind => { if (!me.blade || me.hp <= 0) return; const A = ATK[kind]; me.atk = { kind, ...A, dur: A.dur * (kind === "dash" ? 1 : 1.5) * (1 - .1 * sk("swift")) / me.up("dex"), lock: A.lock * (1 - .1 * sk("recover")) / me.up("car"), t0: me.tnow, face: me.face, hit: new Set(), prev: A.from, cur: A.from, mul: (me.chargeMul || 1) * me.bonus * me.riposte }; me.chargeMul = 1; me.bonus = 1; me.riposte = 1; swoosh(); if (kind === "jab" || kind === "thrust") zone(me.atk); };
-  { const sa = startAtk; startAtk = kind => { sa(kind); const a = me.atk; if (a && window.hxChop) setTimeout(() => { if (me.atk === a || !me.atk) { window.hxChop(a.face, kind); if (kind !== "dash") window.hxSwingMine && window.hxSwingMine(kind); } }, a.dur * 450); }; }   // owner 11-06: the sword cuts trees too
+  { const sa = startAtk; startAtk = kind => { sa(kind); const a = me.atk; if (a && window.hxChop) setTimeout(() => { if (me.atk === a || !me.atk) { window.hxChop(a.face, kind); } }, a.dur * 450); }; }   // owner 11-06: the sword cuts trees too
   const CHAIN = ["s0", "s1", "s2", "slam", "whirl"];
   const nextSwing = () => { if (me.riposte > 1) { me.combo = 0; return startAtk("thrust"); } if (me.tnow - me.comboT > 1.1) me.combo = 0; const len = 3 + sk("combo"); me.comboT = me.tnow; startAtk(CHAIN[me.combo % len]); me.combo = (me.combo + 1) % len; };
   const inWindow = () => !me.atk || (me.tnow - me.atk.t0) / me.atk.dur >= me.atk.lock;
@@ -5823,7 +5823,8 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   function fire() {
     const pw = clamp((me.tnow - me.draw) / drawTime(), .2, 1); me.draw = null; me.loose = me.tnow;
     const n = 1 + sk("multi"), st = bowG.getWorldPosition(bowPos).clone(), d = me.aim ? clamp(Math.hypot(me.aim.x - me.pos.x, me.aim.z - me.pos.z), 3, 60) : 25, v = 42 + 48 * pw, tt = Math.max(.1, d / v), vy = Math.min(25, (me.pos.y + 1 - st.y) / tt + 9 * tt);
-    for (let i = 0; i < n; i++) { const a = me.face + (i - (n - 1) / 2) * .07, o = arrowMesh(); o.position.copy(st); scene.add(o); const tg = new T.BufferGeometry(); tg.setAttribute("position", new T.BufferAttribute(new Float32Array(12), 3)); const tl = new T.Line(tg, arrowTrailMat); tl.frustumCulled = false; scene.add(tl); arrows.push({ o, p: st.clone(), v: new T.Vector3(Math.sin(a) * v, vy, Math.cos(a) * v), dmg: 34 * pw * (pw >= 1 ? 1.25 : 1), t: 0, tl, tp: [st.clone(), st.clone(), st.clone(), st.clone()] }); }
+    const X = me.xhit && me.xhit(), vX = X ? (() => { const dd = X.clone().sub(st), t2 = Math.max(.05, dd.length() / v); return dd.divideScalar(t2).setY(dd.y / t2 + 9 * t2); })() : null;   // owner 11-07: the arrow goes where the crosshair is
+    for (let i = 0; i < n; i++) { const a = me.face + (i - (n - 1) / 2) * .07, o = arrowMesh(); o.position.copy(st); scene.add(o); const tg = new T.BufferGeometry(); tg.setAttribute("position", new T.BufferAttribute(new Float32Array(12), 3)); const tl = new T.Line(tg, arrowTrailMat); tl.frustumCulled = false; scene.add(tl); arrows.push({ o, p: st.clone(), v: vX ? vX.clone().applyAxisAngle(AXB[1], (i - (n - 1) / 2) * .07) : new T.Vector3(Math.sin(a) * v, vy, Math.cos(a) * v), dmg: 34 * pw * (pw >= 1 ? 1.25 : 1), t: 0, tl, tp: [st.clone(), st.clone(), st.clone(), st.clone()] }); }
     while (arrows.length > 60) { const A = arrows.shift(); scene.remove(A.o); }
     tone(320, .05); me.shake = Math.max(me.shake || 0, .05 + .05 * pw); me.shake = Math.max(me.shake || 0, .05 + .05 * pw);
   }
@@ -5845,7 +5846,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
   const ringMat = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .8, depthWrite: false, side: T.DoubleSide });
   const CN = 30, cpts = new Float32Array(CN * 3), cgeo = new T.BufferGeometry(); cgeo.setAttribute("position", new T.BufferAttribute(cpts, 3));
   const chain = new T.Line(cgeo, new T.LineBasicMaterial({ color: 0xb8b8c0 })); chain.frustumCulled = false; chain.visible = false; scene.add(chain);
-  let proj = null;
+  let proj = null; Object.defineProperty(me, "proj", { get: () => proj, configurable: true });
   const handPos = out => { hero.armR.updateMatrixWorld(); return out.setFromMatrixPosition(hero.armR.matrixWorld); };
   function throwBlade(kind) {
     if (!me.blade || me.hp <= 0) return; me.thrownT = me.tnow; me.shake = Math.max(me.shake || 0, .12); me.blade = false; hero.sword.visible = false; thr.visible = true; swoosh();
@@ -5855,7 +5856,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     if (kind === "lob") {                                              // underhand, 45° up: slow, short, lands with a wide hit
       const d = me.aim ? clamp(Math.hypot(me.aim.x - me.pos.x, me.aim.z - me.pos.z), 4, 14) * far : 12 * far, tx = me.pos.x + dir.x * d, tz = me.pos.z + dir.z * d;
       proj = { kind, p0, t: 0, dur: .85, tgt: new T.Vector3(tx, Math.max(H(tx, tz), -.3), tz), peak: d / 4 + 1, p: p0.clone(), dir, mul, out: 0 };
-    } else proj = { kind, p: p0.clone(), dir, left: (26 + 6 * sk("throwp")) * far, speed: (45 + 5 * sk("throwp")) * (pw < 0 ? 1 : 1.35), mul, out: 0, pierce: sk("pierce"), done: new Set() };   // spear throw: fast, far, one target (chain length 26 m)
+    } else { const X = me.xhit && me.xhit(); proj = { kind, p: p0.clone(), d3: !!X, dir: X ? X.sub(p0).normalize() : dir, left: (26 + 6 * sk("throwp")) * far, speed: (45 + 5 * sk("throwp")) * (pw < 0 ? 1 : 1.35), mul, out: 0, pierce: sk("pierce"), done: new Set() }; }   // owner 11-07: flies straight at the crosshair // spear throw: fast, far, one target (chain length 26 m)
   }
   function recall() { if (!proj || proj.ret) return; proj.ret = 1; tone(420, .06); }
   me.parried = m => { m.stun = 1.6; me.riposte = 2; me.cdQ = 0; me.slowT = .45; me.st = Math.min(100, me.st + 25); flash("PARRY! LMB = riposte (2x)", 900); tone(2200, .08); spark(handPos(new T.Vector3()), 16); };
@@ -5865,6 +5866,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
       const dx = m.root.position.x - me.pos.x, dz = m.root.position.z - me.pos.z, d = Math.hypot(dx, dz), rr = Math.max(.9, m.a[1] * .35 * GS);
       if (Math.abs(m.root.position.y + m.a[2] * .5 * GS - me.pos.y - 1) > rr + 2) continue;
       const rel = angD(A.face, Math.atan2(dx, dz)), pad = Math.atan2(rr, Math.max(d, .1));
+      if (A.kind === "jab" || A.kind === "thrust") { const al = dx * Math.sin(A.face) + dz * Math.cos(A.face), pe = Math.abs(dx * Math.cos(A.face) - dz * Math.sin(A.face)); if (al > -.3 && al < reachOf(A) + rr && pe < rr * .6 + .4) { A.hit.add(m); hurtMob(m, BASE * A.m * A.mul * (.9 + Math.random() * .2), me.pos, A.m >= 2); tone(180, .08); } continue; }   // a straight line forward
       const inArc = A.round ? ((-rel + Math.PI * 2) % (Math.PI * 2)) <= -A.cur + pad : rel >= lo - pad && rel <= hi + pad;   // spin: everything the turning blade has passed
       if (d < reachOf(A) + rr && inArc) { A.hit.add(m); hurtMob(m, BASE * A.m * A.mul * (.9 + Math.random() * .2), me.pos, A.m >= 2); tone(180, .08); }
     }
@@ -5925,7 +5927,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
     else if (me.tnow - (me.thrownT ?? -9) < .35) { const p = (me.tnow - me.thrownT) / .35, e = 1 - (1 - p) ** 3; tx = -2.3 + 2.5 * e; ty = -.6 + .6 * e; twist = .7 - 1.3 * e; }   // the throw: whip from over the shoulder through to the front               // follow-through after the throw
     else if (me.moving) { tx = 1.25 + Math.sin(me.walkT || 0) * .2; ty = -.15; }
     else { tx = 1.3 + Math.sin(me.tnow * 2) * .04; ty = -.15; }                    // idle: breathing
-    const aimP = clamp((me.pitchC ?? .3) - .3, -.9, 1.05); me.aimP = aimP; if (K && K !== "slam" && !(me.atk && me.atk.round)) tx += aimP * .95;   // owner 11-06: the cut goes where you aim, down at your feet or up over your head
+    const aimP = clamp((me.pitchC ?? .3) - .3, -.9, 1.05); me.aimP = aimP; if (K && K !== "slam") tx += aimP * .95;   // owner 11-06: the cut goes where you aim, down at your feet or up over your head
     const rk = K || me.tnow - (me.thrownT ?? -9) < .35 ? 42 : 14;   // attacks follow their curve closely, everything else glides
     pv.rotation.x = damp(pv.rotation.x, tx, rk, dt); pv.rotation.y = damp(pv.rotation.y, ty, rk, dt);
     sw.rotation.z = damp(sw.rotation.z, tz, rk, dt); sw.rotation.x = damp(sw.rotation.x, K || me.block || (me.lmb && me.lmb.charging) || me.tabT ? 0 : -1.15, rk, dt);   // at rest the arm hangs and the wrist tips the blade up and forward (user, 11-01) sw.position.z = K === "jab" || K === "thrust" ? sz : damp(sw.position.z, sz, 20, dt);
@@ -5978,7 +5980,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
           for (const m of mobs) if (!m.dead && Math.hypot(m.root.position.x - q.p.x, m.root.position.z - q.p.z) < 3.5 + m.a[1] * .3 * GS) hurtMob(m, BASE * 1.3 * q.mul, q.p);
           const ring = new T.Mesh(new T.RingGeometry(.2, .45, 32), ringMat.clone()); ring.rotation.x = -Math.PI / 2; ring.position.copy(q.p).y += .1; scene.add(ring); me.fx.push({ o: ring, t: 0, d: .45, s: 8 }); }
       } else if (!q.landed) {
-        const step = q.speed * dt, a0 = q.p.clone(); q.p.addScaledVector(q.dir, step); q.p.y = lerp(q.p.y, Math.max(H(q.p.x, q.p.z), -.3) + 1.2, .3); q.left -= step; thr.rotation.set(Math.PI / 2, me.face, 0, "YXZ");   // skims the ground over hills
+        const step = q.speed * dt, a0 = q.p.clone(); q.p.addScaledVector(q.dir, step); if (!q.d3) q.p.y = lerp(q.p.y, Math.max(H(q.p.x, q.p.z), -.3) + 1.2, .3); else if (q.p.y < Math.max(H(q.p.x, q.p.z), -.3)) { q.p.y = Math.max(H(q.p.x, q.p.z), -.3); q.left = 0; } q.left -= step; thr.rotation.set(Math.PI / 2, me.face, 0, "YXZ");   // skims the ground over hills
         let hit = null; for (const m of mobs) { if (m.dead || (q.done && q.done.has(m))) continue; const c = m.root.position.clone(); c.y += m.a[2] * .5 * GS; const rr = Math.max(.9, m.a[1] * .35 * GS); const ab = q.p.clone().sub(a0), u = clamp(c.clone().sub(a0).dot(ab) / (ab.lengthSq() || 1), 0, 1); if (a0.clone().addScaledVector(ab, u).distanceTo(c) < rr + .4) { hit = m; break; } }
         if (hit && q.pierce > 0) { q.pierce--; q.done.add(hit); hurtMob(hit, BASE * 3.2 * q.mul, me.pos, 1); tone(160, .1); hit = null; }   // Piercing Throw: straight through
         else if (hit) { hurtMob(hit, BASE * 3.2 * q.mul, me.pos, 1); tone(140, .12); q.stuck = hit; q.off = q.p.clone().sub(hit.root.position); }
@@ -6000,7 +6002,7 @@ function wildlife(me, scene, cam, H, r, lat, lon, hex) {
         const a0 = A.p.clone(); A.v.y -= 18 * dt; A.p.addScaledVector(A.v, dt);
         for (const m of mobs) { if (m.dead) continue; const c = m.root.position.clone(); c.y += m.a[2] * .5 * GS; const rr = Math.max(.8, m.a[1] * .35 * GS), ab = A.p.clone().sub(a0), u = clamp(c.clone().sub(a0).dot(ab) / (ab.lengthSq() || 1), 0, 1);
           if (a0.clone().addScaledVector(ab, u).distanceTo(c) < rr + .2) { hurtMob(m, A.dmg, a0); tone(240, .06); spark(A.p, 5); A.m = m; A.off = A.p.clone().sub(m.root.position); A.t = Math.max(A.t, 3); break; } }
-        if (!A.m && A.p.y < H(A.p.x, A.p.z)) { A.stuck = 1; A.stickT = A.t; A.t = Math.max(A.t, 2); spark(A.p, 3); }
+        if (!A.m && (A.p.y < H(A.p.x, A.p.z) || (me.vox && me.vox.cell(me.vox.ci(A.p.x), me.vox.cyi(A.p.y), me.vox.ci(A.p.z))))) { A.stuck = 1; A.stickT = A.t; A.t = Math.max(A.t, 2); spark(A.p, 3); }
         A.o.position.copy(A.p); if (!A.stuck && !A.m) { A.o.lookAt(tmpV.copy(A.p).add(A.v)); A.o.rotateZ(A.t * 16); }
       }
       if (A.stuck && A.t - (A.stickT || 0) < .45) A.o.rotateZ(Math.sin((A.t - A.stickT) * 46) * .03); else if (A.m) A.o.rotateZ(Math.sin(A.t * 30) * .02); if (A.tl) { const cp = A.o.position; if (isFinite(cp.x) && isFinite(cp.y) && isFinite(cp.z)) { A.tp.pop(); A.tp.unshift(cp.clone()); } const pa = A.tl.geometry.attributes.position; for (let j = 0; j < 4; j++) { const q = A.tp[j] || cp; if (isFinite(q.x) && isFinite(q.y) && isFinite(q.z)) pa.setXYZ(j, q.x, q.y, q.z); } pa.needsUpdate = true; } if (A.t > 8) { scene.remove(A.o); if (A.tl) { scene.remove(A.tl); A.tl.geometry.dispose(); A.tl = null; } }
@@ -6610,7 +6612,7 @@ function build(me, i) {
     ndc.set(0, 0); ray.setFromCamera(ndc, cam); plane.constant = -(pos.y + 1);
     const ah = ray.ray.intersectPlane(plane, aimV), ad = ah ? clamp(Math.hypot(aimV.x - pos.x, aimV.z - pos.z), 2, 25) : 25;
     me.aim = P(pos.x - sy * ad, pos.y, pos.z - cyw * ad);
-    if (!me.atk || me.atk.kind === "jab") me.face = Math.atan2(-sy, -cyw);
+    if (!me.atk || me.atk.kind === "jab" || me.atk.round) { me.face = Math.atan2(-sy, -cyw); if (me.atk && me.atk.round) me.atk.face = me.face; }   /* owner 11-07: a spin follows where you look */
     hero.root.position.copy(pos); hero.root.rotation.y = me.face + (me.twist || 0);
     hero.root.position.y += mv ? Math.abs(Math.sin(me.walkT)) * .07 : Math.sin(t / 1000 * 2.2) * .012;   // step bounce / breathing
     const sw = mv ? Math.sin(me.walkT) * .6 : 0; hero.legs[0].rotation.x = sw; hero.legs[1].rotation.x = -sw; if (me.weapon !== "bow") hero.armL.rotation.x = -sw * .8;
@@ -6876,15 +6878,14 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
       .catch(() => give(me, a.t));
     return true;
   };
-  const mineArea = (me, reach, kind) => {   // owner 11-06: weapons smash a whole ball of cells; axe x2 on wood and leaves, hammer x2 on stone and bigger, spear smaller
-    const a = aim(me, reach), V = me.vox; if (!a) return; const w = me.melee || "sword", heavy = /slam|whirl|sweep|spin/.test(kind || ""), S = V.VS;
-    const R = ({ sword: 1.7, axe: 1.9, hammer: 2.6, spear: 1.3 }[w] || 1.7) * (heavy ? 1.5 : 1), pw = (w === "hammer" ? 3 : 2) + (heavy ? 1 : 0), Ri = Math.ceil(R), broke = [], trees = new Set(), dm = me.vdmg || (me.vdmg = new Map());
+  const smash = (me, c0, R, pw, kind, fx = 1) => {   // break a ball of cells around c0 = [cx, iy, cz]; damage adds up per cell (dirt 1, wood 2, stone 3)
+    const V = me.vox, w = me.melee || "sword", heavy = /slam|whirl|sweep|spin/.test(kind || ""), S = V.VS, Ri = Math.ceil(R), broke = [], trees = new Set(), dm = me.vdmg || (me.vdmg = new Map());
     if (dm.size > 3000) dm.clear();
     for (let dy = -Ri; dy <= Ri; dy++) for (let dx = -Ri; dx <= Ri; dx++) for (let dz = -Ri; dz <= Ri; dz++) { if (dx * dx + dy * dy + dz * dz > R * R) continue;
-      const cx = a.cx + dx, iy = a.iy + dy, cz = a.cz + dz, t = V.cell(cx, iy, cz); if (!t) continue;
+      const cx = c0[0] + dx, iy = c0[1] + dy, cz = c0[2] + dz, t = V.cell(cx, iy, cz); if (!t) continue;
       const k = cx + "," + iy + "," + cz, p = (dm.get(k) || 0) + pw * (w === "axe" && t >= 6 ? 2 : w === "hammer" && t === 5 ? 2 : 1); if (p < (V.HARD[t] || 1)) { dm.set(k, p); continue; } dm.delete(k);
       trees.add(V.treeAt(cx, iy, cz)); V.set(cx, iy, cz, 0, true); broke.push([cx, iy, cz, t]); if (broke.length > 140) break; }
-    if (!broke.length) { chips(me, new me.T.Vector3((a.cx + .5) * S, V.yb(a.iy) + S, (a.cz + .5) * S), V.tcol(a.t, a.cx, a.cz, a.iy), 4); me.tone && me.tone(300, .04); return; }
+    if (!broke.length) { const t = V.cell(c0[0], c0[1], c0[2]); if (t && fx) { chips(me, new me.T.Vector3((c0[0] + .5) * S, V.yb(c0[1]) + S, (c0[2] + .5) * S), V.tcol(t, c0[0], c0[2], c0[1]), 4); me.tone && me.tone(300, .04); } return broke; }
     V.flush(); me.shake = Math.max(me.shake || 0, .1 + Math.min(.2, broke.length * .004)); me.tone && me.tone(120, .08);
     const cols = new Set(); for (const [cx, , cz] of broke) cols.add(cx + "," + cz);
     for (const [cx, iy, cz, t] of broke.slice(5)) give(me, t);   // the rest straight into the bag
@@ -6893,8 +6894,44 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     lib().then(() => { if (cur() !== me) return; world(me); for (const c of cols) { const [cx, cz] = c.split(",").map(Number); repatch(me, cx, cz); }
       for (const [cx, iy, cz, t] of broke.slice(0, 5)) { const e = junk(me, (cx + .5) * S, V.yb(iy) + S / 2, (cz + .5) * S, S * .92, V.tcol(t, cx, cz, iy), "debris", t); e.b.velocity.set((Math.random() - .5) * 4, 3 + Math.random() * 3, (Math.random() - .5) * 4); e.b.angularVelocity.set(Math.random() * 6, Math.random() * 6, Math.random() * 6); } })
       .catch(() => { for (const [, , , t] of broke.slice(0, 5)) give(me, t); });
+    return broke;
   };
-  window.hxSwingMine = kind => { const me = cur(); if (!me || !me.vox || me.hp <= 0) return; mineArea(me, 4, kind); };
+  const ballR = (me, kind) => ({ sword: 1.7, axe: 1.9, hammer: 2.6, spear: 1.3 }[me.melee || "sword"] || 1.7) * (/slam|whirl|sweep|spin/.test(kind || "") ? 1.5 : 1);
+  const ballP = (me, kind) => (me.melee === "hammer" ? 3 : 2) + (/slam|whirl|sweep|spin/.test(kind || "") ? 1 : 0);
+  const mineArea = (me, reach, kind) => { const a = aim(me, reach); if (a) smash(me, [a.cx, a.iy, a.cz], ballR(me, kind), ballP(me, kind), kind); };
+  const dig2 = (me, p, d, kind) => {   // owner 11-07: a stab or a thrown blade bores 2 cells deep along its line, whatever it is made of
+    const V = me.vox, S = V.VS, dn = d.clone().normalize(); let n = 0;
+    for (let s = 0; s <= 2.6 * S; s += S / 2) { const q = p.clone().addScaledVector(dn, s); n += smash(me, [V.ci(q.x), V.cyi(q.y), V.ci(q.z)], 1.5, 9, kind, 0).length; }
+    if (n) { me.shake = Math.max(me.shake || 0, .14); }
+    return n;
+  };
+  const bladeTip = new Map();
+  const bladeCut = me => {   // the cells the weapon really touches this frame (hand to tip, swept from last frame) get smashed - no pre-picked spot
+    const A = me.atk, h = me.hero, V = me.vox; if (!A || !me.blade || !h || !h.sword || A.kind === "dash") { bladeTip.delete(me); return; }
+    const T = me.T, sw = h.sword; sw.updateWorldMatrix(true, false); const o = new T.Vector3().setFromMatrixPosition(sw.matrixWorld), z = new T.Vector3().setFromMatrixColumn(sw.matrixWorld, 2);
+    const L = (me.bladeL || 1.3) * z.length(); z.normalize(); const pr = bladeTip.get(me), cur0 = { o, z, A }; bladeTip.set(me, cur0);
+    const prev = pr && pr.A === A ? pr : cur0, stab = A.kind === "jab" || A.kind === "thrust", S = V.VS;
+    A.vdone = A.vdone || []; const zi = new T.Vector3(), oi = new T.Vector3();
+    for (let u = 0; u <= 1.001; u += .25) { oi.lerpVectors(prev.o, o, u); zi.lerpVectors(prev.z, z, u).normalize();
+      for (let s = L * .25; s <= L * 1.02; s += S / 2) { const q = oi.clone().addScaledVector(zi, s), cx = V.ci(q.x), iy = V.cyi(q.y), cz = V.ci(q.z); if (!V.cell(cx, iy, cz)) continue;
+        if (A.vdone.some(c => (c[0] - cx) ** 2 + (c[1] - iy) ** 2 + (c[2] - cz) ** 2 < (stab ? 9 : 4))) break;   // this part of the swing already bit here
+        A.vdone.push([cx, iy, cz]); if (stab) dig2(me, q, zi, A.kind); else smash(me, [cx, iy, cz], ballR(me, A.kind) * .8, ballP(me, A.kind), A.kind); break; } }
+  };
+  const throwCut = me => {   // the thrown weapon bores into the first cells it meets
+    const q = me.proj, V = me.vox; if (!q || q.ret) { me.prT = null; return; }
+    const a = me.prT && me.prT.q === q ? me.prT.p : q.p.clone(); me.prT = { q, p: q.p.clone() }; if (q.vdug) return;
+    const d = q.p.clone().sub(a), L = d.length(), S = V.VS; if (!L && !q.landed) return;
+    const hitAt = p => { if (!V.cell(V.ci(p.x), V.cyi(p.y), V.ci(p.z))) return false; q.vdug = 1; dig2(me, p, L > .01 ? d : new me.T.Vector3(0, -1, 0), "throw"); q.landed = 1; return true; };
+    for (let s = 0; s <= L; s += S / 3) if (hitAt(a.clone().addScaledVector(d, s / (L || 1)))) return;
+    if (q.landed) hitAt(q.p.clone().setY(q.p.y - S * .6)) || (q.vdug = 1);
+  };
+  const xhit = me => {   // where the crosshair points in the world: first cell or animal along the view ray, else 120 m out
+    const T = me.T, V = me.vox, d = new T.Vector3(); me.cam.getWorldDirection(d); const o = me.cam.position.clone(); let best = 999;
+    for (const m of me.mobs || []) { if (m.dead) continue; const c = m.root.position.clone(); c.y += .6; const t = c.clone().sub(o).dot(d); if (t < (me.dist || 2) + .5) continue; if (o.clone().addScaledVector(d, t).distanceTo(c) < .9 && t < best) best = t; }
+    for (let s = (me.dist || 2.2) + .4; s < Math.min(best, 120); s += V.VS / 2) { const x = o.x + d.x * s, y = o.y + d.y * s, z = o.z + d.z * s; if (V.cell(V.ci(x), V.cyi(y), V.ci(z)) || y < V.H(x, z) - .05) return o.addScaledVector(d, s); }
+    return o.addScaledVector(d, Math.min(best, 120));
+  };
+  window.hxSwingMine = kind => { const me = cur(); if (!me || !me.vox || me.hp <= 0) return; mineArea(me, 4, kind); };   // kept for other callers; swings now cut by contact (bladeCut)
   const pick = me => { const V = me.vox; if ((V.inv[V.sel] || 0) > 0) return V.sel; const k = Object.keys(V.inv).find(k => V.inv[k] > 0); if (k) V.sel = +k; return k ? +k : 0; };
   const place = me => {
     const a = aim(me), V = me.vox, t = pick(me); if (!a || !a.prev) return; if (!t) { me.say && me.say("No blocks: mine some (B) and pick them up", 1200); return; }
@@ -6972,6 +7009,7 @@ window.SV = { BI, SP, AN, FA, beast, faunaOf, biomeOf, hexBiome, hexLL, open, cl
     me.ps.push((dt, ts) => {
       if (cur() !== me) return;
       if (me.keys && me.keys.KeyB && me.tnow - (me.mineT ?? -9) > .24) mine(me);   // holding B keeps digging
+      if (me.vox) { me.xhit = () => xhit(me); try { bladeCut(me); throwCut(me); } catch (e) { console.warn(e); } }
       // rage drains slowly once you stop landing hits
       if (me.tnow - (me.rageT ?? -9) > 4) me.rage = Math.max(0, (me.rage || 0) - dt * 2);
       // HUD
