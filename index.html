@@ -926,7 +926,7 @@ function gkey(i) {
 }
 function gameColor(i, landc) {
   if (gameView === "population") return GPOP[i] > 0 ? POPC[Math.min(POPC.length - 1, GPCL[i])] : landc;
-  const k = gkey(i); if (k < 0) return gameView === "era" ? "#a89c7c" : landc;
+  const k = gkey(i); if (k < 0) return gameView === "era" ? (+(ERA.tier && ERA.tier[i]) ? "#e4e1d8" : "#ffffff") : landc;   /* owner 11-13: Empty land plain white; stateless Wilds light grey so their stripes show */
   if (gameView === "era") return ERA.tags[k][1];
   return gameView === "religion" ? G.religions[k][2] : gameView === "culture" ? G.cultures[k][2] : gameView === "ethnicity" ? G.groups[k][1] : G.tags[k][1];
 }
