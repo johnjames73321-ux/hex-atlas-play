@@ -17,6 +17,7 @@ this folder is the source of the `<!--PANTHEON:BEGIN-->…<!--PANTHEON:END-->` s
 | `21-strike.js` | Legendary + Duo boons, `strike()` = what each domain does to a foe, status ticks |
 | `30-arms.js` | Aspects of the five arms, Anvil marks, Tablet of Destinies |
 | `40-combat.js` | hit / kill / hurt hooks, Dash, Cast (U), Call (I) |
+| `45-arts.js` | Arm Arts: the signature move of each arm (R) |
 | `50-world.js` | shrines, trials, hazards, offers, well, rift, guardian, passages, death |
 | `60-fx.js` | effects, procedural sigils (frame per culture, glyph per domain), sound, battle music |
 | `70-ui.js` | HUD, offer cards, codex (O), death and intro screens |

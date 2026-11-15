@@ -10284,7 +10284,9 @@ const castHit = (me, at, b, k = 1) => { const M = mods(me), p = b ? pot(b) : 1, 
   for (const m of near(me, at, r)) { hurt(me, m, dmg, c, 1); if (d) strike(me, m, d, power(me) * 1.2 * p * k, "C"); } };
 const castTick = (me, dt) => { const P = me.pn, Rn = R(), mx = castMax(me); P.castCd = Math.max(0, (P.castCd || 0) - dt);
   if (Rn.cast < mx) { P.castT = (P.castT || 0) + dt; if (P.castT >= 2.6) { P.castT = 0; Rn.cast++; } } else { P.castT = 0; if (Rn.cast > mx) Rn.cast = mx; }
-  for (let i = P.shots.length - 1; i >= 0; i--) { const s = P.shots[i], q = s.o.position; s.t += dt; q.addScaledVector(s.v, dt); s.o.rotation.y += dt * 9; let hit = s.t >= s.life || q.y < me.H(q.x, q.z) + .15;
+  for (let i = P.shots.length - 1; i >= 0; i--) { const s = P.shots[i], q = s.o.position; s.t += dt; q.addScaledVector(s.v, dt);
+    if (s.pierce) { for (const m of me.mobs) { if (!alive(m) || s.pierce.has(m)) continue; const c = mp(m); if (Math.hypot(c.x - q.x, c.z - q.z) < rad(m) + 1.5 && Math.abs(q.y - c.y - 1) < 3 + m.a[2] * GSC) { s.pierce.add(m); try { s.onHit(m); } catch (e) { warn(e); } } } if (s.t >= s.life) { me.scene.remove(s.o); P.shots.splice(i, 1); } continue; }
+    s.o.rotation.y += dt * 9; let hit = s.t >= s.life || q.y < me.H(q.x, q.z) + .15;
     if (!hit) for (const m of me.mobs) { if (!alive(m)) continue; const c = mp(m); if (Math.hypot(c.x - q.x, c.z - q.z) < rad(m) + .55 && q.y > c.y - .6 && q.y < c.y + m.a[2] * GSC + 1) { hit = 1; break; } }
     if (hit) { me.scene.remove(s.o); P.shots.splice(i, 1); if (s.t < s.life || s.b) castHit(me, q.clone(), s.b, s.k); } } };
 
@@ -10324,6 +10326,25 @@ const combatTick = (me, dt) => {
   P.tgtT = (P.tgtT || 0) - dt; P.hurtFlash = Math.max(0, (P.hurtFlash || 0) - dt);
   if (P.died && me.hp > 0) { P.died = 0; try { endRun(me); } catch (e) { warn(e); } }
 };
+
+/* ---- 45-arts.js ---- */
+/* Arm Arts: each of the five arms has a signature move that rides on the spin attack (R or T).
+   It counts as a Special, so a Special boon colours it. With the bow in hand, R looses the art instead of swapping to the sword. */
+const ART = { sword: ["Blade Wave", 3.5, "a wave of force flies ahead, cutting through every foe in its path"], axe: ["Rend", 4, "every foe around you is torn open and bleeds, and you drink from it"], hammer: ["Earthbreaker", 5, "the ground bursts around you, hurling and stunning foes"],
+  spear: ["Hundred Thrusts", 4, "four lightning thrusts pierce everything in a line ahead"], bow: ["Rain of Arrows", 5, "a volley falls where you aim"] };
+const armArt = me => { const arm = armOf(me), P = me.pn; if (!arm || me.hp <= 0 || P.ui || (P.artCd || 0) > me.tnow || me.rollT > 0) return false; if (arm !== "bow" && (me.cdR > 0 || !me.blade)) return false;
+  const A = ART[arm], T = me.T, M = mods(me), pw = power(me) * (1 + M.specDmg), b = boonIn("S"), bp = b ? pot(b) : 0, d = b ? CAT[b.id].dom : null, c = d ? DOM[d].c : "#f4f1ea", f = me.face, fx = Math.sin(f), fz = Math.cos(f), eye = new T.Vector3(me.pos.x, me.pos.y + 1.2, me.pos.z);
+  P.artCd = me.tnow + A[1]; P.artMax = A[1]; fxText(me, me.pos.clone().setY(me.pos.y + 2.4), A[0].toUpperCase(), c);
+  const tag = (m, x) => { hurt(me, m, x * (1 + (b ? .3 * bp : 0)), c, 1); if (b) strike(me, m, d, x * .6 * bp, "S"); addGauge(me, 1.2); };
+  if (arm === "sword") { const o = fxOrb(me, c, 2.4); o.scale.set(3.4, 1.2, 1.2); o.rotation.y = f; o.position.copy(eye); P.shots.push({ o, v: new T.Vector3(fx * 30, 0, fz * 30), t: 0, life: .65, pierce: new Set(), onHit: m => tag(m, pw * 1.25) }); sfx(me, "wave"); }
+  else if (arm === "axe") later(me, .22, () => { const fs2 = near(me, me.pos, 4.6); fxRing(me, me.pos, "#ff5a4a", 4.6, .35); for (const m of fs2) { tag(m, pw * .9); afflict(me, m, "stupor", { t: 4, max: 5 + M.stup, n: 2, x: pw * .15, c: "#ff5a4a" }); } heal(me, .6 * fs2.length); sfx(me, "beast"); });
+  else if (arm === "hammer") later(me, .32, () => { fxRing(me, me.pos, "#d8b070", 6.2, .45); fxBurst(me, me.pos.clone().setY(me.pos.y + .3), "#d8b070", 22); me.shake = Math.max(me.shake || 0, .45); sfx(me, "slam"); for (const m of near(me, me.pos, 6.2)) { tag(m, pw * 1.7); if (!m.pnG) m.stun = Math.max(m.stun || 0, .9); const p = mp(m), dx = p.x - me.pos.x, dz = p.z - me.pos.z, l = Math.hypot(dx, dz) || 1; if (!m.pnG && !m.boss) { p.x += dx / l * 1.6; p.z += dz / l * 1.6; } } });
+  else if (arm === "spear") for (let k = 0; k < 4; k++) later(me, .06 + k * .09, () => { const a = new T.Vector3(me.pos.x, me.pos.y + 1.1, me.pos.z), sf = Math.sin(me.face), cf = Math.cos(me.face); fxBolt(me, a, new T.Vector3(a.x + sf * 7.5, a.y, a.z + cf * 7.5), c); sfx(me, "dodge");
+    for (const m of me.mobs) { if (!alive(m)) continue; const p = mp(m), dx = p.x - me.pos.x, dz = p.z - me.pos.z, al = dx * sf + dz * cf, pe = Math.abs(dx * cf - dz * sf); if (al > -.5 && al < 7.5 + rad(m) && pe < rad(m) + .7) tag(m, pw * .55); } });
+  else { let X = null; try { X = me.xhit && me.xhit(); } catch (e) {} const at = X && X.distanceTo(eye) < 60 ? X.clone() : new T.Vector3(me.pos.x + fx * 14, 0, me.pos.z + fz * 14); at.y = Math.max(me.H(at.x, at.z), 0); fxRing(me, at, c, 3.4, .7); sfx(me, "cast");
+    for (let k = 0; k < 7; k++) later(me, .25 + k * .09, () => { const q = new T.Vector3(at.x + (Math.random() - .5) * 5, at.y, at.z + (Math.random() - .5) * 5); fxBolt(me, new T.Vector3(q.x - fx * 3, q.y + 16, q.z - fz * 3), q, c); fxRing(me, q, c, 1.6, .25); for (const m of near(me, q, 1.9)) tag(m, pw * .8); }); }
+  return true; };
+const artHud = me => { const P = me.pn, arm = armOf(me), e = $("pnArt"); if (!e) return; if (!arm) { e.textContent = ""; return; } const left = (P.artCd || 0) - me.tnow; e.textContent = `R · ${ART[arm][0]}${left > 0 ? " " + left.toFixed(1) + "s" : ""}`; e.style.opacity = left > 0 ? .45 : 1; };
 
 /* ---- 50-world.js ---- */
 /* The land as a chamber: three shrines of the land's own gods, a cache, a well, and a guardian whose fall
@@ -10749,7 +10770,7 @@ let ui = null;
 const ensureUI = () => { const sv = $("sv"); if (!sv) return null; if (ui && ui.hud.isConnected) return ui;
   if (!$("pnCss")) { const c = document.createElement("style"); c.id = "pnCss"; c.textContent = CSS; document.head.appendChild(c); }
   const mk = (id, html) => { let e = $(id); if (e) e.remove(); e = document.createElement("div"); e.id = id; if (html) e.innerHTML = html; sv.appendChild(e); return e; };
-  ui = { hud: mk("pnHud", `<div id="pnHp"><b></b><i></i><span></span></div><div class="pnRow"><span id="pnDef"></span><span id="pnCast"></span><span id="pnShield"></span></div><div class="pnRow"><div id="pnGauge"><i></i><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u></div><span id="pnGod"></span></div><div id="pnBoons"></div>`),
+  ui = { hud: mk("pnHud", `<div id="pnHp"><b></b><i></i><span></span></div><div class="pnRow"><span id="pnDef"></span><span id="pnCast"></span><span id="pnShield"></span><span id="pnArt" style="margin-left:auto;font:700 11px system-ui;letter-spacing:.04em"></span></div><div class="pnRow"><div id="pnGauge"><i></i><u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u></div><span id="pnGod"></span></div><div id="pnBoons"></div>`),
     top: mk("pnTop", `<div id="pnCmp"></div><div id="pnBoss" hidden><span></span><b><i></i></b><em></em></div>`), cur: mk("pnCur"), ban: mk("pnBan", "<small></small><b></b>"), prompt: mk("pnPrompt"), vig: mk("pnVig"), offer: mk("pnOffer"), codex: mk("pnCodex"), death: mk("pnDeath"), pool: [], labs: [] };
   sv.querySelectorAll(".pnLab").forEach(e => e.remove());
   ui.prompt.hidden = ui.offer.hidden = ui.codex.hidden = ui.death.hidden = true;
@@ -10759,7 +10780,7 @@ const ensureUI = () => { const sv = $("sv"); if (!sv) return null; if (ui && ui.
   ui.death.addEventListener("click", () => { const me = cur(); if (me) closeUI(me); });
   ui.codex.addEventListener("click", ev => { const me = cur(); if (!me) return; const b = ev.target.closest("button"); if (b) codexClick(me, b, ev.shiftKey || undefined); });
   const cmp = $("pnCmp"); ui.card = []; for (let a = 0; a < 360; a += 45) { const e = document.createElement("i"); e.className = "c"; e.textContent = { 0: "N", 90: "E", 180: "S", 270: "W" }[a] || "·"; cmp.appendChild(e); ui.card.push([a * Math.PI / 180, e]); }
-  const help = sv.querySelector(".help"); if (help && !/U cast/.test(help.textContent)) help.textContent += " · U cast · I call · O gods and arms";
+  const help = sv.querySelector(".help"); if (help && !/U cast/.test(help.textContent)) help.textContent += " · U cast · I call · R arm art · O gods and arms";
   return ui; };
 const banQ = []; let banBusy = 0;
 const banner = (small, big, ms = 2600, color = "#ffe9a8") => { banQ.push([small, big, ms, color]); if (banQ.length > 4) banQ.splice(0, banQ.length - 4); if (!banBusy) banNext(); };
@@ -10784,7 +10805,7 @@ const hudTick = (me, dt) => { const u = ensureUI(), P = me.pn, W = P.W; if (!u) 
   for (let i = ln; i < u.labs.length; i++) u.labs[i].style.display = "none";
   if ((P.hudT = (P.hudT || 0) + dt) < .1 && !P.hudNow) return; P.hudT = 0; P.hudNow = 0;
   hpEl.lastChild.textContent = `${Math.ceil(hp)} / ${Math.round(mx)}`;
-  $("pnDef").textContent = "☥".repeat(Math.max(0, Rn.def)); $("pnCast").textContent = "◆".repeat(Math.max(0, Rn.cast)) + "◇".repeat(Math.max(0, castMax(me) - Rn.cast)); $("pnShield").textContent = P.shield > 0 ? "⛨".repeat(P.shield) : "";
+  artHud(me); $("pnDef").textContent = "☥".repeat(Math.max(0, Rn.def)); $("pnCast").textContent = "◆".repeat(Math.max(0, Rn.cast)) + "◇".repeat(Math.max(0, castMax(me) - Rn.cast)); $("pnShield").textContent = P.shield > 0 ? "⛨".repeat(P.shield) : "";
   const cb = boonIn("G"), gc = cb ? DOM[CAT[cb.id].dom].c : "#8a8fa8", gEl = $("pnGauge"); gEl.firstChild.style.width = Rn.gauge + "%"; gEl.firstChild.style.background = gc; gEl.style.color = gc; gEl.classList.toggle("full", Rn.gauge >= 100);
   $("pnGod").textContent = cb ? `I · ${GOD[cb.god] ? GOD[cb.god].n : "Call"}` : "no Call"; $("pnGod").style.color = gc;
   const sig = Rn.boons.map(b => b.id + b.lv + b.rar).join(",") + "|" + Rn.forge.length;
@@ -10822,7 +10843,7 @@ const deathScreen = (me, s) => { const u = ensureUI(), top = s.top && GOD[s.top[
 const intro = me => { const u = ensureUI(), W = me.pn.W, g = W.sh[0].god; me.pn.ui = { type: "intro", t0: performance.now() }; u.death.hidden = false;
   u.death.innerHTML = `<small>320 BC · ${esc(W.info.state || W.info.place || "the wilds")}</small><h2 style="color:#ffe9a8;text-shadow:0 0 30px rgba(255,220,120,.5)">The gods are watching</h2><img src="${sigilURL(g)}" alt="" style="width:120px;height:120px;filter:drop-shadow(0 0 18px ${domOf(g).c})">
 <p>Every land answers to its own gods: ${GODS.length.toLocaleString()} of them, from ${PANS.length} peoples. Pillars of light mark their <b>shrines</b>. Stand at one and press <kbd>E</kbd> to accept a trial; win, and choose a <b>boon</b> that changes your Attack, Special, Cast, Dash or Call.</p>
-<p><kbd>U</kbd> Cast · <kbd>I</kbd> Call your god · <kbd>O</kbd> boons, arms and the Tablet · clear two shrines to wake the land's <b>guardian</b>, and its fall opens passages onward.</p><p>Fall, and the gods take their gifts back. What you earn for ever: shards and Ichor.</p><div class="f"><kbd>Enter</kbd> begin</div>`; };
+<p><kbd>U</kbd> Cast · <kbd>I</kbd> Call your god · <kbd>R</kbd> your arm's art · <kbd>O</kbd> boons, arms and the Tablet · clear two shrines to wake the land's <b>guardian</b>, and its fall opens passages onward.</p><p>Fall, and the gods take their gifts back. What you earn for ever: shards and Ichor.</p><div class="f"><kbd>Enter</kbd> begin</div>`; };
 
 // ---------- the codex (O): boons, arms, tablet, gods ----------
 const TABS = ["Boons", "Arms", "Tablet", "Gods"];
@@ -10833,7 +10854,7 @@ const drawCodex = me => { const u = ensureUI(), U = me.pn.ui, Rn = R(), M = st.m
     if (Rn.forge.length) h += `<h4>Anvil marks</h4><div class="g">${Rn.forge.map(k => `<div class="row"><div><b>${FORGE[k].n}</b><span>${FORGE[k].t}</span></div></div>`).join("")}</div>`;
     const a = aspNow(me); if (a) h += `<h4>In hand</h4><div class="row"><div><b>${ARMS[a.arm]} · ${a.A.n} ${"●".repeat(a.l)}</b><span>${a.A.text(a.l)}</span></div></div>`; }
   if (U.tab === 1) { h += `<p>Each arm keeps its Aspects for ever. Ichor (✦) falls from guardians and can be bought at wells. Click an Aspect to wield it; “Raise” spends Ichor.</p>`;
-    for (const arm of Object.keys(ARMS)) { h += `<h4>${ARMS[arm]}${armOf(me) === arm ? " · in hand" : ""}</h4><div class="asp">` + ASPECTS[arm].map(A => { const l = aspRank(arm, A.id), sel = (st.meta.aspSel[arm] || "wanderer") === A.id, cost = l >= 5 ? 0 : ASPCOST[l]; return `<button data-asp="${arm}:${A.id}" class="${sel && l ? "on" : ""}"><b>${A.n.replace("Aspect of ", "")} ${"●".repeat(l)}${"○".repeat(5 - l)}</b><span>${esc(A.who)}</span><span style="opacity:1">${esc(A.text(Math.max(1, l)))}</span><i>${l >= 5 ? "max" : l ? `raise: ${cost} ✦ (right-click or Shift-click)` : `unlock: ${cost} ✦`}</i></button>`; }).join("") + `</div>`; } }
+    for (const arm of Object.keys(ARMS)) { h += `<h4>${ARMS[arm]}${armOf(me) === arm ? " · in hand" : ""} <span style="color:#e8ecff;letter-spacing:0;text-transform:none;font-weight:400">· art (R): <b>${ART[arm][0]}</b>, ${ART[arm][2]}</span></h4><div class="asp">` + ASPECTS[arm].map(A => { const l = aspRank(arm, A.id), sel = (st.meta.aspSel[arm] || "wanderer") === A.id, cost = l >= 5 ? 0 : ASPCOST[l]; return `<button data-asp="${arm}:${A.id}" class="${sel && l ? "on" : ""}"><b>${A.n.replace("Aspect of ", "")} ${"●".repeat(l)}${"○".repeat(5 - l)}</b><span>${esc(A.who)}</span><span style="opacity:1">${esc(A.text(Math.max(1, l)))}</span><i>${l >= 5 ? "max" : l ? `raise: ${cost} ✦ (right-click or Shift-click)` : `unlock: ${cost} ✦`}</i></button>`; }).join("") + `</div>`; } }
   if (U.tab === 2) h += `<p>Written once, kept for ever. Shards (◈) come from every trial and guardian.</p><div class="g">` + Object.entries(MIRROR).map(([k, q]) => { const l = mir(k), mx = l >= q[2], cost = mx ? 0 : q[3][l]; return `<button data-mir="${k}" ${mx || M.shards < cost ? "disabled" : ""}><b>${q[0]} ${"●".repeat(l)}${"○".repeat(q[2] - l)}</b><br><span style="font-weight:400;opacity:.85">${q[1]}</span><br><i style="font-style:normal;color:#ffd27a">${mx ? "complete" : cost + " ◈"}</i></button>`; }).join("") + `</div>`;
   if (U.tab === 3) { const p = PANS[U.pan], met = p.gods.filter(g => M.codex[g.id]).length, all = Object.keys(M.codex).length; h += `<div class="tabs"><button data-pan="-1">◀</button><b style="font:400 20px Georgia,serif;color:#fff;min-width:230px;text-align:center">${esc(p.name)} gods</b><button data-pan="1">▶</button><span style="opacity:.8">${p.gods.length} gods · ${met} have blessed you · ${all} of ${GODS.length.toLocaleString()} met in all</span></div><div class="gods">` + p.gods.map(g => `<div class="gd${M.codex[g.id] ? "" : " no"}" title="${esc(domOf(g).n)}${dom2Of(g) ? " · " + esc(dom2Of(g).n) : ""}"><img src="${sigilURL(g)}" alt="" loading="lazy"><div><b>${esc(g.n)}</b><span>${esc(g.e)}</span></div></div>`).join("") + `</div>`; }
   u.codex.innerHTML = h; };
@@ -10880,6 +10901,7 @@ const key = (me, code) => { const P = me && me.pn; if (!P) return false;
   if (code === "KeyI" || code === "Digit6") return call(me);
   if (code === "KeyO" || code === "Digit0" || code === "Period") { openCodex(me); return true; }
   if (code === "KeyE" && interact(me)) return true;
+  if (code === "KeyR" || code === "KeyT") { const used = armArt(me); if (armOf(me) === "bow") return true; return false && used; }
   return false; };
 const restore0 = window.hxRestore;
 window.hxRestore = me => { try { restore0 && restore0(me); } finally { try { init(me); } catch (e) { warn(e); } } };

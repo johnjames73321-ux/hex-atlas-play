@@ -94,7 +94,9 @@ const castHit = (me, at, b, k = 1) => { const M = mods(me), p = b ? pot(b) : 1, 
   for (const m of near(me, at, r)) { hurt(me, m, dmg, c, 1); if (d) strike(me, m, d, power(me) * 1.2 * p * k, "C"); } };
 const castTick = (me, dt) => { const P = me.pn, Rn = R(), mx = castMax(me); P.castCd = Math.max(0, (P.castCd || 0) - dt);
   if (Rn.cast < mx) { P.castT = (P.castT || 0) + dt; if (P.castT >= 2.6) { P.castT = 0; Rn.cast++; } } else { P.castT = 0; if (Rn.cast > mx) Rn.cast = mx; }
-  for (let i = P.shots.length - 1; i >= 0; i--) { const s = P.shots[i], q = s.o.position; s.t += dt; q.addScaledVector(s.v, dt); s.o.rotation.y += dt * 9; let hit = s.t >= s.life || q.y < me.H(q.x, q.z) + .15;
+  for (let i = P.shots.length - 1; i >= 0; i--) { const s = P.shots[i], q = s.o.position; s.t += dt; q.addScaledVector(s.v, dt);
+    if (s.pierce) { for (const m of me.mobs) { if (!alive(m) || s.pierce.has(m)) continue; const c = mp(m); if (Math.hypot(c.x - q.x, c.z - q.z) < rad(m) + 1.5 && Math.abs(q.y - c.y - 1) < 3 + m.a[2] * GSC) { s.pierce.add(m); try { s.onHit(m); } catch (e) { warn(e); } } } if (s.t >= s.life) { me.scene.remove(s.o); P.shots.splice(i, 1); } continue; }
+    s.o.rotation.y += dt * 9; let hit = s.t >= s.life || q.y < me.H(q.x, q.z) + .15;
     if (!hit) for (const m of me.mobs) { if (!alive(m)) continue; const c = mp(m); if (Math.hypot(c.x - q.x, c.z - q.z) < rad(m) + .55 && q.y > c.y - .6 && q.y < c.y + m.a[2] * GSC + 1) { hit = 1; break; } }
     if (hit) { me.scene.remove(s.o); P.shots.splice(i, 1); if (s.t < s.life || s.b) castHit(me, q.clone(), s.b, s.k); } } };
 

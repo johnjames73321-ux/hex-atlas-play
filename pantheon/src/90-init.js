@@ -29,6 +29,7 @@ const key = (me, code) => { const P = me && me.pn; if (!P) return false;
   if (code === "KeyI" || code === "Digit6") return call(me);
   if (code === "KeyO" || code === "Digit0" || code === "Period") { openCodex(me); return true; }
   if (code === "KeyE" && interact(me)) return true;
+  if (code === "KeyR" || code === "KeyT") { const used = armArt(me); if (armOf(me) === "bow") return true; return false && used; }
   return false; };
 const restore0 = window.hxRestore;
 window.hxRestore = me => { try { restore0 && restore0(me); } finally { try { init(me); } catch (e) { warn(e); } } };
