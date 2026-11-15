@@ -38,6 +38,7 @@ const CSS = `
 #pnOffer,#pnDeath{position:absolute;inset:0;z-index:62;display:grid;place-items:center;align-content:center;gap:14px;background:radial-gradient(ellipse at center,rgba(6,7,16,.72),rgba(3,3,8,.93));color:#eef0ff;font-family:system-ui,sans-serif;padding:14px;box-sizing:border-box;overflow:auto;animation:pnFade .25s}
 #pnOffer[hidden],#pnDeath[hidden],#pnCodex[hidden]{display:none}@keyframes pnFade{from{opacity:0}}
 #pnOffer .h{display:grid;justify-items:center;gap:2px;text-align:center}#pnOffer .h img{width:112px;height:112px;filter:drop-shadow(0 0 16px var(--c))}
+#pnOffer .h img{animation:pnGlow 2.2s ease-in-out infinite alternate}@keyframes pnGlow{from{transform:scale(1)}to{transform:scale(1.07);filter:drop-shadow(0 0 30px var(--c))}}
 #pnOffer .h small{font:700 11px system-ui;letter-spacing:.34em;text-transform:uppercase;color:var(--c)}#pnOffer h2{margin:0;font-size:clamp(28px,4.6vw,46px);text-transform:uppercase;color:#fff;text-shadow:0 0 22px var(--c)}
 #pnOffer .h p{margin:2px 0 0;font:13px system-ui;opacity:.75}#pnOffer .h q{font:italic 15px "Palatino Linotype",Georgia,serif;opacity:.9;margin-top:4px;max-width:560px}
 #pnOffer .cs{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;max-width:100%}
@@ -73,6 +74,7 @@ const ensureUI = () => { const sv = $("sv"); if (!sv) return null; if (ui && ui.
   ui.prompt.hidden = ui.offer.hidden = ui.codex.hidden = ui.death.hidden = true;
   for (const e of [ui.offer, ui.codex, ui.death]) e.addEventListener("pointerdown", ev => ev.stopPropagation());
   ui.offer.addEventListener("click", ev => { const me = cur(); if (!me) return; const c = ev.target.closest("[data-i]"); if (c) offerPick(me, +c.dataset.i, true); });
+  ui.offer.addEventListener("mousemove", ev => { const me = cur(), U = me && me.pn && me.pn.ui, c = ev.target.closest("[data-i]"); if (U && U.type === "offer" && c && +c.dataset.i !== U.sel && !document.pointerLockElement) offerSel(me, +c.dataset.i); });
   ui.death.addEventListener("click", () => { const me = cur(); if (me) closeUI(me); });
   ui.codex.addEventListener("click", ev => { const me = cur(); if (!me) return; const b = ev.target.closest("button"); if (b) codexClick(me, b, ev.shiftKey || undefined); });
   const cmp = $("pnCmp"); ui.card = []; for (let a = 0; a < 360; a += 45) { const e = document.createElement("i"); e.className = "c"; e.textContent = { 0: "N", 90: "E", 180: "S", 270: "W" }[a] || "·"; cmp.appendChild(e); ui.card.push([a * Math.PI / 180, e]); }
@@ -92,7 +94,7 @@ const hudTick = (me, dt) => { const u = ensureUI(), P = me.pn, W = P.W; if (!u) 
   for (const [a, e] of u.card) { const rel = wrapA(a - cf); e.style.transform = `translateX(${(wC / 2 - rel * K - 6).toFixed(0)}px)`; e.style.opacity = Math.abs(rel) < 1.3 ? .55 : 0; }
   if (W) for (const s of W.sh) { if (s.state === "done" && s.kind !== "door") continue; let e = u.pool[n]; if (!e) { e = document.createElement("i"); e.className = "s"; $("pnCmp").appendChild(e); u.pool[n] = e; } n++;
     const dx = s.x - me.pos.x, dz = s.z - me.pos.z, d = Math.hypot(dx, dz), rel = clamp(wrapA(Math.atan2(dx, dz) - cf), -1.25, 1.25), key = s.kind + s.i + Math.round(d / 5);
-    if (e.k !== key) { e.k = key; e.innerHTML = `${{ god: "✦", cache: "❖", well: "◉", guard: "☠", door: "⛩" }[s.kind]}<small>${Math.round(d)}</small>`; e.style.color = colOf(s); } e.style.display = ""; e.style.transform = `translateX(${(wC / 2 - rel * K - 12).toFixed(0)}px)`; }
+    if (e.k !== key) { e.k = key; e.innerHTML = `${{ god: "✦", cache: "❖", well: "◉", guard: "☠", door: "⛩", rift: "✺" }[s.kind]}<small>${Math.round(d)}</small>`; e.style.color = colOf(s); } e.style.display = ""; e.style.transform = `translateX(${(wC / 2 - rel * K - 12).toFixed(0)}px)`; }
   for (let i = n; i < u.pool.length; i++) u.pool[i].style.display = "none";
   // names over the shrines in view
   let ln = 0; const pv = PRJ.v || (PRJ.v = new me.T.Vector3()), sv = $("sv"); if (W && !P.ui) for (const s of W.sh) { if (s.state === "done" && s.kind !== "door") continue; const d = Math.hypot(s.x - me.pos.x, s.z - me.pos.z); if (d > 95 || d < 5) continue; pv.set(s.x, s.y + (s.kind === "door" ? 5.6 : 5.2), s.z).project(me.cam); if (pv.z > 1 || Math.abs(pv.x) > 1.05 || Math.abs(pv.y) > 1.05) continue;
@@ -105,7 +107,7 @@ const hudTick = (me, dt) => { const u = ensureUI(), P = me.pn, W = P.W; if (!u) 
   const cb = boonIn("G"), gc = cb ? DOM[CAT[cb.id].dom].c : "#8a8fa8", gEl = $("pnGauge"); gEl.firstChild.style.width = Rn.gauge + "%"; gEl.firstChild.style.background = gc; gEl.style.color = gc; gEl.classList.toggle("full", Rn.gauge >= 100);
   $("pnGod").textContent = cb ? `I · ${GOD[cb.god] ? GOD[cb.god].n : "Call"}` : "no Call"; $("pnGod").style.color = gc;
   const sig = Rn.boons.map(b => b.id + b.lv + b.rar).join(",") + "|" + Rn.forge.length;
-  if (P.boonSig !== sig) { P.boonSig = sig; const slots = ["A", "S", "C", "D", "G"].map(sl => { const b = boonIn(sl); return b ? `<div class="b" title="${esc(boonName(b))}" style="background-image:url(${sigilURL(GOD[b.god] || GODS[0])});border-color:${RAR[b.rar].c}"><kbd>${sl === "A" ? "LMB" : sl === "S" ? "R" : sl === "C" ? "U" : sl === "D" ? "⇧⇧" : "I"}</kbd>${b.lv > 1 ? `<em>${b.lv}</em>` : ""}</div>` : `<div class="b">${SLOT[sl].slice(0, 3)}</div>`; }).join("");
+  if (P.boonSig !== sig) { P.boonSig = sig; glow(me); const slots = ["A", "S", "C", "D", "G"].map(sl => { const b = boonIn(sl); return b ? `<div class="b" title="${esc(boonName(b))}" style="background-image:url(${sigilURL(GOD[b.god] || GODS[0])});border-color:${RAR[b.rar].c}"><kbd>${sl === "A" ? "LMB" : sl === "S" ? "R" : sl === "C" ? "U" : sl === "D" ? "⇧⇧" : "I"}</kbd>${b.lv > 1 ? `<em>${b.lv}</em>` : ""}</div>` : `<div class="b">${SLOT[sl].slice(0, 3)}</div>`; }).join("");
     const ps = Rn.boons.filter(b => CAT[b.id].slot === "P"); $("pnBoons").innerHTML = slots + ps.slice(0, 7).map(b => `<div class="b p" title="${esc(boonName(b))}" style="background-image:url(${sigilURL(GOD[b.god] || GODS[0])});border-color:${RAR[b.rar].c}">${b.lv > 1 ? `<em>${b.lv}</em>` : ""}</div>`).join("") + (ps.length > 7 ? `<span class="more">+${ps.length - 7}</span>` : "") + (Rn.forge.length ? `<span class="more">⚒${Rn.forge.length}</span>` : ""); }
   u.cur.innerHTML = `<b>Depth ${roman(Rn.depth)}</b><span title="Shards">◈ ${st.meta.shards}</span><span title="Ichor">✦ ${st.meta.ichor}</span>${Rn.rr > 0 ? `<span title="Rerolls">⟳ ${Rn.rr}</span>` : ""}`;
   const boss = $("pnBoss"), Tr = W && W.trial, G = W && W.G, tm = G ? G.m : P.tgtT > 0 && P.tgt && !P.tgt.dead && (P.tgt.champ || P.tgt.boss) ? P.tgt : null;
@@ -161,6 +163,6 @@ const codexClick = (me, b, alt) => { const U = me.pn.ui, M = st.meta; if (!U) re
     if (!l || (alt && l < 5)) { const cost = ASPCOST[l]; if (M.ichor >= cost) { M.ichor -= cost; A[id] = l + 1; M.aspSel[arm] = id; sfx(me, "anvil"); } else { sfx(me, "no"); me.say(`Needs ${cost} Ichor (✦). Guardians drop it; wells sell it.`, 2200); } } else { M.aspSel[arm] = id; sfx(me, "pick"); }
     dirty(); save(); }
   drawCodex(me); };
-const codexKey = (me, code) => { const U = me.pn.ui; if (code === "KeyO" || code === "Escape") { closeUI(me); return true; } const n = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 }[code]; if (n != null) { U.tab = n; drawCodex(me); sfx(me, "pick"); return true; }
+const codexKey = (me, code) => { const U = me.pn.ui; if (code === "KeyO" || code === "Escape" || code === "Digit0" || code === "Period") { closeUI(me); return true; } const n = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 }[code]; if (n != null) { U.tab = n; drawCodex(me); sfx(me, "pick"); return true; }
   if (U.tab === 3 && (code === "ArrowLeft" || code === "ArrowRight")) { U.pan = (U.pan + (code === "ArrowLeft" ? -1 : 1) + PANS.length) % PANS.length; drawCodex(me); } return true; };
 document.addEventListener("contextmenu", e => { const b = e.target.closest && e.target.closest("#pnCodex button[data-asp]"); if (b) { e.preventDefault(); const me = cur(); if (me) codexClick(me, b, true); } });

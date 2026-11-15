@@ -7,7 +7,7 @@ const st = (() => { let s = {}; try { s = JSON.parse(localStorage.getItem(SKEY) 
   s.meta = Object.assign({ shards: 0, ichor: 0, mirror: {}, asp: {}, aspSel: {}, codex: {}, best: 0, runs: 0, wins: 0, seen: 0, opt: {} }, s.meta || {}); if (!s.run) s.run = null; return s; })();
 let saveT = 0; const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(SKEY, JSON.stringify(st)); } catch (e) {} }, 300); };
 const mir = k => st.meta.mirror[k] || 0;
-const newRun = () => ({ seed: (Math.random() * 2 ** 31) | 0, boons: [], depth: 0, lands: {}, nLands: 0, kills: 0, t0: Date.now(), cleared: {}, forge: [], hearts: 0, def: mir("breath"), rr: mir("dice"), gauge: 0, cast: 3 + mir("quiver"), gods: {}, dealt: 0, taken: 0, guardians: 0, lv: 0 });
+const newRun = () => ({ seed: (Math.random() * 2 ** 31) | 0, boons: [], depth: 0, lands: {}, nLands: 0, kills: 0, t0: Date.now(), cleared: {}, forge: [], hearts: 0, def: 1 + mir("breath"), rr: mir("dice"), gauge: 0, cast: 3 + mir("quiver"), gods: {}, dealt: 0, taken: 0, guardians: 0, lv: 0 });
 const R = () => st.run || (st.run = newRun());
 PN.st = st; PN.save = save; PN.dirty = () => dirty();
 

@@ -1,7 +1,7 @@
 /* Wiring: once per land (window.hxRestore), keys (window.hxKey), one function per frame (me.ps). Every entry point
    is wrapped, so a fault in this layer can never stop the game underneath. */
 const tick = (me, dt, t) => { const P = me.pn, rdt = clamp(t - (P.lastT || t), 0, .05); P.lastT = t;
-  if (P.ui && P.ui.type !== "codex") me.stopT = Math.max(me.stopT || 0, .12);
+  if (P.ui) me.stopT = Math.max(me.stopT || 0, .12);
   combatTick(me, dt); worldTick(me, dt, t); fxTick(me, rdt, t); hudTick(me, rdt); };
 const reoffer = me => { const o = R().owed; if (!o || me.pn.ui) return; if (o.k === "gods") { const gs = o.ids.map(id => GOD[id]).filter(Boolean); if (gs.length) offerBoons(me, gs, o.boost || 0); else delete R().owed; } else if (o.k === "laurel") offerLaurel(me); else if (o.k === "anvil") offerAnvil(me); };
 const init = me => {
@@ -26,8 +26,8 @@ const init = me => {
 const key = (me, code) => { const P = me && me.pn; if (!P) return false;
   if (P.ui) return uiKey(me, code);
   if (code === "KeyU" || code === "CapsLock") return cast(me);
-  if (code === "KeyI") return call(me);
-  if (code === "KeyO") { openCodex(me); return true; }
+  if (code === "KeyI" || code === "Digit6") return call(me);
+  if (code === "KeyO" || code === "Digit0" || code === "Period") { openCodex(me); return true; }
   if (code === "KeyE" && interact(me)) return true;
   return false; };
 const restore0 = window.hxRestore;

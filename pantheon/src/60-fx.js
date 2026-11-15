@@ -17,6 +17,8 @@ const fxRoots = (me, p, c) => { const T = me.T, g = new T.Group(); for (let i = 
 const fxBeast = (me, m, c) => { const T = me.T, a = new T.Vector3(me.pos.x, me.pos.y + 1, me.pos.z), b = head(me, m), s = new T.Sprite(new T.SpriteMaterial({ map: glowTex(me), color: new T.Color(c), transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false })); s.scale.set(3.4, 1.5, 1); fxAdd(me, s, .24, k => { s.position.lerpVectors(a, b, Math.min(1, k / .7)); s.material.opacity = k > .7 ? 1 - (k - .7) / .3 : .95; }); };
 const fxRift = (me, p, c) => { geo(me); const T = me.T, o = new T.Mesh(SPHG, new T.MeshBasicMaterial({ color: 0x12001f, transparent: true, opacity: .92, fog: false })); o.position.set(p.x, p.y + 1, p.z); fxAdd(me, o, .45, k => { o.scale.setScalar(1 + Math.sin(k * Math.PI) * 9); o.material.opacity = .92 * (1 - k * k); }); fxRing(me, p, c, 2.8, .45); };
 const fxOrb = (me, c, sc = 1) => { geo(me); const T = me.T, g = new T.Group(), a = new T.Mesh(SPHG, new T.MeshBasicMaterial({ color: 0xffffff, fog: false })), s = new T.Sprite(new T.SpriteMaterial({ map: glowTex(me), color: new T.Color(c), transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false })); s.scale.setScalar(1.9); g.add(a, s); g.scale.setScalar(sc); me.scene.add(g); return g; };
+const fxApparition = (me, s) => { const T = me.T, sp = new T.Sprite(new T.SpriteMaterial({ map: sigilTex(me, s), transparent: true, depthWrite: false, fog: false, opacity: .85 })); sp.position.set(s.x, s.y + 3.1, s.z); fxAdd(me, sp, 1.9, k => { const e = 1 - (1 - k) ** 2; sp.scale.setScalar(2.6 + e * 9); sp.position.y = s.y + 3.1 + e * 5; sp.material.opacity = .85 * (1 - k); }); fxRing(me, new T.Vector3(s.x, s.y, s.z), colOf(s), 9, 1.1); };
+const glow = me => { try { const b = boonIn("A"), c = new me.T.Color(b ? DOM[CAT[b.id].dom].c : "#000000").multiplyScalar(b ? .45 : 0), sw = me.hero && me.hero.sword; if (sw) sw.traverse(o => { if (o.material && o.material.emissive) o.material.emissive.copy(c); }); } catch (e) {} };
 const fxText = (me, p, text, color) => { const sv = $("sv"); if (!sv) return; const el = document.createElement("div"); el.className = "pnTx"; el.textContent = text; el.style.color = color || "#fff"; sv.appendChild(el); me.pn.tx.push({ el, p: p.clone(), t: 0 }); };
 const PRJ = { v: null };
 const fxTick = (me, dt, t) => { const P = me.pn, T = me.T;
@@ -92,7 +94,7 @@ const sigilURL = g => g.url || (g.url = godSigil(g).toDataURL());
 const DSU = new Map();
 const domSigilURL = (art, d) => { const k = art + ":" + d; if (!DSU.has(k)) DSU.set(k, sigil("dom:" + k, d, art, DOM[d].c, DOM[d].c2).toDataURL()); return DSU.get(k); };
 const TEXC = new Map();
-const sigilTex = (me, s) => { const art = me.pn.W.info.pan.art, cv = s.kind === "god" ? godSigil(s.god) : s.kind === "cache" ? sigil("cache:" + s.reward + art, s.reward, art, "#ffd27a", "#fff1c4") : sigil("guard:" + art, "beast", art, "#ff5a3a", "#ffb09a");
+const sigilTex = (me, s) => { const art = me.pn.W.info.pan.art, cv = s.kind === "god" ? godSigil(s.god) : s.kind === "cache" ? sigil("cache:" + s.reward + art, s.reward, art, "#ffd27a", "#fff1c4") : s.kind === "rift" ? sigil("rift:" + art, "Z", art, DOM.Z.c, "#dcbcff") : sigil("guard:" + art, "beast", art, "#ff5a3a", "#ffb09a");
   if (!TEXC.has(cv)) TEXC.set(cv, new me.T.CanvasTexture(cv)); return TEXC.get(cv); };
 
 // ---------- sound ----------

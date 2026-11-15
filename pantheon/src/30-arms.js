@@ -63,7 +63,7 @@ const FORGE = {
 
 // The Tablet of Destinies: [name, text, max rank, cost per rank]
 const MIRROR = {
-  breath: ["Second Breath", "Death Defiance: rise once more at half health, each run.", 3, [30, 90, 220]],
+  breath: ["Second Breath", "One more Death Defiance each run (you always have one): rise again at half health.", 3, [30, 90, 220]],
   skin: ["Bronze Skin", "+10 maximum health.", 5, [10, 20, 40, 70, 110]],
   quiver: ["Votive Stones", "+1 Cast.", 2, [25, 70]],
   favour: ["Favoured", "The gods offer rarer boons (+4%).", 5, [15, 30, 50, 80, 120]],

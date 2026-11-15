@@ -14,7 +14,7 @@ window.PT = (() => {
   const dummy = (hp = 60000) => { const m = me(), x = m.spawn("wolf", false, false); x.root.position.set(m.pos.x + 3, m.H(m.pos.x + 3, m.pos.z), m.pos.z); x.hp = x.mx = hp; x.noRe = 1; return x; };
   const give = (id, god = "hellenic:Zeus", rar = 1, lv = 1) => { const Rn = PN().st.run, c = PN().CAT[id]; if (c.slot !== "P") Rn.boons = Rn.boons.filter(b => PN().CAT[b.id].slot !== c.slot); Rn.boons.push({ id, god, rar, lv }); PN().dirty(); };
   const smoke = async (la = 38, lo = 23.7) => { const out = {}; try {
-    out.land = await boot(la, lo).then(i => [i.state, i.people, i.pan.name]); const m = me(), P = PN();
+    out.land = await boot(la, lo).then(i => [i.state, i.people, i.pan.name]); const m = me(), P = PN(); P.st.run.def = 99;
     out.sh = m.pn.W.sh.map(s => s.kind + ":" + (s.god ? s.god.n : s.name || s.reward || ""));
     out.t1 = clearTrial(0); out.cards1 = m.pn.ui && m.pn.ui.cfg.cards.map(c => c.title + " [" + c.tag + "]"); out.n1 = pickCard(0);
     out.t2 = clearTrial(1); out.n2 = pickCard(2); out.patron = P.st.run.patron;

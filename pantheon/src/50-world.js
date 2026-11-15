@@ -33,7 +33,9 @@ const LINES = {
   X: ["It was written that you would come here.", "Fortune loves the reckless. Today."], N: ["The pack runs with you now.", "Teeth and patience. That is all the wild knows."],
   O: ["Good iron wants a good arm.", "Strike while it glows."], Z: ["Before the gods, there was only this.", "Take a piece of the first dark. It bites."]
 };
-const KINDS = { god: "Shrine", cache: "Cache", well: "Well", guard: "Guardian", door: "Passage" };
+const KINDS = { god: "Shrine", cache: "Cache", well: "Well", guard: "Guardian", door: "Passage", rift: "Rift" };
+const THANKS = { S: "Now you carry the storm.", W: "Go as water goes.", R: "Good. Make it red.", L: "Wear it well, beloved.", H: "Aim true.", A: "Use it wisely. That is all I ask.", V: "Now we feast!", C: "Feel that? That is patience.", E: "Grow strong.", T: "Don't tell the others.", D: "A fair bargain. I will collect, in time.", U: "Shine.", M: "Carry a little night with you.", F: "Mind you don't burn yourself.", K: "Rule well.", Y: "Be whole.", X: "As it was written.", N: "Run with us.", O: "Fresh from the fire.", Z: "It was always yours." };
+const ascend = me => { const Rn = R(); if (Rn.depth % 5) return; Rn.rr++; later(me, 2.6, () => { banner("Depth " + roman(Rn.depth), "The gods take notice", 2600, "#ffe9a8"); me.say("+1 reroll. The trials grow harder.", 3000); sfx(me, "greet"); }); };
 const neighbours = i => { const out = []; try { for (let d = 0; d < 6; d++) { const j = nb(i, d); if (j >= 0 && D.reg[j] >= 0) out.push(j); } } catch (e) {} return out; };
 const landFlags = me => { const L = R().lands; return L[me.hex] || (L[me.hex] = { c: {}, g: 0 }); };
 
@@ -51,7 +53,7 @@ const worldInit = me => {
   const add = (kind, ang, d, extra) => { const [x, z] = spot(ang, d), s = Object.assign({ kind, i: W.sh.length, x, z, y: Math.max(me.H(x, z), 0), state: F.c[W.sh.length] ? "done" : "idle" }, extra); W.sh.push(s); return s; };
   chosen.forEach((g, k) => add("god", a0 + k * 2.094, 46 + r() * 22, { god: g, patron: g === pat }));
   add("cache", a0 + 1.05, 78 + r() * 16, { reward: ["laurel", "anvil", "heart"][Math.floor(r() * 3)] });
-  add("well", a0 + 3.14, 26 + r() * 8, {});
+  add("well", a0 + 3.14, 26 + r() * 8, {}); if (r() < .55) add("rift", a0 + 5.3, 58 + r() * 30, {});
   const gn = GUARD[info.pan.id] || ["The Beast of the Land"]; add("guard", a0 + 4.2, 112 + r() * 20, { name: gn[Math.floor(r() * gn.length)] }); if (F.g) W.sh[W.sh.length - 1].state = "done";
   W.kinds = [...new Set(me.mobs.filter(m => !m.boss && !m.tame).map(m => m.k))];
   for (const s of W.sh) safeBuild(me, s);
@@ -59,7 +61,7 @@ const worldInit = me => {
   if (mir("start") && !Rn.started) { Rn.started = 1; const g = chosen[0], o = offerFor(me, g, mir("start") > 1 ? .5 : 0, r)[0]; if (o) { takeBoon(me, o, true); later(me, 3.5, () => banner("Head Start", `${boonName(o)} · ${g.n}`, 2600, DOM[CAT[o.id].dom].c)); } }
   Rn.started = 1; save();
 };
-const colOf = s => s.kind === "god" ? domOf(s.god).c : s.kind === "cache" ? "#ffd27a" : s.kind === "well" ? "#7fe6ff" : s.kind === "guard" ? "#ff5a3a" : "#c9a6ff";
+const colOf = s => s.kind === "god" ? domOf(s.god).c : s.kind === "cache" ? "#ffd27a" : s.kind === "well" ? "#7fe6ff" : s.kind === "guard" ? "#ff5a3a" : s.kind === "rift" ? DOM.Z.c : "#c9a6ff";
 const safeBuild = (me, s) => { try { build(me, s); } catch (e) { warn(e); } };
 const build = (me, s) => {
   const T = me.T, g = new T.Group(), c = new T.Color(colOf(s)), done = s.state === "done"; g.position.set(s.x, s.y, s.z); s.grp = g;
@@ -74,12 +76,13 @@ const build = (me, s) => {
   me.scene.add(g);
 };
 const dim = (me, s) => { s.state = "done"; if (s.beam) { s.grp.remove(s.beam); s.beam = null; } if (s.orb && s.orb.material) s.orb.material.opacity = .28; if (s.glow) s.glow.material.opacity = 0; if (s.ring) s.ring.material.opacity = .15; if (s.kind !== "guard" && s.kind !== "door") { landFlags(me).c[s.i] = 1; save(); } };
-const label = s => s.kind === "god" ? `${s.god.n}, ${s.god.e}` : s.kind === "cache" ? ({ laurel: "Laurel of the Victor", anvil: "The Anvil", heart: "Heart of the Land" })[s.reward] : s.kind === "well" ? "The Well of Offerings" : s.kind === "guard" ? s.name : `Passage to ${s.to.state || s.to.place || "the wilds"}`;
+const label = s => s.kind === "god" ? `${s.god.n}, ${s.god.e}` : s.kind === "cache" ? ({ laurel: "Laurel of the Victor", anvil: "The Anvil", heart: "Heart of the Land" })[s.reward] : s.kind === "well" ? "The Well of Offerings" : s.kind === "rift" ? "Rift of the First Dark" : s.kind === "guard" ? s.name : `Passage to ${s.to.state || s.to.place || "the wilds"}`;
 const prompt = (me, s) => { const W = me.pn.W;
   if (W.trial) return null; if (s.state === "done") return s.kind === "well" ? "The well is dry" : null;
   if (s.kind === "god") return `E · Accept the trial of ${s.god.n}${s.patron ? " (your patron)" : ""}`;
   if (s.kind === "cache") return `E · Fight for ${label(s)}`;
   if (s.kind === "well") return "E · Make an offering at the well";
+  if (s.kind === "rift") return "E · Reach into the rift: 20 health for the gift of a far-off god";
   if (s.kind === "guard") { const need = 2 - W.sh.filter(q => q.kind === "god" && q.state === "done").length; return need > 0 ? `Sealed · clear ${need} more shrine${need > 1 ? "s" : ""} to wake ${s.name}` : `E · Wake ${s.name}`; }
   return `E · ${label(s)} · ${s.to.pan.name} gods`; };
 
@@ -88,7 +91,7 @@ const kindsOf = me => { const W = me.pn.W; let ks = W.kinds.filter(k => { try { 
 const heat = () => R().depth;
 const summon = (me, s, k, elite) => { let m = null; try { m = me.spawn(k, false, false); } catch (e) { warn(e); } if (!m) return null;
   for (let t = 0; t < 12; t++) { const a = Math.random() * 6.283, d = 11 + Math.random() * 9, x = s.x + Math.cos(a) * d, z = s.z + Math.sin(a) * d; if (me.H(x, z) > .2) { m.root.position.set(x, me.H(x, z), z); break; } }
-  const h = heat(), c = colOf(s); m.noRe = 1; m.angry = 999; m.pnT = 1; m.hp = m.mx = m.mx * (1 + .1 * h) * (elite ? 1.25 : .5); m.a[7] *= (1 + .05 * h) * (elite ? 1.25 : 1); m.a[8] = 999;
+  const h = heat(), c = colOf(s); m.noRe = 1; m.angry = 999; m.pnT = 1; m.hp = m.mx = m.mx * (1 + .1 * h) * (elite ? 1.25 : .5); m.a[7] *= (h < 3 ? .8 : 1) * (1 + .05 * h) * (elite ? 1.25 : 1); m.a[8] = 999;
   if (elite) { m.champ = 1; m.pnC = "#ffd23a"; m.root.scale.multiplyScalar(1.22); m.a[9] = "Champion " + m.a[9]; m.root.traverse(o => { if (o.material && o.material.emissive) o.material.emissive.setHex(0x3a2a00); }); }
   fxPillar(me, mp(m).clone(), c, 18, .5); fxRing(me, mp(m), c, 2, .4); return m; };
 const startTrial = (me, s) => { const W = me.pn.W, ks = kindsOf(me); if (!ks.length) { complete(me, s); return; }
@@ -97,12 +100,13 @@ const startTrial = (me, s) => { const W = me.pn.W, ks = kindsOf(me); if (!ks.len
   const nm = s.kind === "god" ? s.god.n : label(s); banner(s.kind === "god" ? "Trial of" : "Trial", nm, 2200, colOf(s)); sfx(me, "trial"); musicMood(me, 1); nextWave(me); };
 const nextWave = me => { const W = me.pn.W, Tr = W.trial, s = Tr.s; Tr.wave++; const last = Tr.wave === Tr.waves, n = Math.min(6, 2 + Math.floor(heat() / 4) + (Tr.wave > 1 ? 1 : 0));
   for (let i = 0; i < n; i++) { const m = summon(me, s, pick(Tr.ks), false); if (m) Tr.ms.push(m); }
-  if (last) { const m = summon(me, s, pick(Tr.ks), true); if (m) Tr.ms.push(m); }
+  if (last) { const m = summon(me, s, pick(Tr.ks), true); if (m) { Tr.ms.push(m); if (heat() >= 3) { Tr.aff = { m, t: 3 }; m.a[9] = "Blessed " + m.a[9]; m.pnC = colOf(s); } } }
   if (Tr.wave > 1) { banner("", last ? "The champion comes" : "They come again", 1400, colOf(s)); sfx(me, "wave2"); } };
 const worldKill = (me, m) => {};
 const trialTick = (me, dt) => { const W = me.pn.W, Tr = W.trial; if (!Tr) return; Tr.t += dt;
   let left = 0; for (const m of Tr.ms) { if (m.dead || !me.mobs.includes(m)) continue; left++; if (m.angry < 60) m.angry = 999; }
   Tr.left = left; if (Tr.arena) Tr.arena.material.opacity = .35 + Math.sin(me.tnow * 3) * .15;
+  if (Tr.aff && alive(Tr.aff.m) && !(Tr.aff.m.stun > 0) && (Tr.aff.t -= dt) <= 0) { Tr.aff.t = 4.2; const q = mp(Tr.aff.m); telegraph(me, q.x, q.z, 5.2, 1, 12, Tr.aff.m.a[9], colOf(Tr.s)); }
   if (Tr.haz && left > 0 && (Tr.hz -= dt) <= 0) { Tr.hz = Math.max(3, 5.5 - heat() * .12); const s = Tr.s, c = colOf(s), who = s.god.n, md = me.mdir || [0, 0], mv = me.moving ? 1 : 0;
     if (Tr.haz === "strike") for (let i = 0; i < 2 + (heat() > 5 ? 1 : 0); i++) telegraph(me, me.pos.x + md[0] * mv * i * 3 + (Math.random() - .5) * (i ? 5 : 1), me.pos.z + md[1] * mv * i * 3 + (Math.random() - .5) * (i ? 5 : 1), 2.4, .9 + i * .2, 9, who, c);
     else if (Tr.haz === "ring") telegraph(me, me.pos.x, me.pos.z, 6.2, 1.5, 11, who, c);
@@ -110,7 +114,7 @@ const trialTick = (me, dt) => { const W = me.pn.W, Tr = W.trial; if (!Tr) return
   if (Tr.boss || left > 0 || Tr.t < .6) return;
   if (Tr.wave < Tr.waves) { Tr.t = 0; later(me, .7, () => { if (me.pn.W.trial === Tr) nextWave(me); }); Tr.ms = []; Tr.t = -1; return; }
   W.trial = null; if (Tr.arena) { me.scene.remove(Tr.arena); Tr.arena.geometry.dispose(); Tr.arena.material.dispose(); } for (const q of W.tele) me.scene.remove(q.a, q.b); W.tele = []; for (const o of W.orbs) me.scene.remove(o.o); W.orbs = []; complete(me, Tr.s); };
-const complete = (me, s) => { const Rn = R(), M = mods(me), c = colOf(s); Rn.depth++; st.meta.best = Math.max(st.meta.best, Rn.depth); dim(me, s);
+const complete = (me, s) => { const Rn = R(), M = mods(me), c = colOf(s); Rn.depth++; ascend(me); st.meta.best = Math.max(st.meta.best, Rn.depth); dim(me, s);
   const sh = Math.round((3 + Rn.depth * .6) * (1 + M.coin)); st.meta.shards += sh; Rn.shards = (Rn.shards || 0) + sh; me.dropCoins && me.dropCoins(new me.T.Vector3(s.x, s.y, s.z), Math.round((14 + 3 * Rn.depth) * (1 + M.coin)));
   if (M.trialHeal) heal(me, M.trialHeal); me.slowT = .9; me.shake = .3; banner("Trial cleared", `+${sh} shards`, 1700, c); sfx(me, "clear"); musicMood(me, 0); fxRing(me, new me.T.Vector3(s.x, s.y, s.z), c, 14, .9); save();
   later(me, 1.25, () => reward(me, s)); };
@@ -130,7 +134,7 @@ const offerFor = (me, g, boost = 0, r = Math.random) => { const own = R().boons,
   return out; };
 const takeBoon = (me, o, quiet) => { const Rn = R(), c = CAT[o.id]; if (c.slot !== "P") Rn.boons = Rn.boons.filter(b => CAT[b.id].slot !== c.slot); Rn.boons.push({ id: o.id, god: o.god, rar: o.rar, lv: o.lv || 1 }); Rn.gods[o.god] = (Rn.gods[o.god] || 0) + 1; st.meta.codex[o.god] = (st.meta.codex[o.god] || 0) + 1; dirty(); save();
   if (!Rn.patron && GOD[o.god]) { Rn.patron = o.god; const g = GOD[o.god]; later(me, quiet ? 5 : 1.2, () => { banner("Your patron", g.n, 2600, domOf(g).c); me.say(`${g.n} is your patron for this run: a shrine of ${g.n} will wait in every land you enter.`, 6000); }); }
-  if (!quiet) { const d = DOM[c.dom]; sfx(me, "boon"); fxPillar(me, me.pos.clone(), d.c, 30, .9, 1.1); fxRing(me, me.pos, d.c, 6, .6); fxBurst(me, me.pos.clone().setY(me.pos.y + 1.2), d.c, 26); } };
+  if (!quiet) { const d = DOM[c.dom], g = GOD[o.god], first = st.meta.codex[o.god] === 1; if (g) later(me, .7, () => me.say(`${g.n}: “${THANKS[g.d[0]] || THANKS.Z}”${first ? `  ·  new god met (${Object.keys(st.meta.codex).length} of ${GODS.length.toLocaleString()})` : ""}`, 4200)); sfx(me, "boon"); fxPillar(me, me.pos.clone(), d.c, 30, .9, 1.1); fxRing(me, me.pos, d.c, 6, .6); fxBurst(me, me.pos.clone().setY(me.pos.y + 1.2), d.c, 26); } };
 const cardOf = (me, o) => { const c = CAT[o.id], g = GOD[o.god], d = DOM[c.dom], old = c.slot !== "P" && boonIn(c.slot);
   return { img: domSigilURL(PANBY[g.pan].art, c.dom), title: boonName(o), tag: `${RAR[o.rar].n} · ${c.slot === "P" ? "Blessing" : SLOT[c.slot] + " · " + SLOTKEY[c.slot]}`, text: boonText(o), color: d.c, rc: RAR[o.rar].c, god: g, note: old ? `Replaces ${boonName(old)}` : "", dom: d }; };
 const offerBoons = (me, gods, boost, s) => { const mk = () => { let os = []; if (gods.length === 1) os = offerFor(me, gods[0], boost); else for (const g of gods) { const o = offerFor(me, g, boost)[0]; if (o) os.push(o); }
@@ -150,7 +154,7 @@ const offerAnvil = me => { R().owed = { k: "anvil" }; const ks = Object.keys(FOR
 const openWell = (me, s) => { const Rn = R(), r = rngOf(hash(Rn.seed + "|well|" + me.hex)), h = heat(), g = pick(me.pn.W.info.pan.gods, r);
   const all = [{ n: "Draught of the Spring", t: "Restore 40 health.", cost: 30, go: () => heal(me, 40) }, { n: "Votive Laurel", t: "Raise a random boon by a level.", cost: 80 + 6 * h, ok: () => R().boons.some(b => b.lv < 5), go: () => { const b = pick(R().boons.filter(b => b.lv < 5)); if (b) levelUp(me, b); } },
     { n: `Favour of ${g.n}`, t: `A boon of ${g.n}, ${g.e}.`, cost: 70 + 8 * h, go: () => { const o = offerFor(me, g, .1)[0]; if (o) { takeBoon(me, o); banner(boonName(o), g.n, 2400, DOM[CAT[o.id].dom].c); } } },
-    { n: "Heart of the Land", t: "+25 maximum health.", cost: 120 + 10 * h, go: () => { R().hearts++; dirty(); heal(me, 25); } }, { n: "Whetstone of the Smiths", t: "A random Anvil mark.", cost: 110 + 8 * h, ok: () => Object.keys(FORGE).some(k => !R().forge.includes(k)), go: () => { const k = pick(Object.keys(FORGE).filter(k => !R().forge.includes(k))); R().forge.push(k); if (FORGE[k].now) FORGE[k].now(); dirty(); banner(FORGE[k].n, FORGE[k].t, 2600, "#c9d2e4"); } },
+    { n: "Heart of the Land", t: "+25 maximum health.", cost: 120 + 10 * h, go: () => { R().hearts++; dirty(); heal(me, 25); } }, { n: "Whetstone of the Smiths", t: "A random Anvil mark.", cost: 110 + 8 * h, ok: () => Object.keys(FORGE).some(k => !R().forge.includes(k)), go: () => { const k = pick(Object.keys(FORGE).filter(k => !R().forge.includes(k))); R().forge.push(k); if (FORGE[k].now) FORGE[k].now(); dirty(); banner("Anvil mark", FORGE[k].n, 2600, "#c9d2e4"); me.say(FORGE[k].t, 4000); } },
     { n: "Ichor of the Gods", t: "+1 Ichor, to raise an Aspect of your arms (O).", cost: 200, go: () => { st.meta.ichor++; } }];
   const items = all.sort(() => r() - .5).slice(0, 3), bought = s.bought || (s.bought = {});
   const show = () => offer(me, { kicker: "The Well of Offerings", title: `${me.prog.coins || 0} coins`, sub: "Cast coin into the water. E or Esc to leave.", color: "#7fe6ff", shop: 1,
@@ -185,7 +189,7 @@ const guardTick = (me, dt) => { const W = me.pn.W, G = W.G;
   else { const md = me.mdir || [0, 0]; for (let i = 0; i < (low ? 5 : 3); i++) telegraph(me, me.pos.x + (me.moving ? md[0] * i * 3.2 : (Math.random() - .5) * 7), me.pos.z + (me.moving ? md[1] * i * 3.2 : (Math.random() - .5) * 7), 2.7, .85 + i * .16, 17, G.s.name); } };
 const guardDown = me => { const W = me.pn.W, G = W.G, s = G.s; W.G = null; for (const q of W.tele) me.scene.remove(q.a, q.b); W.tele = []; for (const o of W.orbs) me.scene.remove(o.o); W.orbs = [];
   if (W.trial) for (const a of W.trial.ms) if (a !== G.m && alive(a)) { a.hp = 0; finish(me, a); } W.trial = null;
-  const Rn = R(); Rn.guardians++; Rn.depth++; st.meta.best = Math.max(st.meta.best, Rn.depth); st.meta.ichor++; const sh = Math.round((15 + 2 * Rn.depth) * (1 + mods(me).coin)); st.meta.shards += sh; Rn.shards = (Rn.shards || 0) + sh; landFlags(me).g = 1; dim(me, s); save();
+  const Rn = R(); Rn.guardians++; Rn.depth++; ascend(me); st.meta.best = Math.max(st.meta.best, Rn.depth); st.meta.ichor++; const sh = Math.round((15 + 2 * Rn.depth) * (1 + mods(me).coin)); st.meta.shards += sh; Rn.shards = (Rn.shards || 0) + sh; landFlags(me).g = 1; dim(me, s); save();
   me.slowT = 1.4; me.shake = .6; banner("Guardian slain", `+1 Ichor · +${sh} shards`, 3000, "#ffd27a"); sfx(me, "victory"); musicMood(me, 0); fxRing(me, new me.T.Vector3(s.x, s.y, s.z), "#ffd27a", 22, 1.2);
   later(me, 2.2, () => guardReward(me, s)); };
 const guardReward = (me, s) => { if (cur() !== me) return; const W = me.pn.W, gs = W.info.pan.gods.slice().sort(() => Math.random() - .5).slice(0, 3); if (s.state !== "done") { landFlags(me).g = 1; dim(me, s); }
@@ -200,13 +204,14 @@ const nearest = me => { const W = me.pn.W; if (!W) return null; let best = null,
 const interact = me => { const s = nearest(me), W = me.pn.W; if (!s || W.trial || s.state === "done" || me.hp <= 0) return false;
   if (s.kind === "god" || s.kind === "cache") startTrial(me, s);
   else if (s.kind === "well") openWell(me, s);
+  else if (s.kind === "rift") { if (me.hp <= 25) { me.say("You are too weak to pay the rift's price.", 2200); sfx(me, "no"); } else { me.pn.invT = 0; me.hp -= 20; me.hurtT = 1; me.hpDraw && me.hpDraw(); fxRift(me, new me.T.Vector3(s.x, s.y + 2, s.z), DOM.Z.c); sfx(me, "rift"); me.shake = .4; dim(me, s); const gs = [0, 1, 2].map(() => GODS[Math.floor(Math.random() * GODS.length)]); later(me, .6, () => offerBoons(me, gs, .35, s)); } }
   else if (s.kind === "guard") { if (W.sh.filter(q => q.kind === "god" && q.state === "done").length < 2) { me.say(prompt(me, s), 2200); sfx(me, "no"); } else wakeGuard(me, s); }
   else travel(me, s);
   return true; };
 const worldTick = (me, dt, t) => { const W = me.pn.W; if (!W) return; trialTick(me, dt); guardTick(me, dt);
   for (const s of W.sh) { if (!s.grp) continue; const d = Math.hypot(s.x - me.pos.x, s.z - me.pos.z);
     if (s.orb && s.kind !== "well") s.orb.position.y = 3.1 + Math.sin(t * 1.8 + s.i) * .22; if (s.ring) s.ring.rotation.z = t * .6 * (s.i % 2 ? 1 : -1); if (s.veil) s.veil.material.opacity = .4 + Math.sin(t * 4 + s.i) * .15;
-    if (s.kind === "god" && s.state === "idle" && d < 16 && !W.greet[s.i]) { W.greet[s.i] = 1; const g = s.god; banner(g.e, g.n, 2600, domOf(g).c); sfx(me, "greet"); later(me, .9, () => me.say(`${g.n}: “${pick(LINES[g.d[0]] || LINES.Z)}”`, 4200)); } }
+    if (s.kind === "god" && s.state === "idle" && d < 16 && !W.greet[s.i]) { W.greet[s.i] = 1; const g = s.god; banner(g.e, g.n, 2600, domOf(g).c); sfx(me, "greet"); fxApparition(me, s); later(me, .9, () => me.say(`${g.n}: “${pick(LINES[g.d[0]] || LINES.Z)}”`, 4200)); } }
 };
 const endRun = me => { const Rn = R(), M = st.meta, bonus = Rn.depth * 2; M.shards += bonus; M.runs++; const sum = { depth: Rn.depth, kills: Rn.kills, lands: Rn.nLands, boons: Rn.boons.length, shards: (Rn.shards || 0) + bonus, guardians: Rn.guardians, t: Math.round((Date.now() - Rn.t0) / 1000), best: M.best, top: Object.entries(Rn.gods).sort((a, b) => b[1] - a[1])[0] };
   const W = me.pn.W; if (W) { for (const s of W.sh) if (s.grp) me.scene.remove(s.grp); for (const q of W.tele) me.scene.remove(q.a, q.b); for (const o of W.orbs) me.scene.remove(o.o); if (W.trial) { if (W.trial.arena) me.scene.remove(W.trial.arena); for (const a of W.trial.ms) if (alive(a)) { a.angry = 0; a.pnT = 0; } } }
