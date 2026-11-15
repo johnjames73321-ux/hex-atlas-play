@@ -45,10 +45,11 @@ const worldInit = me => {
   const wpick = () => { let tot = 0; const w = gods.map((g, i) => chosen.includes(g) ? 0 : 1 / (1 + i * .06)); for (const x of w) tot += x; let u = r() * tot; for (let i = 0; i < gods.length; i++) { u -= w[i]; if (u <= 0) return gods[i]; } return gods[0]; };
   for (let k = 0; k < 3; k++) chosen.push(wpick());
   const nbs = neighbours(me.hex).map(j => landInfo(j).pan).filter(p => p !== info.pan); if (nbs.length && r() < .45) { const fp = nbs[Math.floor(r() * nbs.length)]; chosen[2] = fp.gods[Math.floor(r() * Math.min(12, fp.gods.length))]; }
+  const pat = Rn.patron && GOD[Rn.patron]; if (pat && !chosen.includes(pat)) chosen[1] = pat;
   const sx = me.sx || 0, sz = me.sz || 0, a0 = r() * 6.283;
   const spot = (ang, d) => { for (let t = 0; t < 14; t++) { const a = ang + (r() - .5) * .5 * (1 + t * .3), dd = d * (1 + (r() - .5) * .3) + t * 3, x = sx + Math.cos(a) * dd, z = sz + Math.sin(a) * dd; if (me.H(x, z) > .35 && Math.hypot(x, z) < 590) return [x, z]; } return [sx + Math.cos(ang) * d * .5, sz + Math.sin(ang) * d * .5]; };
   const add = (kind, ang, d, extra) => { const [x, z] = spot(ang, d), s = Object.assign({ kind, i: W.sh.length, x, z, y: Math.max(me.H(x, z), 0), state: F.c[W.sh.length] ? "done" : "idle" }, extra); W.sh.push(s); return s; };
-  chosen.forEach((g, k) => add("god", a0 + k * 2.094, 46 + r() * 22, { god: g }));
+  chosen.forEach((g, k) => add("god", a0 + k * 2.094, 46 + r() * 22, { god: g, patron: g === pat }));
   add("cache", a0 + 1.05, 78 + r() * 16, { reward: ["laurel", "anvil", "heart"][Math.floor(r() * 3)] });
   add("well", a0 + 3.14, 26 + r() * 8, {});
   const gn = GUARD[info.pan.id] || ["The Beast of the Land"]; add("guard", a0 + 4.2, 112 + r() * 20, { name: gn[Math.floor(r() * gn.length)] }); if (F.g) W.sh[W.sh.length - 1].state = "done";
@@ -76,7 +77,7 @@ const dim = (me, s) => { s.state = "done"; if (s.beam) { s.grp.remove(s.beam); s
 const label = s => s.kind === "god" ? `${s.god.n}, ${s.god.e}` : s.kind === "cache" ? ({ laurel: "Laurel of the Victor", anvil: "The Anvil", heart: "Heart of the Land" })[s.reward] : s.kind === "well" ? "The Well of Offerings" : s.kind === "guard" ? s.name : `Passage to ${s.to.state || s.to.place || "the wilds"}`;
 const prompt = (me, s) => { const W = me.pn.W;
   if (W.trial) return null; if (s.state === "done") return s.kind === "well" ? "The well is dry" : null;
-  if (s.kind === "god") return `E · Accept the trial of ${s.god.n}`;
+  if (s.kind === "god") return `E · Accept the trial of ${s.god.n}${s.patron ? " (your patron)" : ""}`;
   if (s.kind === "cache") return `E · Fight for ${label(s)}`;
   if (s.kind === "well") return "E · Make an offering at the well";
   if (s.kind === "guard") { const need = 2 - W.sh.filter(q => q.kind === "god" && q.state === "done").length; return need > 0 ? `Sealed · clear ${need} more shrine${need > 1 ? "s" : ""} to wake ${s.name}` : `E · Wake ${s.name}`; }
@@ -87,11 +88,12 @@ const kindsOf = me => { const W = me.pn.W; let ks = W.kinds.filter(k => { try { 
 const heat = () => R().depth;
 const summon = (me, s, k, elite) => { let m = null; try { m = me.spawn(k, false, false); } catch (e) { warn(e); } if (!m) return null;
   for (let t = 0; t < 12; t++) { const a = Math.random() * 6.283, d = 11 + Math.random() * 9, x = s.x + Math.cos(a) * d, z = s.z + Math.sin(a) * d; if (me.H(x, z) > .2) { m.root.position.set(x, me.H(x, z), z); break; } }
-  const h = heat(), c = colOf(s); m.noRe = 1; m.angry = 999; m.pnT = 1; m.hp = m.mx = m.mx * (1 + .1 * h) * (elite ? 1.5 : .6); m.a[7] *= (1 + .05 * h) * (elite ? 1.25 : 1); m.a[8] = 999;
+  const h = heat(), c = colOf(s); m.noRe = 1; m.angry = 999; m.pnT = 1; m.hp = m.mx = m.mx * (1 + .1 * h) * (elite ? 1.25 : .5); m.a[7] *= (1 + .05 * h) * (elite ? 1.25 : 1); m.a[8] = 999;
   if (elite) { m.champ = 1; m.pnC = "#ffd23a"; m.root.scale.multiplyScalar(1.22); m.a[9] = "Champion " + m.a[9]; m.root.traverse(o => { if (o.material && o.material.emissive) o.material.emissive.setHex(0x3a2a00); }); }
   fxPillar(me, mp(m).clone(), c, 18, .5); fxRing(me, mp(m), c, 2, .4); return m; };
 const startTrial = (me, s) => { const W = me.pn.W, ks = kindsOf(me); if (!ks.length) { complete(me, s); return; }
-  s.state = "trial"; W.trial = { s, wave: 0, waves: heat() >= 6 ? 3 : 2, ms: [], t: 0, ks }; if (s.beam) s.beam.material.opacity = .7;
+  s.state = "trial"; W.trial = { s, wave: 0, waves: heat() >= 6 ? 3 : 2, ms: [], t: 0, ks, haz: s.kind === "god" && heat() >= 1 ? HAZ[s.god.d[0]] : null, hz: 5 }; if (s.beam) s.beam.material.opacity = .7;
+  { const T = me.T, a = new T.Mesh(new T.RingGeometry(23.6, 24, 72), new T.MeshBasicMaterial({ color: new T.Color(colOf(s)), transparent: true, opacity: .5, side: T.DoubleSide, depthWrite: false, fog: false })); a.rotation.x = -Math.PI / 2; a.position.set(s.x, s.y + .25, s.z); me.scene.add(a); W.trial.arena = a; }
   const nm = s.kind === "god" ? s.god.n : label(s); banner(s.kind === "god" ? "Trial of" : "Trial", nm, 2200, colOf(s)); sfx(me, "trial"); musicMood(me, 1); nextWave(me); };
 const nextWave = me => { const W = me.pn.W, Tr = W.trial, s = Tr.s; Tr.wave++; const last = Tr.wave === Tr.waves, n = Math.min(6, 2 + Math.floor(heat() / 4) + (Tr.wave > 1 ? 1 : 0));
   for (let i = 0; i < n; i++) { const m = summon(me, s, pick(Tr.ks), false); if (m) Tr.ms.push(m); }
@@ -100,9 +102,14 @@ const nextWave = me => { const W = me.pn.W, Tr = W.trial, s = Tr.s; Tr.wave++; c
 const worldKill = (me, m) => {};
 const trialTick = (me, dt) => { const W = me.pn.W, Tr = W.trial; if (!Tr) return; Tr.t += dt;
   let left = 0; for (const m of Tr.ms) { if (m.dead || !me.mobs.includes(m)) continue; left++; if (m.angry < 60) m.angry = 999; }
-  Tr.left = left; if (Tr.boss || left > 0 || Tr.t < .6) return;
+  Tr.left = left; if (Tr.arena) Tr.arena.material.opacity = .35 + Math.sin(me.tnow * 3) * .15;
+  if (Tr.haz && left > 0 && (Tr.hz -= dt) <= 0) { Tr.hz = Math.max(3, 5.5 - heat() * .12); const s = Tr.s, c = colOf(s), who = s.god.n, md = me.mdir || [0, 0], mv = me.moving ? 1 : 0;
+    if (Tr.haz === "strike") for (let i = 0; i < 2 + (heat() > 5 ? 1 : 0); i++) telegraph(me, me.pos.x + md[0] * mv * i * 3 + (Math.random() - .5) * (i ? 5 : 1), me.pos.z + md[1] * mv * i * 3 + (Math.random() - .5) * (i ? 5 : 1), 2.4, .9 + i * .2, 9, who, c);
+    else if (Tr.haz === "ring") telegraph(me, me.pos.x, me.pos.z, 6.2, 1.5, 11, who, c);
+    else for (let i = 0; i < 2; i++) { const o = fxOrb(me, c, 1.1); o.position.set(s.x + (i ? 1.5 : -1.5), s.y + 2.6, s.z); W.orbs.push({ o, v: new me.T.Vector3(0, 0, 0), t: 0, life: 5.5, dmg: 8, who, home: 6.5 }); } }
+  if (Tr.boss || left > 0 || Tr.t < .6) return;
   if (Tr.wave < Tr.waves) { Tr.t = 0; later(me, .7, () => { if (me.pn.W.trial === Tr) nextWave(me); }); Tr.ms = []; Tr.t = -1; return; }
-  W.trial = null; complete(me, Tr.s); };
+  W.trial = null; if (Tr.arena) { me.scene.remove(Tr.arena); Tr.arena.geometry.dispose(); Tr.arena.material.dispose(); } for (const q of W.tele) me.scene.remove(q.a, q.b); W.tele = []; for (const o of W.orbs) me.scene.remove(o.o); W.orbs = []; complete(me, Tr.s); };
 const complete = (me, s) => { const Rn = R(), M = mods(me), c = colOf(s); Rn.depth++; st.meta.best = Math.max(st.meta.best, Rn.depth); dim(me, s);
   const sh = Math.round((3 + Rn.depth * .6) * (1 + M.coin)); st.meta.shards += sh; Rn.shards = (Rn.shards || 0) + sh; me.dropCoins && me.dropCoins(new me.T.Vector3(s.x, s.y, s.z), Math.round((14 + 3 * Rn.depth) * (1 + M.coin)));
   if (M.trialHeal) heal(me, M.trialHeal); me.slowT = .9; me.shake = .3; banner("Trial cleared", `+${sh} shards`, 1700, c); sfx(me, "clear"); musicMood(me, 0); fxRing(me, new me.T.Vector3(s.x, s.y, s.z), c, 14, .9); save();
@@ -116,14 +123,16 @@ const reward = (me, s) => { if (cur() !== me) return;
 // ---------- offers ----------
 const rollRar = (me, boost = 0, r = Math.random) => { const l = mods(me).luck + boost + R().depth * .004, u = r(); return u < .02 + l * .5 ? 3 : u < .1 + l ? 2 : u < .34 + l * 1.5 ? 1 : 0; };
 const poolOf = g => { const d1 = g.d[0], d2 = g.d[1], ids = ["A", "S", "C", "D", "G", "P1", "P2"].map(s => d1 + ":" + s); if (d2 && d2 !== d1 && DOM[d2]) ids.push(d2 + ":P1", d2 + ":P2", d2 + ":" + "ASCDG"[hash(g.id) % 5]); return ids; };
-const offerFor = (me, g, boost = 0, r = Math.random) => { const own = R().boons, out = [], pool = poolOf(g).filter(id => !own.some(b => b.id === id));
+const offerFor = (me, g, boost = 0, r = Math.random) => { const own = R().boons, out = [], pool = poolOf(g).filter(id => !own.some(b => b.id === id)), sp = specials(g);
+  if (sp.length && r() < .75) out.push(sp[Math.floor(r() * sp.length)]);
   const w = id => { const c = CAT[id]; return c.slot === "P" ? 2 : boonIn(c.slot) ? 1 : 3.2; }; const bag = pool.slice();
   while (out.length < 3 && bag.length) { let tot = 0; for (const id of bag) tot += w(id); let u = r() * tot, k = 0; for (; k < bag.length - 1; k++) { u -= w(bag[k]); if (u <= 0) break; } const id = bag.splice(k, 1)[0]; out.push({ id, god: g.id, rar: rollRar(me, boost, r), lv: 1 }); }
   return out; };
 const takeBoon = (me, o, quiet) => { const Rn = R(), c = CAT[o.id]; if (c.slot !== "P") Rn.boons = Rn.boons.filter(b => CAT[b.id].slot !== c.slot); Rn.boons.push({ id: o.id, god: o.god, rar: o.rar, lv: o.lv || 1 }); Rn.gods[o.god] = (Rn.gods[o.god] || 0) + 1; st.meta.codex[o.god] = (st.meta.codex[o.god] || 0) + 1; dirty(); save();
-  if (!quiet) { const d = DOM[c.dom]; sfx(me, "boon"); fxPillar(me, me.pos.clone(), d.c, 30, .9); fxRing(me, me.pos, d.c, 6, .6); fxBurst(me, me.pos.clone().setY(me.pos.y + 1.2), d.c, 26); } };
+  if (!Rn.patron && GOD[o.god]) { Rn.patron = o.god; const g = GOD[o.god]; later(me, quiet ? 5 : 1.2, () => { banner("Your patron", g.n, 2600, domOf(g).c); me.say(`${g.n} is your patron for this run: a shrine of ${g.n} will wait in every land you enter.`, 6000); }); }
+  if (!quiet) { const d = DOM[c.dom]; sfx(me, "boon"); fxPillar(me, me.pos.clone(), d.c, 30, .9, 1.1); fxRing(me, me.pos, d.c, 6, .6); fxBurst(me, me.pos.clone().setY(me.pos.y + 1.2), d.c, 26); } };
 const cardOf = (me, o) => { const c = CAT[o.id], g = GOD[o.god], d = DOM[c.dom], old = c.slot !== "P" && boonIn(c.slot);
-  return { title: boonName(o), tag: `${RAR[o.rar].n} · ${c.slot === "P" ? "Blessing" : SLOT[c.slot] + " · " + SLOTKEY[c.slot]}`, text: boonText(o), color: d.c, rc: RAR[o.rar].c, god: g, note: old ? `Replaces ${boonName(old)}` : "", dom: d }; };
+  return { img: domSigilURL(PANBY[g.pan].art, c.dom), title: boonName(o), tag: `${RAR[o.rar].n} · ${c.slot === "P" ? "Blessing" : SLOT[c.slot] + " · " + SLOTKEY[c.slot]}`, text: boonText(o), color: d.c, rc: RAR[o.rar].c, god: g, note: old ? `Replaces ${boonName(old)}` : "", dom: d }; };
 const offerBoons = (me, gods, boost, s) => { const mk = () => { let os = []; if (gods.length === 1) os = offerFor(me, gods[0], boost); else for (const g of gods) { const o = offerFor(me, g, boost)[0]; if (o) os.push(o); }
     if (os.length < 3) { const ups = R().boons.filter(b => b.lv < 5).sort(() => Math.random() - .5).slice(0, 3 - os.length); for (const b of ups) os.push({ up: b }); } return os; };
   R().owed = { k: "gods", ids: gods.map(g => g.id), boost }; let os = mk(); if (!os.length) { delete R().owed; st.meta.shards += 10; banner("The gods have nothing more to give", "+10 shards", 2200); save(); return; }
@@ -131,7 +140,7 @@ const offerBoons = (me, gods, boost, s) => { const mk = () => { let os = []; if 
     cards: os.map(o => o.up ? laurelCard(o.up) : cardOf(me, o)), rerolls: R().rr, onReroll: () => { R().rr--; os = mk(); save(); show(); },
     onPick: i => { const o = os[i]; if (o.up) levelUp(me, o.up); else takeBoon(me, o); } });
   show(); };
-const laurelCard = b => { const c = CAT[b.id], d = DOM[c.dom], nb2 = Object.assign({}, b, { lv: b.lv + 1 }); return { title: boonName(b), tag: `Laurel · Lv ${b.lv} → ${b.lv + 1}`, text: boonText(nb2), color: d.c, rc: "#ffd27a", god: GOD[b.god], note: "", dom: d }; };
+const laurelCard = b => { const c = CAT[b.id], d = DOM[c.dom], nb2 = Object.assign({}, b, { lv: b.lv + 1 }); return { img: domSigilURL(PANBY[(GOD[b.god] || GODS[0]).pan].art, c.dom), title: boonName(b), tag: `Laurel · Lv ${b.lv} → ${b.lv + 1}`, text: boonText(nb2), color: d.c, rc: "#ffd27a", god: GOD[b.god], note: "", dom: d }; };
 const levelUp = (me, b) => { b.lv++; dirty(); save(); sfx(me, "boon"); fxPillar(me, me.pos.clone(), "#ffd27a", 26, .8); fxBurst(me, me.pos.clone().setY(me.pos.y + 1.2), "#ffd27a", 20); };
 const offerLaurel = me => { R().owed = { k: "laurel" }; const bs = R().boons.filter(b => b.lv < 5).sort(() => Math.random() - .5).slice(0, 3); if (!bs.length) { delete R().owed; st.meta.shards += 12; save(); banner("Laurel of the Victor", "No boon to raise: +12 shards", 2400, "#ffd27a"); return; }
   offer(me, { kicker: "Reward", title: "Laurel of the Victor", sub: "Raise one boon by a level", color: "#ffd27a", cards: bs.map(laurelCard), onPick: i => levelUp(me, bs[i]) }); };
@@ -159,13 +168,14 @@ const wakeGuard = (me, s) => { const W = me.pn.W, ks = kindsOf(me).slice().sort(
   const seen = new Set(); m.root.traverse(o => { const mt = o.material; if (mt && mt.color && !seen.has(mt)) { seen.add(mt); const l = mt.color.r * .3 + mt.color.g * .59 + mt.color.b * .11; mt.color.setRGB(.2 + l * .7, .06 + l * .2, .05 + l * .12); if (mt.emissive) mt.emissive.setHex(0x2a0500); } });
   s.state = "trial"; W.G = { m, s, cd: 2.5, n: 0, adds: 0 }; W.trial = { s, wave: 1, waves: 1, ms: [m], t: 0, ks, boss: 1 };
   banner("Guardian of " + (W.info.place || W.info.state || "the land"), s.name, 3400, "#ff5a3a"); sfx(me, "boss"); musicMood(me, 2); me.shake = .5; fxPillar(me, mp(m).clone(), "#ff5a3a", 40, 1); };
-const telegraph = (me, x, z, r, dur, dmg, who) => { const T = me.T, y = Math.max(me.H(x, z), 0) + .12, mk = (g, op) => { const o = new T.Mesh(g, new T.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: op, side: T.DoubleSide, depthWrite: false, fog: false })); o.rotation.x = -Math.PI / 2; o.position.set(x, y, z); me.scene.add(o); return o; };
-  me.pn.W.tele.push({ a: mk(new T.RingGeometry(r - .14, r, 44), .9), b: mk(new T.CircleGeometry(r, 36), .3), x, z, r, t: 0, dur, dmg, who }); };
+const HAZ = { S: "strike", K: "strike", U: "strike", M: "strike", Z: "strike", F: "strike", W: "ring", C: "ring", E: "ring", R: "ring", D: "wisp", X: "wisp", V: "wisp", L: "wisp", T: "wisp" };
+const telegraph = (me, x, z, r, dur, dmg, who, col = "#ff3020") => { const T = me.T, y = Math.max(me.H(x, z), 0) + .12, mk = (g, op) => { const o = new T.Mesh(g, new T.MeshBasicMaterial({ color: new T.Color(col), transparent: true, opacity: op, side: T.DoubleSide, depthWrite: false, fog: false })); o.rotation.x = -Math.PI / 2; o.position.set(x, y, z); me.scene.add(o); return o; };
+  me.pn.W.tele.push({ a: mk(new T.RingGeometry(r - .14, r, 44), .9), b: mk(new T.CircleGeometry(r, 36), .3), x, z, r, t: 0, dur, dmg, who, col }); };
 const guardTick = (me, dt) => { const W = me.pn.W, G = W.G;
   for (let i = W.tele.length - 1; i >= 0; i--) { const q = W.tele[i]; q.t += dt; const k = Math.min(1, q.t / q.dur); q.b.scale.setScalar(Math.max(.02, k));
-    if (k >= 1) { me.scene.remove(q.a, q.b); q.a.geometry.dispose(); q.b.geometry.dispose(); W.tele.splice(i, 1); fxRing(me, new me.T.Vector3(q.x, q.a.position.y, q.z), "#ff5a3a", q.r, .3); sfx(me, "slam");
+    if (k >= 1) { me.scene.remove(q.a, q.b); q.a.geometry.dispose(); q.b.geometry.dispose(); W.tele.splice(i, 1); fxRing(me, new me.T.Vector3(q.x, q.a.position.y, q.z), q.col, q.r, .3); sfx(me, "slam");
       if (Math.hypot(me.pos.x - q.x, me.pos.z - q.z) < q.r && !((me.jy || 0) > 1.1)) hurtMe(me, q.dmg, q.who); } }
-  for (let i = W.orbs.length - 1; i >= 0; i--) { const o = W.orbs[i], p = o.o.position; o.t += dt; p.addScaledVector(o.v, dt); const hit = Math.hypot(p.x - me.pos.x, p.z - me.pos.z) < .95 && Math.abs(p.y - me.pos.y - 1 - (me.jy || 0)) < 1.5;
+  for (let i = W.orbs.length - 1; i >= 0; i--) { const o = W.orbs[i], p = o.o.position; o.t += dt; if (o.home) { const dx = me.pos.x - p.x, dy = me.pos.y + 1.1 - p.y, dz = me.pos.z - p.z, l = Math.hypot(dx, dy, dz) || 1; o.v.x += (dx / l * o.home - o.v.x) * Math.min(1, dt * 2.2); o.v.y += (dy / l * o.home - o.v.y) * Math.min(1, dt * 2.2); o.v.z += (dz / l * o.home - o.v.z) * Math.min(1, dt * 2.2); } p.addScaledVector(o.v, dt); const hit = Math.hypot(p.x - me.pos.x, p.z - me.pos.z) < .95 && Math.abs(p.y - me.pos.y - 1 - (me.jy || 0)) < 1.5;
     if (hit) hurtMe(me, o.dmg, o.who); if (hit || o.t > o.life) { me.scene.remove(o.o); W.orbs.splice(i, 1); } }
   if (!G) return; if (G.m.dead || !me.mobs.includes(G.m)) { guardDown(me); return; } const m = G.m, p = mp(m), low = m.hp < m.mx * .5; G.cd -= dt;
   if (low && !G.adds) { G.adds = 1; banner("", `${G.s.name} calls its brood`, 1600, "#ff5a3a"); for (let i = 0; i < 2; i++) { const a = summon(me, G.s, pick(W.trial ? W.trial.ks : kindsOf(me)), false); if (a && W.trial) W.trial.ms.push(a); } }
@@ -199,6 +209,6 @@ const worldTick = (me, dt, t) => { const W = me.pn.W; if (!W) return; trialTick(
     if (s.kind === "god" && s.state === "idle" && d < 16 && !W.greet[s.i]) { W.greet[s.i] = 1; const g = s.god; banner(g.e, g.n, 2600, domOf(g).c); sfx(me, "greet"); later(me, .9, () => me.say(`${g.n}: “${pick(LINES[g.d[0]] || LINES.Z)}”`, 4200)); } }
 };
 const endRun = me => { const Rn = R(), M = st.meta, bonus = Rn.depth * 2; M.shards += bonus; M.runs++; const sum = { depth: Rn.depth, kills: Rn.kills, lands: Rn.nLands, boons: Rn.boons.length, shards: (Rn.shards || 0) + bonus, guardians: Rn.guardians, t: Math.round((Date.now() - Rn.t0) / 1000), best: M.best, top: Object.entries(Rn.gods).sort((a, b) => b[1] - a[1])[0] };
-  const W = me.pn.W; if (W) { for (const s of W.sh) if (s.grp) me.scene.remove(s.grp); for (const q of W.tele) me.scene.remove(q.a, q.b); for (const o of W.orbs) me.scene.remove(o.o); if (W.trial) for (const a of W.trial.ms) if (alive(a)) { a.angry = 0; a.pnT = 0; } }
+  const W = me.pn.W; if (W) { for (const s of W.sh) if (s.grp) me.scene.remove(s.grp); for (const q of W.tele) me.scene.remove(q.a, q.b); for (const o of W.orbs) me.scene.remove(o.o); if (W.trial) { if (W.trial.arena) me.scene.remove(W.trial.arena); for (const a of W.trial.ms) if (alive(a)) { a.angry = 0; a.pnT = 0; } } }
   st.run = newRun(); dirty(); save(); me.pn.call = null; me.pn.shield = 0; musicMood(me, 0);
   try { worldInit(me); } catch (e) { warn(e); } deathScreen(me, sum); };

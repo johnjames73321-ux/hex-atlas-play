@@ -9,7 +9,7 @@ let saveT = 0; const save = () => { clearTimeout(saveT); saveT = setTimeout(() =
 const mir = k => st.meta.mirror[k] || 0;
 const newRun = () => ({ seed: (Math.random() * 2 ** 31) | 0, boons: [], depth: 0, lands: {}, nLands: 0, kills: 0, t0: Date.now(), cleared: {}, forge: [], hearts: 0, def: mir("breath"), rr: mir("dice"), gauge: 0, cast: 3 + mir("quiver"), gods: {}, dealt: 0, taken: 0, guardians: 0, lv: 0 });
 const R = () => st.run || (st.run = newRun());
-PN.st = st; PN.save = save;
+PN.st = st; PN.save = save; PN.dirty = () => dirty();
 
 // ---------- catalogue ----------
 const ADJ = { S: ["Thunder", "Stormbrand", "Skyfire"], W: ["Tidal", "Riptide", "Breaker's"], R: ["Doom", "Bloodied", "Warbringer's"], L: ["Heartseeker", "Rose", "Enthralling"], H: ["Hunter's", "True", "Stalker's"],
@@ -53,7 +53,7 @@ for (const d of Object.keys(DOM)) {
   PASS[d].forEach((q, i) => { CAT[d + ":P" + (i + 1)] = { id: d + ":P" + (i + 1), dom: d, slot: "P", name: q[0], text: q[1], stats: q[2] }; });
 }
 const pot = b => RAR[b.rar].m * (1 + .3 * (b.lv - 1));
-const boonName = b => { const c = CAT[b.id]; if (c.name) return c.name; const h = hash(b.god + c.id); return ADJ[c.dom][h % 3] + " " + NOUN[c.slot][(h >> 4) % 3]; };
+const boonName = b => { const c = CAT[b.id]; if (c.name) return c.name; const h = hash(b.god + c.id); return ADJ[c.dom][h % 3] + " " + NOUN[c.slot][(h >>> 4) % 3]; };
 const boonText = (b, p = pot(b)) => { const c = CAT[b.id], d = c.dom;
   if (c.slot === "P") return c.text(p);
   if (c.slot === "A") return `Your Attack deals +${pc(.2 * p)} damage and ${DOMTEXT[d]}.`;
@@ -88,8 +88,8 @@ const rad = m => Math.max(.9, m.a[1] * .35 * GSC);
 const near = (me, p, r, skip) => me.mobs.filter(m => alive(m) && m !== skip && Math.hypot(mp(m).x - p.x, mp(m).z - p.z) < r + rad(m));
 const head = (me, m) => new me.T.Vector3(mp(m).x, mp(m).y + m.a[2] * GSC * .6, mp(m).z);
 const sOf = m => m.pn || (m.pn = { s: {}, sp0: m.a[5], bite0: m.a[7] });
-const restat = m => { const P = m.pn, s = P.s; let sp = 1, bite = 1; if (s.chill) sp *= 1 - Math.min(.72, .09 * s.chill.n); if (s.weak) bite *= .65; if (s.stupor) sp *= .9; m.a[5] = P.sp0 * sp; m.a[7] = P.bite0 * bite; };
-const vuln = (me, m) => { const P = m.pn; if (!P) return 1; const s = P.s; let v = 1; if (s.hex) v += .25; if (s.sunder) v += .06 * s.sunder.n; if (s.exposed) v += .15; if (s.weak) v += mods(me).potL || 0; if (s.mark) v += .2; return v; };
+const restat = m => { const P = m.pn, s = P.s; let sp = 1, bite = 1; if (s.chill) sp *= 1 - Math.min(.72, .09 * s.chill.n); if (s.weak) bite *= FL("legL") ? .35 : .65; if (s.stupor) sp *= .9; m.a[5] = P.sp0 * sp; m.a[7] = P.bite0 * bite; };
+const vuln = (me, m) => { const P = m.pn; if (!P) return 1; const s = P.s; let v = 1; if (s.hex) v += .25; if (s.sunder) v += (FL("legO") ? .08 : .06) * s.sunder.n; if (s.exposed) v += .15; if (s.weak) v += (mods(me).potL || 0) + (FL("legL") ? .25 : 0); if (s.mark) v += .2; return v; };
 const afflict = (me, m, k, o = {}) => { if (!alive(m)) return null; const P = sOf(m), s = P.s[k] || (P.s[k] = { n: 0, t: 0, x: 0, tick: .5 });
   s.n = Math.min(o.max || 1, s.n + (o.n || 1)); s.t = Math.max(s.t, o.t || 4); s.x = Math.max(s.x, o.x || 0); s.c = o.c || s.c; restat(m); P.icon = o.c || P.icon; P.iconT = 0; return s; };
 const hideNum = () => { const sv = $("sv"), e = sv && sv.lastElementChild; if (e && e.classList.contains("dn")) e.style.display = "none"; };
@@ -97,47 +97,11 @@ const num = (me, m, v, color, big) => { try { me.popNum(m, v, false); const e = 
 const finish = (me, m) => { PN.inner++; try { for (let i = 0; i < 8 && !m.dead; i++) { m.hp = Math.min(m.hp, 0); me.hurtMob(m, 1, me.pos, false); hideNum(); } } catch (e) { warn(e); } finally { PN.inner--; } };
 const hurt = (me, m, v, color, big) => {   // damage from a boon: quiet, no combo, no hit-stop
   if (!alive(m) || !(v > 0)) return 0; v *= vuln(me, m); if (m.champ || m.boss || m.pnG) v *= 1 + mods(me).bossDmg;
-  m.hp -= v; if (m.bar && m.bar.fill) m.bar.fill.scale.x = Math.max(0, m.hp / m.mx); m.angry = Math.max(m.angry || 0, 25); m.flash = .12; num(me, m, v, color, big); R().dealt += v;
-  if (m.hp <= 0) finish(me, m); return v; };
+  m.hp -= v; if (m.bar && m.bar.fill) m.bar.fill.scale.x = Math.max(0, m.hp / m.mx); m.angry = Math.max(m.angry || 0, 25); m.flash = .12; R().dealt += v;
+  if (big) num(me, m, v, color, 1); else { const P = sOf(m), A = P.acc || (P.acc = { v: 0, t: .16 }); A.v += v; A.c = color; }
+  if (m.hp <= 0) { flushNum(me, m); finish(me, m); } return v; };
+const flushNum = (me, m) => { const P = m.pn; if (P && P.acc) { num(me, m, P.acc.v, P.acc.c); P.acc = null; } };
 const heal = (me, v) => { if (me.hp <= 0 || !(v > 0)) return; me.hp = Math.min(100, me.hp + v / maxHP(me) * 100); me.hpDraw && me.hpDraw(); };
 const later = (me, sec, fn) => me.pn.q.push({ t: sec, fn });
 PN.hurt = hurt; PN.afflict = afflict; PN.heal = heal;
 
-// ---------- the 20 gifts: what each domain does to a foe, at strength x (damage units) ----------
-const strike = (me, m, d, x, src) => {
-  if (!alive(m)) return; const T = me.T, c = DOM[d].c, k = potOf(me, d), p = mp(m), M = mods(me); x *= k;
-  switch (d) {
-    case "S": { hurt(me, m, x * .3, c); let last = head(me, m), n = 0; const seen = new Set([m]);
-      for (let j = 0; j < 3 + M.chain; j++) { const o = near(me, last, 9).filter(u => !seen.has(u)).sort((a, b) => mp(a).distanceTo(last) - mp(b).distanceTo(last))[0]; if (!o) break; seen.add(o); const h = head(me, o); fxBolt(me, last, h, c); hurt(me, o, x * .6, c); last = h; n++; }
-      if (!n) fxBolt(me, head(me, m).setY(p.y + 9), head(me, m), c); sfx(me, "zap"); break; }
-    case "W": { hurt(me, m, x * .5, c); const dx = p.x - me.pos.x, dz = p.z - me.pos.z, l = Math.hypot(dx, dz) || 1, push = (m.boss || m.pnG ? .8 : 2.6) * (1 + (M.potW || 0)); const nx = p.x + dx / l * push, nz = p.z + dz / l * push; if (me.H(nx, nz) > -.6) { p.x = nx; p.z = nz; } m.stun = Math.max(m.stun || 0, .25); fxRing(me, p, c, 2.2, .35); sfx(me, "wave"); break; }
-    case "R": { const s = afflict(me, m, "doom", { t: 1.1, max: 3, x: x * 1.2, c }); if (s) s.t = 1.1; break; }
-    case "L": hurt(me, m, x * .35, c); afflict(me, m, "weak", { t: 6, c }); break;
-    case "H": hurt(me, m, x * .4, c); afflict(me, m, "mark", { t: 7, c }); break;
-    case "A": hurt(me, m, x * .35, c); afflict(me, m, "exposed", { t: 5, c }); break;
-    case "V": afflict(me, m, "stupor", { t: 4, max: 5 + M.stup, x: x * .22, c }); break;
-    case "C": { hurt(me, m, x * .3, c); const s = afflict(me, m, "chill", { t: 6, max: 8, n: src === "S" || src === "C" ? 2 : 1, c }); if (s && s.n >= 8) { delete m.pn.s.chill; restat(m); m.stun = Math.max(m.stun || 0, m.boss || m.pnG ? 1 : 2.2); fxBurst(me, head(me, m), c, 14); fxRing(me, p, c, 3, .4); sfx(me, "ice"); later(me, .5, () => hurt(me, m, x * 2.5 * (1 + (M.potC || 0)), c, 1)); } break; }
-    case "E": { const P = sOf(m); if ((P.rootCd || 0) <= me.tnow) { P.rootCd = me.tnow + 7; m.stun = Math.max(m.stun || 0, m.boss || m.pnG ? .5 : 1.3); afflict(me, m, "root", { t: 1.3, c }); hurt(me, m, x * .5, c); fxRoots(me, p, c); sfx(me, "root"); } else hurt(me, m, x * .3, c); break; }
-    case "T": { hurt(me, m, x * .35, c); if (Math.random() < .3 && !(m.boss || m.pnG)) { m.stun = Math.max(m.stun || 0, .7); afflict(me, m, "daze", { t: .7, c }); } me.pn.swiftT = me.tnow + 1.6; break; }
-    case "D": { hurt(me, m, x * .35, c); heal(me, .5 * k); if (alive(m) && !m.boss && !m.pnG && m.hp / m.mx < .2 + (M.potD || 0)) { fxBurst(me, head(me, m), c, 10); sfx(me, "reap"); num(me, m, m.hp, c, 1); m.hp = 0; finish(me, m); } break; }
-    case "U": afflict(me, m, "burn", { t: 3.5, x: x * .3, c }); break;
-    case "M": { hurt(me, m, x * .2, c); me.pn.moonN = (me.pn.moonN || 0) + 1; if (me.pn.moonN >= (M.moon4 ? 4 : 5)) { me.pn.moonN = 0; const at = p.clone(); fxPillar(me, at, c, 26, .5); sfx(me, "moon"); later(me, .18, () => { fxRing(me, at, c, 3.6, .4); for (const o of near(me, at, 3.6)) hurt(me, o, x * 2.2, c, 1); }); } break; }
-    case "F": afflict(me, m, "blaze", { t: 4, x: x * .24, c }); break;
-    case "K": hurt(me, m, x * (.3 + (m.hp / m.mx > .7 ? .6 : 0) + (m.boss || m.champ || m.pnG ? .4 : 0)), c); break;
-    case "Y": hurt(me, m, x * .3, c); heal(me, .6 * k); break;
-    case "X": hurt(me, m, x * .2, c); afflict(me, m, "hex", { t: 5, c }); break;
-    case "N": { me.pn.packN = (me.pn.packN || 0) + 1; if (me.pn.packN >= (M.pack2 ? 2 : 3)) { me.pn.packN = 0; fxBeast(me, m, c); sfx(me, "beast"); later(me, .16, () => hurt(me, m, x * 1.5, c, 1)); } else hurt(me, m, x * .15, c); break; }
-    case "O": hurt(me, m, x * .25, c); afflict(me, m, "sunder", { t: 6, max: 5, c }); break;
-    default: if (Math.random() < .16) { const at = p.clone(); fxRift(me, at, c); sfx(me, "rift"); later(me, .12, () => { for (const o of near(me, at, 2.6)) hurt(me, o, x * 3, c, 1); }); } else hurt(me, m, x * .25, c);
-  }
-};
-PN.strike = strike;
-
-// statuses that tick, and the hero's own timers
-const statusTick = (me, dt) => {
-  for (const m of me.mobs) { const P = m.pn; if (!P) continue; if (m.dead) continue; let ch = 0;
-    for (const k in P.s) { const s = P.s[k]; s.t -= dt;
-      if (k === "stupor" || k === "burn" || k === "blaze") { s.tick -= dt; if (s.tick <= 0) { s.tick = .5; hurt(me, m, s.x * (k === "stupor" ? s.n : 1) * (k === "burn" ? 1 + (mods(me).potU || 0) : k === "blaze" ? 1 + (mods(me).potF || 0) : 1 + (mods(me).potV || 0)), s.c); if (m.dead) break; } }
-      if (s.t <= 0) { if (k === "doom") { const x = s.x * s.n; fxBurst(me, head(me, m), s.c, 8); sfx(me, "doom"); delete P.s[k]; hurt(me, m, x, s.c, 1); ch = 1; if (m.dead) break; continue; } delete P.s[k]; ch = 1; } }
-    if (ch && !m.dead) restat(m); }
-};

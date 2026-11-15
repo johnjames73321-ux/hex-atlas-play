@@ -16,14 +16,16 @@ const onHit = (me, m, dmg, crit, heavy) => {
   if (M.first && !S.hit1) mul += M.first; S.hit1 = 1;
   if (M.twin && Object.keys(S.s).length >= 2) mul += M.twin;
   if (P.momT > me.tnow) mul += P.momV * P.momN; if (P.standT > me.tnow) mul += P.standV; if (P.frenzyT > me.tnow) mul += M.frenzy;
-  if (M.lowDmg && me.hp < 50) mul += M.lowDmg;
-  if (!crit && (M.crit || S.s.mark) && Math.random() < M.crit + (S.s.mark ? .25 : 0)) { mul += 1; I.crit = 1; fxText(me, head(me, m), "CRIT", "#ffd84a"); }
+  if (M.lowDmg && me.hp < 50) mul += M.lowDmg; if (M.legK && me.hp > 80) mul += .3;
+  if (!crit && (P.lucky || ((M.crit || S.s.mark) && Math.random() < M.crit + (S.s.mark ? .25 : 0)))) { mul += 1; I.crit = 1; fxText(me, head(me, m), "CRIT", "#ffd84a"); }
+  P.lucky = 0; if (I.crit && M.legH) mul += 1;
   const b = I.slot === "A" ? boonIn("A") : I.slot === "S" ? boonIn("S") : null, p = b ? pot(b) : 0;
   if (b) mul += (I.slot === "A" ? .2 : .3) * p;
   const extra = dmg * mul; if (extra > 0) { m.hp -= extra; if (extra > dmg * .2) num(me, m, extra, b ? DOM[CAT[b.id].dom].c : "#ffd27a"); }
   R().dealt += dmg + extra;
   if (b) { const d = CAT[b.id].dom, x = dmg * (I.slot === "A" ? .6 : .9) * p; later(me, 0, () => strike(me, m, d, x, I.slot)); }
   if (I.slot === "A") { if (M.echo) later(me, .13, () => { fxBurst(me, head(me, m), "#ffffff", 4); hurt(me, m, dmg * M.echo, "#ffffff"); }); if (M.lifesteal) heal(me, M.lifesteal); }
+  if (M.legX && Math.random() < .2) later(me, .1, () => { fxText(me, head(me, m), "FATED", DOM.X.c); hurt(me, m, dmg * (1 + mul), DOM.X.c, 1); });
   if (M.sunderAll) afflict(me, m, "sunder", { t: 6, max: 5, c: DOM.O.c });
   if (M.quake && I.heavy) shock(me, m, power(me) * M.quake, 4.2, "#d8c8a0");
   aspCall(me, "hit", m, dmg, I);
@@ -45,13 +47,14 @@ const hpSet = (me, old, n) => {
   if (me.prog && me.prog.god) return n;
   if (P.invT > me.tnow) return old;
   if (d > 1.2) {   // a real blow, not a tick of poison
-    if (M.dodge && Math.random() < M.dodge) { fxText(me, me.pos.clone().setY(me.pos.y + 2.2), "DODGE", "#ffd9a6"); sfx(me, "dodge"); return old; }
-    if (P.shield > 0) { P.shield--; P.shieldT = 0; fxRing(me, me.pos, DOM.A.c, 2.4, .35); fxText(me, me.pos.clone().setY(me.pos.y + 2.2), "TURNED ASIDE", DOM.A.c); sfx(me, "deflect"); P.invT = me.tnow + .25; return old; }
+    if (M.dodge && Math.random() < M.dodge) { fxText(me, me.pos.clone().setY(me.pos.y + 2.2), "DODGE", "#ffd9a6"); sfx(me, "dodge"); if (M.legT) P.hasteT = me.tnow + 2.2; return old; }
+    if (P.shield > 0) { P.shield--; P.shieldT = 0; fxRing(me, me.pos, DOM.A.c, 2.4, .35); fxText(me, me.pos.clone().setY(me.pos.y + 2.2), "TURNED ASIDE", DOM.A.c); sfx(me, "deflect"); P.invT = me.tnow + .25; if (M.legA) later(me, 0, () => { for (const o of near(me, me.pos, 5.5)) o.stun = Math.max(o.stun || 0, o.pnG ? .5 : 1.2); }); return old; }
     if (me.tnow - (P.revT || -9) > .8) { P.revT = me.tnow; later(me, 0, () => revenge(me)); }
     aspCall(me, "hurtMe"); addGauge(me, 5); P.hurtFlash = .35;
   }
   Rn.taken += d / 100 * M.hpmax;
   if (n <= 0) {
+    if (M.legY && !landFlags(me).und) { landFlags(me).und = 1; P.invT = me.tnow + 1.5; later(me, 0, () => { fxPillar(me, me.pos.clone(), DOM.Y.c, 30, .9); fxRing(me, me.pos, DOM.Y.c, 7, .6); sfx(me, "defy"); banner("Undying", "Life refuses to leave you", 2000, DOM.Y.c); me.hpDraw && me.hpDraw(); }); return 33; }
     if (Rn.def > 0) { Rn.def--; save(); P.invT = me.tnow + 2; later(me, 0, () => defy(me)); return 50; }
     P.died = 1;
   }
@@ -65,7 +68,7 @@ const defy = me => { fxRing(me, me.pos, "#ffffff", 9, .7); fxPillar(me, me.pos.c
   me.slowT = .8; me.shake = .5; sfx(me, "defy"); banner("Death Defiance", "You rise again", 2200, "#ffe9a8"); me.hpDraw && me.hpDraw(); };
 
 // ---------- Dash ----------
-const onDash = me => { const P = me.pn; if (me.tnow - (P.dashAt || -9) < .45) return; P.dashAt = me.tnow; aspCall(me, "dash");
+const onDash = me => { const P = me.pn; if (me.tnow - (P.dashAt || -9) < .45) return; P.dashAt = me.tnow; aspCall(me, "dash"); if (mods(me).duoTX) P.lucky = 1;
   const b = boonIn("D"); if (!b) return; const p = pot(b), d = CAT[b.id].dom, c = DOM[d].c, at = me.pos.clone(), foes = near(me, at, 4.6);
   fxRing(me, at, c, 4.6, .4); fxBurst(me, at.clone().setY(at.y + 1), c, 10); sfx(me, "dash");
   for (const m of foes) { hurt(me, m, power(me) * 1.6 * p, c); strike(me, m, d, power(me) * p, "D"); }
@@ -126,7 +129,7 @@ const combatTick = (me, dt) => {
   statusTick(me, dt); castTick(me, dt); callTick(me, dt);
   const dashing = (me.atk && me.atk.kind === "dash") || me.rollT > 0; if (dashing && !P.dashing) onDash(me); P.dashing = dashing;
   if (M.regen && me.hp > 0 && me.hp < 100) heal(me, M.regen * dt);
-  if (M.shield && (P.shield || 0) < 1) { P.shieldT = (P.shieldT || 0) + dt; if (P.shieldT >= (M.shieldCd || 14)) { P.shieldT = 0; P.shield = 1; fxText(me, me.pos.clone().setY(me.pos.y + 2.2), "shield", DOM.A.c); } }
+  if ((M.shield || M.legA) && (P.shield || 0) < 1) { P.shieldT = (P.shieldT || 0) + dt; if (P.shieldT >= (M.legA ? Math.min(6, M.shieldCd || 6) : M.shieldCd || 14)) { P.shieldT = 0; P.shield = 1; fxText(me, me.pos.clone().setY(me.pos.y + 2.2), "shield", DOM.A.c); } }
   if (P.momT <= me.tnow) P.momN = 0;
   P.tgtT = (P.tgtT || 0) - dt; P.hurtFlash = Math.max(0, (P.hurtFlash || 0) - dt);
   if (P.died && me.hp > 0) { P.died = 0; try { endRun(me); } catch (e) { warn(e); } }

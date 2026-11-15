@@ -5,7 +5,7 @@ const geo = me => { const T = me.T; if (!RINGG) { RINGG = new T.RingGeometry(.84
 const basic = (me, c, op = .8) => new me.T.MeshBasicMaterial({ color: new me.T.Color(c), transparent: true, opacity: op, depthWrite: false, blending: me.T.AdditiveBlending, side: me.T.DoubleSide, fog: false });
 const fxAdd = (me, o, d, upd) => { const f = { o, t: 0, d, upd }; me.scene.add(o); me.pn.fx.push(f); return f; };
 const fxRing = (me, p, c, r, d = .4) => { geo(me); const o = new me.T.Mesh(RINGG, basic(me, c, .9)); o.rotation.x = -Math.PI / 2; o.position.set(p.x, p.y + .16, p.z); o.scale.setScalar(.1); fxAdd(me, o, d, k => { const e = 1 - (1 - k) ** 3; o.scale.setScalar(Math.max(.05, r * e)); o.material.opacity = .9 * (1 - k); }); };
-const fxPillar = (me, p, c, h, d = .5) => { geo(me); const o = new me.T.Mesh(CYLG, basic(me, c, .75)); o.position.set(p.x, p.y + h / 2, p.z); o.scale.set(.9, h, .9); fxAdd(me, o, d, k => { const w = .9 * (1 - k) + .04; o.scale.set(w, h, w); o.material.opacity = .75 * (1 - k * k); }); };
+const fxPillar = (me, p, c, h, d = .5, w0 = .42) => { geo(me); const o = new me.T.Mesh(CYLG, basic(me, c, .55)); o.position.set(p.x, p.y + h / 2, p.z); o.scale.set(w0, h, w0); fxAdd(me, o, d, k => { const w = w0 * (1 - k) + .03; o.scale.set(w, h, w); o.material.opacity = .55 * (1 - k * k); }); };
 const fxBurst = (me, p, c, n = 10) => { const T = me.T, pos = new Float32Array(n * 3), vel = []; for (let i = 0; i < n; i++) { pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z; const a = Math.random() * 6.283, s = 2 + Math.random() * 5; vel.push(Math.cos(a) * s, 2 + Math.random() * 5, Math.sin(a) * s); }
   const g = new T.BufferGeometry(); g.setAttribute("position", new T.BufferAttribute(pos, 3)); const o = new T.Points(g, new T.PointsMaterial({ color: new T.Color(c), size: .55, map: glowTex(me), transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false })); o.frustumCulled = false; let last = 0;
   fxAdd(me, o, .6, k => { const dt = (k - last) * .6; last = k; for (let i = 0; i < n; i++) { vel[i * 3 + 1] -= 14 * dt; pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt; } g.attributes.position.needsUpdate = true; o.material.opacity = 1 - k; }).own = 1; };
@@ -89,6 +89,8 @@ const sigil = (key, glyph, art, c, c2) => {   // a 192px canvas, cached
   SIG.set(key, cv); return cv; };
 const godSigil = g => sigil(g.id, g.d[0], PANBY[g.pan].art, domOf(g).c, dom2Of(g) ? dom2Of(g).c : domOf(g).c2);
 const sigilURL = g => g.url || (g.url = godSigil(g).toDataURL());
+const DSU = new Map();
+const domSigilURL = (art, d) => { const k = art + ":" + d; if (!DSU.has(k)) DSU.set(k, sigil("dom:" + k, d, art, DOM[d].c, DOM[d].c2).toDataURL()); return DSU.get(k); };
 const TEXC = new Map();
 const sigilTex = (me, s) => { const art = me.pn.W.info.pan.art, cv = s.kind === "god" ? godSigil(s.god) : s.kind === "cache" ? sigil("cache:" + s.reward + art, s.reward, art, "#ffd27a", "#fff1c4") : sigil("guard:" + art, "beast", art, "#ff5a3a", "#ffb09a");
   if (!TEXC.has(cv)) TEXC.set(cv, new me.T.CanvasTexture(cv)); return TEXC.get(cv); };

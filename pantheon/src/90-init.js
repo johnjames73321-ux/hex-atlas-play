@@ -6,7 +6,7 @@ const tick = (me, dt, t) => { const P = me.pn, rdt = clamp(t - (P.lastT || t), 0
 const reoffer = me => { const o = R().owed; if (!o || me.pn.ui) return; if (o.k === "gods") { const gs = o.ids.map(id => GOD[id]).filter(Boolean); if (gs.length) offerBoons(me, gs, o.boost || 0); else delete R().owed; } else if (o.k === "laurel") offerLaurel(me); else if (o.k === "anvil") offerAnvil(me); };
 const init = me => {
   if (!me || me.pn || !me.T || !me.scene || !me.mobs || !me.ps) return;
-  const P = me.pn = { q: [], fx: [], tx: [], shots: [], W: null, ui: null }; R(); dirty(); const u = ensureUI(); if (u) { u.offer.hidden = u.codex.hidden = u.death.hidden = true; u.pool.forEach(e => e.remove()); u.pool = []; }
+  const P = me.pn = { q: [], fx: [], tx: [], shots: [], W: null, ui: null }; R(); dirty(); const u = ensureUI(); if (u) { u.offer.hidden = u.codex.hidden = u.death.hidden = true; u.pool.forEach(e => e.remove()); u.pool = []; u.labs.forEach(e => e.remove()); u.labs = []; }
   const hit0 = me.onHit, kill0 = me.onKill, par0 = me.parried, up0 = me.up, ld0 = me.lmbDown, lu0 = me.lmbUp, mm0 = me.mmb;
   me.onHit = (m, dmg, crit, heavy) => { try { hit0 && hit0(m, dmg, crit, heavy); } catch (e) { warn(e); } try { onHit(me, m, dmg, crit, heavy); } catch (e) { warn(e); } };
   me.onKill = (m, from, heavy) => { try { kill0 && kill0(m, from, heavy); } catch (e) { warn(e); } try { onKill(me, m); } catch (e) { warn(e); } };
@@ -36,4 +36,7 @@ const key0 = window.hxKey;
 window.hxKey = (code, me) => { try { if (key(me, code)) return true; } catch (e) { warn(e); } return key0 ? key0(code, me) : false; };
 // mouse side buttons: back = Cast, forward = Call (and never let them leave the page while the 3D view is open)
 for (const ev of ["mousedown", "mouseup", "auxclick"]) addEventListener(ev, e => { const me = cur(); if (!me || !me.pn || (e.button !== 3 && e.button !== 4)) return; e.preventDefault(); e.stopPropagation(); if (ev === "mousedown" && !me.pn.ui) try { e.button === 3 ? cast(me) : call(me); } catch (x) { warn(x); } }, true);
+// a line on the start menu
+const startHint = () => { const b = document.querySelector("#hxStart .box"); if (b && !$("pnHint")) { const d = document.createElement("div"); d.id = "pnHint"; d.style.cssText = "margin-top:10px;font:600 12px system-ui;color:#ffd27a;letter-spacing:.04em;text-align:center"; d.textContent = "New: the gods of 320 BC. Follow the pillars of light to their shrines."; b.appendChild(d); } };
+for (const ms of [300, 1200, 3000]) setTimeout(startHint, ms);
 Object.assign(PN, { init, R, cast, call, offerBoons, offerLaurel, offerAnvil, startTrial, wakeGuard, interact, openCodex, landInfo, banner, endRun, takeBoon, offerFor, closeUI, sigil, godSigil });

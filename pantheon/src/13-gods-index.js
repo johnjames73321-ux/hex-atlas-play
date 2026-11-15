@@ -10,24 +10,28 @@ const warn = e => { try { console.warn("[pantheon]", e); } catch (x) {} };
 
 // peoples whose label needs a tighter match than the one written beside the list (word edges, look-alikes)
 const REFIX = {
+  slavic: "slav|milograd|zarubin|venedi|neuri|budin|vysotsk|chernoles|carpathian-foreland",
+  uralic: "finn|\\burali|\\bsami\\b|saami|samoyed|mansi|khanty|\\bkomi|permic|mordv|volgaic|ugric|selkup|\\benets|nenets|hasava|nganasan|kulai|\\btobol|dyakovo",
+  italic: "latin|(?<!pre-)roman|italic|umbri|oscan|samnit|sabell|sabine|picen|venet|sicel|sican|elym|nurag|ligur|lucan|brutt|campan|corsic",
+  korean: "korean|yemaek|gojoseon|buyeo|okjeo|\\bmaek\\b|byeon|\\bye\\b|samhan|tamna|(han|jin) \\(proto-korean",
   thracian: "thrac|dacian|\\bgeta|getic|paeon|moes|triball|odrys",
   siberian: "tungus|yukaghir|evenk|chukot|koryak|yenisei|paleo-?sib|palaeo-?sib|paleo-?asiat|\\bamur|nivkh|ymyyakhtakh|glazkovo|orochon|negidal|nanai|\\boroch|sushen|yilou|\\bust\\b|belkachi|syalakh|kongin|birar|kilogir|primorye|poltse|\\buril\\b|baikal|boyagir|\\bugir|mungal|nemnyar|chapogir|tungir|kindigir|\\bhori\\b",
-  scythian: "saka|scyth|sarmat|massaget|maeot|pazyryk|dahae|apasiac|wusun|yuezhi|taurian|tochar|subeixi|sargat|tarim|forest-steppe",
+  scythian: "saka|scyth|sarmat|sauromat|iranian nomad|massaget|maeot|pazyryk|dahae|apasiac|wusun|yuezhi|taurian|tochar|subeixi|sargat|tarim|forest-steppe",
   steppe: "xiongnu|mongol|donghu|turkic|dingling|slab|hunnu|\\bhu\\b|wuhuan|xianbei|tuoba|shiwei|hunyu|hujie|mengwu|kumoxi|hulunbuir|xiajiadian|\\brong\\b|\\bdi\\b|\\bsteppe|hexi|\\bhami\\b|shirenzigou|qushe|xinli|north asian",
   vedic: "indo-aryan|indo-iranian \\(|indic|vedic|magadh|maurya|nanda|gandhar|kamboj|\\bbhil|sinhal|dardic|burushaski|indigenous forest|indigenous/indo",
   chinese: "chinese|\\bhan\\b|huaxia|\\bqin\\b|\\bchu\\b|zhou|\\bjin\\b|\\bshu\\b|\\bba\\b|\\bdian\\b|yelang|baidi|kunming|ailao|\\bbo\\b|\\bman\\b|\\bsui\\b|liaoning",
   tibetan: "tibeto|qiang|zhangzhung|tibet|burm|\\bnaga\\b|kirat|\\byi\\b",
   seasia: "austroasiatic|vietic|\\btai\\b|khmer|\\bmon\\b|\\blac\\b|hlai|\\bkam\\b|aslian|negrito|andaman|munda|\\byue\\b|\\bau\\b|\\bpu\\b|nicobar",
   polynesian: "polynes|lapita|samoic|fijian|micrones|tongan|oceanic|uvean|chamorro",
-  sahel: "mande|\\bgur\\b|atlantic \\(|dogon|songhay|soninke|tichitt|\\bdhar\\b|pulaar|chadic|kotoko|\\bsara\\b|adamawa|ubangi|gbaya|\\bbanda\\b|zande|ngbandi|ngbaka|\\bmaba|\\bfur\\b|\\bdaza|\\bteda\\b|tubu|zaghawa|\\bberia\\b|kawar|saharan|kordofan|\\bkoman\\b|mangbetu|\\bnok\\b|serer|wolof|hassan|nemadi|\\btama\\b|\\bberti\\b|tunjur|meidob|sinyar|\\bkarra\\b|\\bchari\\b|kuwaa|central sudanic|benue|upper cross",
+  sahel: "mande|\\bgur\\b|atlantic \\(|dogon|songhay|soninke|tichitt|\\bdhar\\b|pulaar|chadic|kotoko|\\bsara\\b|adamawa|ubangi|gbaya|\\bbanda\\b|zande|ngbandi|ngbaka|\\bmaba|\\bfur\\b|\\bdaza|\\bteda\\b|tubu|zaghawa|\\bberia\\b|kawar|saharan|kordofan|\\bkoman\\b|mangbetu|\\bnok\\b|serer|wolof|hassan|nemadi|^atlantic|\\btama\\b|\\bberti\\b|tunjur|meidob|sinyar|\\bkarra\\b|\\bchari\\b|kuwaa|central sudanic|benue|upper cross",
   westafrican: "yorub|igbo|\\bakan\\b|\\bedo\\b|\\bgbe\\b|\\bewe\\b|\\bkwa\\b|nupoid|idomoid|kainji|\\bguan\\b|\\bkru\\b|jukun|ekoid|bendi|tivoid|kamuku|ijaw",
   bantu: "bantu|kikongo|umbundu|mbundu|\\bmongo\\b|\\bteke\\b|\\bfang\\b|myene|\\bbeti\\b|ngangela|ngombe|mwani|\\bkoti\\b|grassfield|tikar|\\bmbam",
   nilotic: "nilot|surmic|nilo-|\\bberta\\b|kunama|\\bnara\\b|dinka|\\bluo\\b|eastern sudanic|pastoral neolithic",
   khoisan: "khoe|khoisan|\\bsan\\b(?! (agust|pedro))|khoekhoe|\\btuu\\b|kx'a|hadza|pygm|\\btwa\\b|sandawe|african forager|lsa forager",
   maya: "maya|yucat|k'iche|pet[eé]n",
   mesoamerican: "zapotec|olmec|\\bmixe|otomi|oto-mangue|nahua|totonac|otomang|mixtec|purepecha|huave|popoloc|chinantec|amuzgo|tequistlatec|cuitlatec|mesoamerican|lencan|misumalpan|subtiaba|corachol|chichimec|cahit|tepehuan|tecual|totorame|acaxee|xixime|caxcan|tecuex|zacatec|morelos|colim|taracahit|\\bcoca\\b|pinome|coano|tecoxquin|tepecano|\\btubar\\b|\\bhume\\b",
-  amazonian: "tupi|arawak|\\bj[eê]\\b|macro-j|guaran|tukano|panoan|tapuya|bororo|kariri|yanomam|amazon|chiquitan|nambikwar|kayap|timbira|botocud|maxakal|kamak|zamuc|chapacur|tacana|arawan|harakmbut|katukin|mosete|tupari|s[aá]liva|juruna|witoto|\\bboran\\b|\\bpeba|zaparo|guahib|nadahup|\\bmura\\b|karaj|mond[eé]|kagwahiv|sambaqui|nheenga|maraj|tapajo|tucuj|taruma|warao|otomac|yaruro|betoi|puinave|tikuna|andoke|\\bhoti\\b|yabarana|tinigua|\\byuri\\b|\\bjuri\\b|xukuru|pankarar|xok[oó]|yaath|payay|trumai|munduruku|iranxe|matanawi|ramarama|kwaza|kanoe|itonama|canichana|cayu[bv]a|movima|yuracar|\\bleco|ofai|guato|cariban|guianan|humait|sapuca|goitac",
-  southerncone: "mapu|tehuelch|chonan|charr|pampa|picunch|huillich|puelch|haush|yamana|kawesqar|\\bchono|guaicur|mataguay|\\bchaco\\b(?! canyon)|comeching|sanavir|querand|gununa|\\blule\\b|tonocot|enlhet|mascoy|\\bchan[aá]\\b|uruguay|selk|umbu",
+  amazonian: "tupi|arawak|\\bj[eê](?![a-zà-ÿ])|macro-j|tarairi|guaran|tukano|panoan|tapuya|bororo|kariri|yanomam|amazon|chiquitan|nambikwar|kayap|timbira|botocud|maxakal|kamak|zamuc|chapacur|tacana|arawan|harakmbut|katukin|mosete|tupari|s[aá]liva|juruna|witoto|\\bboran\\b|\\bpeba|zaparo|guahib|nadahup|\\bmura\\b|karaj|mond[eé]|kagwahiv|sambaqui|nheenga|maraj|tapajo|tucuj|taruma|warao|otomac|yaruro|betoi|puinave|tikuna|andoke|\\bhoti\\b|yabarana|tinigua|\\byuri\\b|\\bjuri\\b|xukuru|pankarar|xok[oó]|yaath|payay|trumai|munduruku|iranxe|matanawi|ramarama|kwaza|kanoe|itonama|canichana|cayu[bv]a|movima|yuracar|\\bleco|ofai|guato|cariban|guianan|humait|sapuca|goitac",
+  southerncone: "mapu|tehuelch|chonan|charr|pampa|pampe|chan[aá]-|picunch|huillich|puelch|haush|yamana|kawesqar|\\bchono|guaicur|mataguay|\\bchaco\\b(?! canyon)|comeching|sanavir|querand|gununa|\\blule\\b|tonocot|enlhet|mascoy|\\bchan[aá]\\b|uruguay|selk|umbu",
   southwest: "hopi|zuni|keres|tewa|tiwa|towa|\\btano|basketmaker|pima|o'odham|yuman|yavapai|\\bpai\\b|apache|southern athabask|numic|paiute|shoshon|\\buto\\b|takic|cochim|\\bseri\\b|jumano|concho|toboso|irritila|mayran|tompiro|waikuri|peric|owens|\\bute\\b|mogollon|puebloan",
   northwest: "salish|wakash|kwak|haida|tsimsh|\\bnuu|chinook|chimaku|\\bbella|tlingit|st'at|secwep|thompson|okanag|sahapt|kutenai|kalapuy|cayuse|molala|klamath|dakelh|chilcot|babine|pentlatch|takelma|athabask|\\bdene\\b",
   arctic: "dorset|inuit|eskimo|aleut|thule|yupik|inupi|saqqaq|norton|kachemak"
@@ -60,10 +64,16 @@ const regionPan = (la, lo) => {
   if (lo > 19 && la < 41.5) return "hellenic"; if (lo > 21 && la <= 46) return "thracian"; if (lo > 13.2 && la > 40 && la < 47 && lo < 21) return "illyrian";
   if (lo > 7 && la < 46.5) return la > 42 && lo < 12.5 ? "etruscan" : "italic"; if (lo < 3.3 && la < 43.8) return "iberian"; return "celtic";
 };
+// the people named first decides (a longer match wins a tie); "Iranian (Saka)" and the like are steppe riders, not Persians
+const panOfPeople = s => { if (!s) return null; let best = null, bi = 1e9, bl = 0; for (const p of PANS) { const m = p.re.exec(s); if (m && (m.index < bi || (m.index === bi && m[0].length > bl))) { best = p; bi = m.index; bl = m[0].length; } } if (best && best.id === "persian" && PANBY.scythian.re.test(s)) best = PANBY.scythian;
+  if (best && best.id === "austronesian" && /oceanic|polynes|solomon|fiji|samoa|tonga|vanuatu|caledon|micrones|lapita|papuan tip|admiralt|melanes|kanak|chamorro|palau|\byap|temotu|bismarck/i.test(s)) best = PANBY.polynesian; return best; };
+// land nobody is named for (or an unknown people): the gods of the nearest land that has some
+const NEARC = new Map();
+const panNear = i => { if (NEARC.has(i)) return NEARC.get(i); let out = null; try { const seen = new Set([i]); let q = [i]; for (let ring = 0; ring < 40 && q.length && !out; ring++) { const nx = []; for (const a of q) { for (let d = 0; d < 6; d++) { const j = nb(a, d); if (j < 0 || seen.has(j)) continue; seen.add(j); nx.push(j); if (D.reg[j] < 0) continue; const k = eraOf(j); if (k >= 0) { const p = panOfPeople(String(ERA.tags[k][4] || "")); if (p) { out = p; break; } } } if (out) break; } q = nx; } } catch (e) {} NEARC.set(i, out); return out; };
 const landInfo = i => {   // the 320 BC holder of a hex and its gods
   let state = "", people = "", kind = "";
   try { const k = eraOf(i); if (k >= 0) { const t = ERA.tags[k]; state = String(t[0] || ""); kind = String(t[3] || ""); people = String(t[4] || ""); } } catch (e) {}
-  let pan = null; if (people) for (const p of PANS) if (p.re.test(people)) { pan = p; break; }
+  let pan = panOfPeople(people); if (!pan) pan = panNear(i);
   if (!pan) { let ll = [0, 0]; try { ll = SV.hexLL(i); } catch (e) {} pan = PANBY[regionPan(ll[0], ll[1])] || PANS[0]; }
   let place = ""; try { place = (ERA.hn && ERA.hn[i]) || (ERA.rn && ERA.rn[D.reg[i]]) || D.regions[D.reg[i]][0] || ""; } catch (e) {}
   return { state, people, kind, pan, place };
