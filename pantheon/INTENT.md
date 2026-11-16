@@ -21,6 +21,7 @@ this folder is the source of the `<!--PANTHEON:BEGIN-->…<!--PANTHEON:END-->` s
 | `50-world.js` | shrines, trials, hazards, offers, well, rift, guardian, passages, death |
 | `60-fx.js` | effects, procedural sigils (frame per culture, glyph per domain), sound, battle music |
 | `70-ui.js` | HUD, offer cards, codex (O), death and intro screens |
+| `80-polish.js` | visual polish for the whole street view: shadows, clouds, birds, water, particles, ribbons, afterimages, squash, camera, UI motion |
 | `90-init.js` | wiring |
 
 Test: `node pantheon/serve.js 8792`, open http://localhost:8792, load `/pantheon/test.js` in the page and run
