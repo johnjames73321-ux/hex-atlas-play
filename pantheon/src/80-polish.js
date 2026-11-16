@@ -117,7 +117,7 @@ const pxInit = me => {
   me.ps.push((dt, t) => { if (cur() !== me) return; try { pxTick(me, dt, t); } catch (e) { if (!X.err) { X.err = 1; warn(e); } } });
 };
 const pxHit = (me, m, crit, heavy) => { const X = me.px; if (!X || !m || !m.root) return; const p = head(me, m), n = crit ? 16 : heavy ? 11 : 7, c = crit ? X.cCrit : X.cSpark;
-  for (let k = 0; k < n; k++) { const a = Math.random() * 6.283, s = 4 + Math.random() * (crit ? 9 : 6); pxEmit(X.glow, p.x, p.y, p.z, Math.cos(a) * s, 2 + Math.random() * 5, Math.sin(a) * s, .22 + Math.random() * .2, .16, .03, c, 1, 16, 2); }
+  for (let k = 0; k < n; k++) { const a = Math.random() * 6.283, s = 4 + Math.random() * (crit ? 9 : 6); pxEmit(X.glow, p.x, p.y, p.z, Math.cos(a) * s, 2 + Math.random() * 5, Math.sin(a) * s, .22 + Math.random() * .2, .1, .02, c, 1, 16, 2); }
   pxEmit(X.glow, p.x, p.y, p.z, 0, 0, 0, .07, crit ? .7 : .45, .1, c, .8);
   if (!m.dead) { if (!m.pxSq) m.pxBase = m.root.scale.clone(); m.pxSq = crit || heavy ? .22 : .16; m.pxSqS = crit || heavy ? .2 : .13; } };
 const pxGroundC = (me, y) => { const X = me.px, b = me.bio || {}; if (b.sn && y > b.sn) return X.cSnow; if (X.snowy) return X.cSnow; if (X.desert || (b.w && y < 1.3)) return X.cSand; return X.cDust; };
@@ -151,6 +151,11 @@ const pxTick = (me, dt, t) => {
       if (pxInWater(me)) { for (let k = 0; k < 5; k++) pxEmit(X.dust, pos.x + fx, .05, pos.z + fz, (Math.random() - .5) * 2.4, 2 + Math.random() * 2.6, (Math.random() - .5) * 2.4, .45, .12, .05, X.cWater, .85, 14, 1); pxRing(me, pos.x + fx, .03, pos.z + fz, 1.1, 0xdff4ff, .55, .5); try { sfx(me, "stepW"); } catch (e) {} }
       else { pxPuff(me, pos.x + fx, me.by, pos.z + fz, run ? 3 : 1 + (Math.random() < .5 ? 1 : 0), pxGroundC(me, me.by), run ? .9 : .45, .45, run ? .42 : .3, .55); try { sfx(me, "step"); } catch (e) {} } }
     X.ps = s;
+    // idle: after a few still seconds the knight looks around a little
+    X.idle = moving || me.atk || me.block || me.draw != null ? 0 : (X.idle || 0) + dt; if (X.idle > 3 && me.weapon !== "bow" && hero.head) { const k = Math.min(1, (X.idle - 3) / 1.5); hero.head.rotation.y += Math.sin(X.t * .55) * .45 * k; hero.head.rotation.x = Math.sin(X.t * .33) * .08 * k; } else if (hero.head) hero.head.rotation.x = 0;
+    // a level gained: a column of gold and a ring; coins picked up: a few glints
+    const pr = me.prog || {}; if (X.lvl != null && pr.lvl > X.lvl) { const gc = X.cGold || (X.cGold = new T.Color("#ffd84a")); pxRing(me, pos.x, me.by + .08, pos.z, 4.5, 0xffd84a, .7, .8); for (let q = 0; q < 28; q++) { const a = q / 28 * 6.283; pxEmit(X.glow, pos.x + Math.cos(a) * .7, me.by + .2, pos.z + Math.sin(a) * .7, Math.cos(a) * .4, 3 + Math.random() * 4, Math.sin(a) * .4, 1 + Math.random() * .6, .08, .02, gc, 1, -.5, .8, 0); } X.dip = .12; X.sq = .26; X.sqS = .6; }
+    X.lvl = pr.lvl; const cn = pr.coins || 0; if (X.coins != null && cn > X.coins && cn - X.coins < 5000) { const gc = X.cGold || (X.cGold = new T.Color("#ffd84a")); for (let q = 0; q < Math.min(10, 2 + (cn - X.coins) / 3); q++) pxEmit(X.glow, pos.x + (Math.random() - .5) * .6, pos.y + .8 + Math.random() * .6, pos.z + (Math.random() - .5) * .6, (Math.random() - .5) * 1.5, 1 + Math.random() * 2, (Math.random() - .5) * 1.5, .4 + Math.random() * .3, .06, .015, gc, 1, 3, 1, 0); } X.coins = cn;
     if (me.slide && grounded && (X.slT = (X.slT || 0) - dt) <= 0) { X.slT = .04; pxPuff(me, pos.x, me.by, pos.z, 2, pxGroundC(me, me.by), .8, .5, .45, .6); }
     // the hero's shadow stays on the ground and shrinks as you rise
     { const h = Math.max(0, (pos.y - (me.by ?? pos.y))), k = clamp(1 - h / 6, .35, 1); X.heroSh.position.set(pos.x, (me.by ?? pos.y) + .06, pos.z); X.heroSh.scale.setScalar(.62 * k * (me.rollT > 0 ? 1.2 : 1)); X.heroSh.material.opacity = .4 * k; X.heroSh.visible = me.hp > 0 && !me.flying; }
@@ -174,7 +179,7 @@ const pxTick = (me, dt, t) => {
   // ---- animals: blob shadows, squash on a hit, a puff and a rising spark when the body fades ----
   const seen = new Set();
   for (const m of me.mobs || []) { const R0 = m.root; if (!R0) continue; seen.add(m); let sh = X.shadows.get(m);
-    if (!sh) { sh = X.mkShadow(); X.shadows.set(m, sh); m.pxR = clamp(((m.a[1] || 1) * .3 + (m.a[2] || 1) * .18) * GSC * (m.drake ? 1 : R0.scale.x), .3, 7); let c = null; R0.traverse(o => { const mt = o.material; if (!c && mt && mt.color && !mt.isMeshBasicMaterial) { const h = mt.color.getHex(); if (h !== 0xffffff && h > 0x101010) c = mt.color.clone(); } }); m.pxC = c || X.cDust; }
+    if (!sh) { sh = X.mkShadow(); X.shadows.set(m, sh); m.pxR = clamp(((m.a[1] || 1) * .3 + (m.a[2] || 1) * .18) * GSC * (m.drake ? 1 : R0.scale.x), .3, 7); let c = null; R0.traverse(o => { const mt = o.material; if (!c && mt && mt.color && !mt.isMeshBasicMaterial) { const h = mt.color.getHex(); if (h !== 0xffffff && h > 0x101010) c = mt.color.clone(); } }); m.pxC = c || X.cDust; const pd = Math.hypot(R0.position.x - me.pos.x, R0.position.z - me.pos.z); if (X.t > 2 && pd < 45 && !m.pnT && !m.dead) pxPuff(me, R0.position.x, me.H(R0.position.x, R0.position.z), R0.position.z, 8, pxGroundC(me, R0.position.y), 1.8, .6, .6, .8); }
     const p = R0.position, gy = me.H(p.x, p.z), hgt = Math.max(0, p.y - gy), k = clamp(1 - hgt / 12, 0, 1), fade = m.dead ? clamp(m.dead / 3.5, 0, 1) : 1;
     sh.position.set(p.x, gy + .06, p.z); sh.scale.setScalar(m.pxR * (.6 + .4 * k)); sh.material.opacity = .34 * k * fade; sh.visible = R0.visible && k > 0;
     if (m.pxSq > 0) { m.pxSq -= dt; const B = m.pxBase; if (m.dead || m.pxSq <= 0 || !B) { if (B) R0.scale.copy(B); m.pxSq = 0; } else { const q = Math.sin((1 - m.pxSq / .22) * Math.PI) * m.pxSqS; R0.scale.set(B.x * (1 + q * .6), B.y * (1 - q), B.z * (1 + q * .6)); } }
